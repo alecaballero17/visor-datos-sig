@@ -1,0 +1,33 @@
+@{ ViewData["Title"]="Iniciar sesión"; }
+<div class="login-shell" data-api="@ViewBag.BackendBaseUrl">
+  <div class="card shadow-sm login-card">
+    <div class="card-body p-4 p-md-5">
+      <div class="brand-mark mb-3">A</div>
+      <h1 class="h3 mb-1">Arquis</h1>
+      <p class="text-secondary mb-4">Visor de datos geográficos</p>
+      <form id="loginForm" novalidate>
+        <div class="mb-3">
+          <label for="usuario" class="form-label">Usuario o email</label>
+          <input id="usuario" class="form-control" autocomplete="username" maxlength="254" required />
+        </div>
+        <div class="mb-3">
+          <label for="password" class="form-label">Contraseña</label>
+          <input id="password" type="password" class="form-control" autocomplete="current-password" required />
+        </div>
+        <div id="loginError" class="alert alert-danger d-none" role="alert"></div>
+        <button class="btn btn-primary w-100" type="submit">Ingresar</button>
+      </form>
+      <div id="loginNotice" class="alert alert-success d-none mt-3" role="status"></div>
+      <form id="registerForm" class="d-none">
+        <h2 class="h5 mb-3">Registrar usuario</h2>
+        <div class="mb-3"><label for="registerName" class="form-label">Nombre</label><input id="registerName" class="form-control" autocomplete="name" minlength="2" maxlength="120" required></div>
+        <div class="mb-3"><label for="registerEmail" class="form-label">Email</label><input id="registerEmail" type="email" class="form-control" autocomplete="email" maxlength="254" required></div>
+        <div class="mb-3"><label for="registerPassword" class="form-label">Contraseña</label><input id="registerPassword" type="password" class="form-control" autocomplete="new-password" minlength="8" maxlength="128" aria-describedby="passwordHelp" required><small id="passwordHelp" class="text-secondary">Mínimo 8 caracteres.</small></div>
+        <div id="registerError" class="alert alert-danger d-none" role="alert"></div>
+        <button class="btn btn-primary w-100" type="submit">Crear cuenta</button>
+      </form>
+      <button id="toggleRegister" class="btn btn-link w-100 mt-3" type="button" aria-controls="registerForm" aria-expanded="false">Registrar usuario</button>
+    </div>
+  </div>
+</div>
+@section Scripts { <script src="~/js/login.js" asp-append-version="true"></script> }
