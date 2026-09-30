@@ -1,5 +1,9 @@
 # Arquis · VisorDatosSIG
 
+<p align="center">
+  <img src="assets/arquis-hero.png" alt="Vista cartográfica abstracta de Arquis" width="100%">
+</p>
+
 Sistema web SIG para importar, consultar y visualizar información cartográfica de **San Ignacio de Velasco**. Combina un visor web responsivo, una API protegida, SQL Server y un migrador de escritorio para manzanas, lotes, códigos fijos y vías.
 
 > Versión alfa funcional: autenticación, mapa, capas, búsqueda, fichas de información y validación inicial de Shapefiles.
