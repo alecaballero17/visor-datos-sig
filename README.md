@@ -4,6 +4,20 @@ Sistema web SIG para importar, consultar y visualizar información cartográfica
 
 > Versión alfa funcional: autenticación, mapa, capas, búsqueda, fichas de información y validación inicial de Shapefiles.
 
+![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
+![ASP.NET Core](https://img.shields.io/badge/ASP.NET%20Core-Web%20API-512BD4?logo=dotnet&logoColor=white)
+![SQL Server](https://img.shields.io/badge/SQL%20Server-2022-CC2927?logo=microsoftsqlserver&logoColor=white)
+![Leaflet](https://img.shields.io/badge/Leaflet-Mapas-199900?logo=leaflet&logoColor=white)
+
+```mermaid
+flowchart LR
+    A[Capas SHP<br/>San Ignacio de Velasco] --> B[Migrador WPF]
+    B --> C[(SQL Server<br/>geometrías 4326)]
+    C --> D[API ASP.NET Core]
+    D --> E[Visor web<br/>Leaflet + Razor]
+    E --> F[Usuario autenticado]
+```
+
 ## Qué ofrece
 
 - Inicio de sesión y registro de cuentas de consulta.
@@ -14,8 +28,51 @@ Sistema web SIG para importar, consultar y visualizar información cartográfica
 
 ## Arquitectura
 
-```text
-Archivos SHP → Migrador → SQL Server 2022 → API ASP.NET Core → Visor Leaflet
+Arquis separa la interfaz, los servicios y los datos espaciales. El navegador nunca se conecta directamente a SQL Server: todas las consultas pasan por la API, que valida la sesión y entrega solo JSON o GeoJSON.
+
+```mermaid
+flowchart TB
+    subgraph Cliente[Cliente web]
+        UI[Frontend MVC / Razor]
+        MAP[Leaflet: mapa, capas y selección]
+        UI --> MAP
+    end
+
+    subgraph Servicios[Servicios .NET]
+        API[Backend Web API]
+        AUTH[Autenticación por cookie<br/>roles Administrador y Consultor]
+        GEO[Servicio geográfico<br/>bbox, búsqueda y GeoJSON]
+        API --> AUTH
+        API --> GEO
+    end
+
+    subgraph Datos[Datos espaciales]
+        SQL[(SQL Server 2022)]
+        TABLES[Manzanas · Lotes<br/>Códigos fijos · Vías]
+        LOGS[Bitácora de accesos<br/>e historial de migración]
+        SQL --- TABLES
+        SQL --- LOGS
+    end
+
+    MAP -->|HTTPS / JSON| API
+    GEO -->|consultas parametrizadas| SQL
+    AUTH -->|sesión y roles| SQL
+```
+
+### Recorrido de una consulta
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant W as Visor web
+    participant A as API
+    participant S as SQL Server
+    U->>W: Busca o selecciona una entidad
+    W->>A: Solicita datos con sesión activa
+    A->>S: Ejecuta consulta parametrizada
+    S-->>A: Geometría y atributos
+    A-->>W: GeoJSON / JSON
+    W-->>U: Resalta la entidad y muestra detalles
 ```
 
 | Componente | Ubicación | Tecnología |
@@ -24,6 +81,15 @@ Archivos SHP → Migrador → SQL Server 2022 → API ASP.NET Core → Visor Lea
 | API | `src/Arquis.Backend` | ASP.NET Core, C#, GeoJSON, cookies |
 | Migrador | `src/Arquis.Migrador` | .NET 10, WPF |
 | Base de datos | `02_BaseDatos` | SQL Server 2022, T-SQL, índices espaciales |
+
+### Responsabilidades por componente
+
+| Capa | Responsabilidad | No hace |
+|---|---|---|
+| Migrador | Verifica SHP y prepara la carga espacial | No expone datos al navegador |
+| SQL Server | Guarda geometrías, relaciones, usuarios, roles y bitácoras | No contiene lógica visual |
+| API | Protege rutas y transforma datos a GeoJSON | No dibuja el mapa |
+| Visor | Presenta mapa, capas, búsqueda y fichas | No accede directamente a SQL Server |
 
 ## Inicio rápido
 
@@ -88,6 +154,14 @@ Cuenta inicial: `admin` / `Admin123!`.
 2. Activar/desactivar capas desde el panel lateral.
 3. Buscar una entidad y acercar el mapa al resultado.
 4. Seleccionar una geometría para consultar sus atributos.
+
+```mermaid
+flowchart LR
+    L[Iniciar sesión] --> M[Abrir mapa]
+    M --> N[Activar capas]
+    N --> O[Buscar entidad]
+    O --> P[Seleccionar y consultar]
+```
 
 ## Documentación
 
