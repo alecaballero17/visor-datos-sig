@@ -1,77 +1,109 @@
-# Arquis - versión alfa
+# Arquis · VisorDatosSIG
 
-Base inicial del proyecto SIG solicitada para la **Fase I / versión alfa**. Está construida con **C# / .NET 10**, **ASP.NET Core Web API**, **ASP.NET Core MVC + Razor**, **SQL Server 2022**, **Bootstrap 5** y **Leaflet**.
+Sistema web SIG para importar, consultar y visualizar información cartográfica de **San Ignacio de Velasco**. Combina un visor web responsivo, una API protegida, SQL Server y un migrador de escritorio para manzanas, lotes, códigos fijos y vías.
 
-## Contenido
+> Versión alfa funcional: autenticación, mapa, capas, búsqueda, fichas de información y validación inicial de Shapefiles.
 
-- `src/Arquis.Backend`: API protegida por cookie, catálogo de capas, GeoJSON acotado por `bbox`, búsqueda e historial de migraciones.
-- `src/Arquis.Frontend`: MVC/Razor responsivo con login, mapa base, cuatro capas, leyenda, identificación, búsqueda y sincronización básica de resultados.
-- Ficha de agua potable al seleccionar códigos fijos o lotes, con datos disponibles y estado del servicio sin verificar. Consulte `04_Documentacion/05_AGUA_POTABLE.md`.
-- Registro con nombre, email y contraseña desde el login. Las nuevas cuentas tienen rol Consultor e ingresan con su email; los usuarios existentes conservan su acceso.
-- Colores: manzanas rojo, lotes celeste, códigos fijos ámbar y vías violeta. Los símbolos de agua y las casillas Con agua/Sin agua mantienen la clasificación del servicio.
-- `02_BaseDatos`: scripts originales entregados por el docente y `09_Arquis_Alfa.sql` para bitácoras/rol Consultor.
-- `03_DatosPrueba`: SHP oficiales incluidos en el ZIP de especificaciones.
-- `04_Documentacion`: mapeo, endpoints, alcance alfa e instalación.
+## Qué ofrece
 
-## Arranque rápido
+- Inicio de sesión y registro de cuentas de consulta.
+- Mapa base con cuatro capas temáticas, estilos, leyenda y coordenadas.
+- Búsqueda de lotes, manzanas, códigos fijos y vías; zoom y selección de resultados.
+- Fichas de entidades y disponibilidad de agua potable.
+- Migrador WPF que valida archivos obligatorios, WGS 84, geometría, extensión y registros.
 
-Haga doble clic en **LEVANTAR_ARQUIS.cmd** para comprobar los requisitos,
-preparar la base cuando corresponda y levantar ambas aplicaciones.
-La guía completa, incluidos los requisitos y la importación de capas, está en
-[COMO_EJECUTAR.md](COMO_EJECUTAR.md).
+## Arquitectura
 
-Para desarrollo local en Windows se incluyen `preparar-base.ps1` e `iniciar.ps1`.
-Requieren el [SDK de .NET 10](https://dotnet.microsoft.com/en-us/download/dotnet/10.0)
-y [SQL Server 2022 LocalDB](https://learn.microsoft.com/es-es/sql/database-engine/configure-windows/sql-server-express-localdb).
-La configuración de desarrollo utiliza `(localdb)\MSSQLLocalDB`.
+```text
+Archivos SHP → Migrador → SQL Server 2022 → API ASP.NET Core → Visor Leaflet
+```
+
+| Componente | Ubicación | Tecnología |
+|---|---|---|
+| Visor web | `src/Arquis.Frontend` | MVC/Razor, JavaScript, Bootstrap 5, Leaflet |
+| API | `src/Arquis.Backend` | ASP.NET Core, C#, GeoJSON, cookies |
+| Migrador | `src/Arquis.Migrador` | .NET 10, WPF |
+| Base de datos | `02_BaseDatos` | SQL Server 2022, T-SQL, índices espaciales |
+
+## Inicio rápido
+
+### Requisitos
+
+- Windows 10/11.
+- [SDK de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0).
+- SQL Server 2022 o LocalDB.
+- Python 3 para convertir las capas SHP.
+- Internet para NuGet y el mapa base.
 
 ```powershell
-# Opcional: copiar primero las capas autorizadas según 03_DatosPrueba/README.md.
+dotnet --version
+git clone https://github.com/alecaballero17/visor-datos-sig.git
+cd visor-datos-sig
+```
+
+### Preparar datos
+
+Las capas reales no se suben al repositorio. Copia los archivos autorizados en `03_DatosPrueba/DatosSIG_Reproj/`, conservando por capa los archivos `.shp`, `.shx`, `.dbf` y `.prj`:
+
+- `Exp_MapaBase_MZA_4326`
+- `Exp_MapaBase_LOTES_4326`
+- `Exp_CodigoFijo_4326`
+- `Exp_MapaBase_VIAS_4326`
+
+Consulta [las instrucciones de datos](03_DatosPrueba/README.md) antes de usar información real.
+
+### Crear la base y cargar capas
+
+Con LocalDB, usa el lanzador:
+
+```powershell
+.\LEVANTAR_ARQUIS.cmd
+```
+
+Con una instancia local de SQL Server, crea la base con los scripts de `02_BaseDatos`. Luego:
+
+```powershell
 py -m pip install --no-deps --target .setup/pythonlibs pyshp
 py convertir-capas.py
+powershell -ExecutionPolicy Bypass -File .\cargar-capas-completas.ps1
+```
 
-# Crear la base, importar las capas convertidas e iniciar ambas aplicaciones.
-powershell -ExecutionPolicy Bypass -File .\preparar-base.ps1
+La carga se realiza por lotes y reemplaza las entidades cartográficas existentes; úsala solo en una base de desarrollo.
+
+### Ejecutar el visor
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\iniciar.ps1
 ```
 
-Abra http://localhost:5180 e ingrese con `admin` / `Admin123!`.
-También puede elegir **Registrar usuario** y crear una cuenta con nombre,
-email y contraseña de al menos 8 caracteres. Ingrese luego con ese email.
-Los logs de ambas aplicaciones quedan en `.setup`.
-La preparación conserva las tablas que ya tienen datos y no vuelve a crear una base existente.
-El mapa base y las librerías Bootstrap/Leaflet utilizan recursos de Internet.
+- Visor: [http://localhost:5180](http://localhost:5180)
+- API: [http://localhost:5080/health](http://localhost:5080/health)
+- Swagger: [http://localhost:5080/swagger](http://localhost:5080/swagger)
 
-Para una instalación con SQL Server como servicio:
+Cuenta inicial: `admin` / `Admin123!`.
 
-1. En SQL Server 2022 ejecute `02_BaseDatos/01_CrearBD.sql` y luego los scripts siguientes que correspondan. Ejecute al final `09_Arquis_Alfa.sql`.
-2. Importe los SHP siguiendo `02_BaseDatos/02_Importar_SHP.md` o use el migrador que se desarrollará en la siguiente iteración.
-3. Revise `src/Arquis.Backend/appsettings.json` y configure `DefaultConnection`.
-4. Abra `Arquis.sln` en Visual Studio 2026 y restaure NuGet.
-5. Inicie primero `Arquis.Backend` en `http://localhost:5080` y luego `Arquis.Frontend` en `http://localhost:5180`.
-6. Ingrese con `admin` y la contraseña inicial indicada por el script oficial (`Admin123!`). Cámbiela antes de publicar.
+## Demostración sugerida
 
-## Repositorio GitHub
+1. Iniciar sesión.
+2. Activar/desactivar capas desde el panel lateral.
+3. Buscar una entidad y acercar el mapa al resultado.
+4. Seleccionar una geometría para consultar sus atributos.
 
-El repositorio contiene código, scripts de esquema y documentación. Las capas
-reales con nombres y ubicaciones se mantienen locales según
-`03_DatosPrueba/README.md`; tampoco se versionan credenciales locales, logs,
-instaladores o archivos de la base de datos. La configuración incluida usa
-autenticación integrada de Windows y no contiene contraseñas de conexión.
+## Documentación
 
-La rama inicial es `main`. El workflow `.github/workflows/build.yml` restaura
-NuGet y compila ambos proyectos en Release en cada push o pull request,
-usando las acciones oficiales [setup-dotnet](https://github.com/actions/setup-dotnet).
-No realiza publicación ni necesita una base de datos para compilar.
-El remoto se configurará cuando se proporcione la URL de GitHub.
+- [Guía de ejecución](COMO_EJECUTAR.md)
+- [Alcance alfa](04_Documentacion/01_ALCANCE_ALFA.md)
+- [Mapeo SHP a SQL](04_Documentacion/02_MAPEO_SHP_SQL.md)
+- [Endpoints](04_Documentacion/03_ENDPOINTS.md)
+- [Instalación](04_Documentacion/04_INSTALACION.md)
+- [Agua potable](04_Documentacion/05_AGUA_POTABLE.md)
 
-> Este paquete es una base **alfa**, no la entrega final de 45 días. Aún falta completar el migrador WinForms/WPF, gestión administrativa de usuarios, filtros combinados avanzados, exportación CSV, pruebas automatizadas, endurecimiento de seguridad y publicación IIS/Kestrel.
+## Seguridad y datos
 
-## Nota de validación
+Las capas reales, bases locales, archivos temporales y registros están excluidos mediante `.gitignore`. Las contraseñas se almacenan con PBKDF2-SHA256 y los endpoints de consulta requieren sesión autenticada.
 
-Validado en Windows con .NET SDK 10.0.401: restauración NuGet y compilación
-de ambos proyectos sin errores ni advertencias. La API y el frontend responden
-en sus puertos locales, el inicio de sesión de administrador funciona y las
-cuatro capas entregan GeoJSON. La preparación local aplica el script
-`10_Asociacion_Indices_Espaciales.sql` para utilizar los índices espaciales
-durante la asociación de lotes, manzanas y códigos fijos.
+## Próximos pasos
+
+La siguiente iteración completa el migrador con mapeo configurable, cancelación, bitácora y resumen de importación; además de filtros avanzados, administración de usuarios, pruebas automatizadas y despliegue.
+
+Proyecto académico de Sistemas de Información Geográfica. Utiliza los datos cartográficos únicamente con autorización y no los publiques en repositorios públicos.

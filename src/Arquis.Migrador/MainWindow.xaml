@@ -37,7 +37,7 @@
     </Grid>
     <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
       <Button x:Name="ValidateButton" Content="Validar capas" Padding="14,7" Margin="0,0,8,0" IsEnabled="False" Click="Validate_Click" />
-      <Button x:Name="ImportButton" Content="Importar a SQL Server" Padding="14,7" IsEnabled="False" ToolTip="Se habilitará al completar la validación y configuración de conexión." />
+      <Button x:Name="ImportButton" Content="Importar a SQL Server" Padding="14,7" IsEnabled="False" ToolTip="Se habilitará al completar la validación y configuración de conexión." Click="Import_Click" />
     </StackPanel>
   </Grid>
 </Window>
