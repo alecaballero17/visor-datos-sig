@@ -275,7 +275,7 @@ window.arquis = (() => {
 
     map=L.map('map',{zoomControl:true}).setView([-16.39,-60.965],14);
     map.createPane('selectionPane').style.zIndex=650;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:22,maxNativeZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
     L.control.scale({imperial:false}).addTo(map);
 
     map.on('mousemove',e=>{const el=$('coords');if(el)el.textContent=`Lon: ${e.latlng.lng.toFixed(6)} · Lat: ${e.latlng.lat.toFixed(6)}`;});
