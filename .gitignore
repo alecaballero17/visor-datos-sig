@@ -22,3 +22,40 @@ __pycache__/
 *.pyc
 TestResults/
 artifacts/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+**/build/
+lib/generated_plugin_registrant.dart
+
+
+app.*.symbols
+
+app.*.map.json
+
+*.jks
+*.key
+
+# Android
+**/android/.gradle
+**/android/local.properties
+**/android/app/src/main/res/values/secrets.xml
+
+# iOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/App.framework
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/flutter_assets/
