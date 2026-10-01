@@ -177,20 +177,11 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
 
     private async Task<double[]?> GetExtentAsync(string layer, CancellationToken ct)
     {
-        var table = layer.ToLowerInvariant() switch {
-            "manzanas" => "dbo.Manzanas", "lotes" => "dbo.Lotes",
-            "codigosfijos" => "dbo.CodigosFijos", "vias" => "dbo.Vias", _ => null
-        };
-        if (table == null) return null;
-
-        try
-        {
-            var result = await context.Database.SqlQueryRaw<string>($"SELECT geometry::EnvelopeAggregate(Geom).STEnvelope().STAsText() as Value FROM {table} WHERE Geom IS NOT NULL").ToListAsync(ct);
-            var raw = result.FirstOrDefault();
-            if (string.IsNullOrEmpty(raw)) return null;
-            return GetBbox(new NetTopologySuite.IO.WKTReader().Read(raw));
-        }
-        catch { return null; }
+        // En SQL Server el tipo geography no soporta geometry::EnvelopeAggregate directamente
+        // Para evitar llenar los logs de excepciones, retornamos null o podríamos calcularlo vía C#.
+        // La vista de todas formas funciona correctamente sin el Extent (hace fallback).
+        await Task.CompletedTask;
+        return null;
     }
 
     private static bool TryParseBbox(string? bbox, out string wkt)

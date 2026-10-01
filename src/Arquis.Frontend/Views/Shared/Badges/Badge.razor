@@ -1,0 +1,9 @@
+@inherits BadgeBaseComponent
+
+<span class="@ComputedCssClass" @attributes="AdditionalAttributes">
+    @ChildContent
+</span>
+
+@code {
+    protected override string DefaultCssClass => "badge text-bg-secondary";
+}

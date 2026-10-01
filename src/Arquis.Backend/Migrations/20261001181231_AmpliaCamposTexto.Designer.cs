@@ -4,6 +4,7 @@ using Arquis.Backend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NetTopologySuite.Geometries;
 
@@ -12,9 +13,11 @@ using NetTopologySuite.Geometries;
 namespace Arquis.Backend.Migrations
 {
     [DbContext(typeof(ArquisDbContext))]
-    partial class ArquisDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261001181231_AmpliaCamposTexto")]
+    partial class AmpliaCamposTexto
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

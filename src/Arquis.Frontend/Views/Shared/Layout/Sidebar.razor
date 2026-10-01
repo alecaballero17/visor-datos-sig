@@ -1,0 +1,50 @@
+@using System.Net.Http.Json
+
+<aside id="sidebar" class="sidebar @(IsOpen ? "open" : "")">
+    <div class="p-3 border-bottom">
+        <div class="fw-semibold mb-1" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#6c757d">Buscar</div>
+        <div class="input-group input-group-sm">
+            <input id="searchText" type="text" class="form-control" placeholder="Código, manzana, lote o vía…" autocomplete="off" />
+            <button id="searchBtn" type="button" class="btn btn-primary">Buscar</button>
+        </div>
+        <button id="clearBtn" type="button" class="btn btn-link btn-sm px-0 mt-1" style="font-size:.75rem">Limpiar resultados</button>
+    </div>
+
+    <div class="p-3 border-bottom">
+        <div class="fw-semibold mb-2" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#6c757d">Capas</div>
+        <div id="layerControl"></div>
+    </div>
+
+    <div class="p-3 border-bottom">
+        <fieldset>
+            <legend class="h6" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#6c757d">Disponibilidad de agua</legend>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showWithWater" checked />
+                <label class="form-check-label" for="showWithWater">Con agua</label>
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showWithoutWater" checked />
+                <label class="form-check-label" for="showWithoutWater">Sin agua</label>
+            </div>
+        </fieldset>
+    </div>
+
+    <div class="p-3 border-bottom">
+        <div class="fw-semibold mb-2" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#6c757d">Leyenda</div>
+        <div id="legend"><span class="small text-secondary">Cargando…</span></div>
+    </div>
+
+    <div class="p-3 results-panel">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="fw-semibold" style="font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:#6c757d">Resultados</span>
+            <span class="badge bg-secondary" id="resultCount">0</span>
+        </div>
+        <div id="resultStatus" class="small text-secondary py-1">Sin consulta activa.</div>
+        <div id="results" class="list-group mt-1" style="max-height:420px;overflow-y:auto"></div>
+    </div>
+</aside>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; } = false;
+}
+

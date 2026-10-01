@@ -1,0 +1,10 @@
+@inherits CardBaseComponent
+
+<div class="@ComputedCssClass" @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    protected override string BaseCssClass => "card";
+    protected override string DefaultModifiers => "shadow-sm";
+}

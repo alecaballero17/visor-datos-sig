@@ -13,6 +13,7 @@ paquete de datos autorizado a `03_DatosPrueba/DatosSIG_Reproj`:
 - `Exp_MapaBase_MZA_4326`: SHP/SHX/DBF/PRJ/CPG, 863 registros.
 - `Exp_MapaBase_VIAS_4326`: SHP/SHX/DBF/PRJ/CPG, 578 registros.
 
-Luego ejecute `convertir-capas.py` y `preparar-base.ps1` segun el README
-principal. Sin estas capas, el sistema permite registrarse e iniciar sesion,
-pero la base cartografica del proyecto no contiene entidades locales.
+Luego, simplemente inicie el backend (por ejemplo ejecutando `dotnet run` en el proyecto Arquis.Backend).
+El sistema detectará automáticamente los archivos `.shp` y poblará la base de datos usando el seeder nativo integrado en C# (`GeoDataSeeder.cs`). 
+
+No es necesario ejecutar scripts adicionales de Python o PowerShell. Sin estas capas, el sistema permite registrarse e iniciar sesión, y utilizará datos de prueba mínimos (si están configurados), pero la base cartográfica del proyecto no contendrá sus entidades reales.

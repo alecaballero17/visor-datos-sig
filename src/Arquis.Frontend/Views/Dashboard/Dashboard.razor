@@ -1,0 +1,78 @@
+@page "/dashboard"
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject IConfiguration Config
+
+<PageTitle>Visor SIG - Dashboard</PageTitle>
+
+<div id="app" class="app-shell" data-api="@apiBase">
+    <Header UserName="@userName" OnToggleSidebar="ToggleSidebar" OnLogout="Logout" />
+
+    <div class="app-body">
+        <Sidebar IsOpen="isSidebarOpen" />
+
+        <main class="map-wrap position-relative">
+            <div id="map" style="position:absolute;inset:0"></div>
+            <div id="loading" class="map-loading d-none">Cargando capas…</div>
+            <div id="coords" class="coords"></div>
+            <div id="detailPanel" class="detail-panel d-none">
+                <button id="detailClose" class="btn-close float-end" aria-label="Cerrar"></button>
+                <div id="detailContent"></div>
+            </div>
+        </main>
+    </div>
+</div>
+
+@code {
+    private bool isSidebarOpen = false;
+    private string userName = "Cargando...";
+    private string apiBase = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Resuelve la base URL del backend desde configuración
+        apiBase = Config["ApiBaseUrl"] ?? Http.BaseAddress?.ToString().TrimEnd('/') ?? string.Empty;
+
+        try
+        {
+            var response = await Http.GetAsync("api/autenticacion/sesion");
+            if (response.IsSuccessStatusCode)
+            {
+                var session = await response.Content.ReadFromJsonAsync<SessionData>();
+                userName = session?.nombre ?? session?.usuario ?? "Usuario";
+            }
+            else
+            {
+                Navigation.NavigateTo("/login");
+            }
+        }
+        catch { userName = "Desconocido"; }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Arranca el motor JS completo una vez que el DOM está listo
+            await JS.InvokeVoidAsync("arquis.init");
+        }
+    }
+
+    private class SessionData
+    {
+        public string? usuario { get; set; }
+        public string? nombre { get; set; }
+    }
+
+    private void ToggleSidebar()
+    {
+        isSidebarOpen = !isSidebarOpen;
+    }
+
+    private async Task Logout()
+    {
+        await Http.PostAsync("api/autenticacion/cerrar", null);
+        Navigation.NavigateTo("/login");
+    }
+}

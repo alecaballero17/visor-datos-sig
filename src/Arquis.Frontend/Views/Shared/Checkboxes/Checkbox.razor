@@ -1,0 +1,13 @@
+@inherits CheckboxBaseComponent
+
+<div class="@CssClass">
+    <input class="form-check-input" type="checkbox" id="@Id" checked="@Value" @onchange="OnValueChanged">
+    <label class="form-check-label" for="@Id">
+        @Label
+        @ChildContent
+    </label>
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
