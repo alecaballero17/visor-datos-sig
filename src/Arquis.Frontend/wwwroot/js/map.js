@@ -1,10 +1,11 @@
 (() => {
   const app=document.getElementById('app'); const api=app.dataset.api;
   const map=L.map('map',{zoomControl:true}).setView([-16.39,-60.965],14);
+  map.createPane('selectionPane').style.zIndex=650;
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
   L.control.scale({imperial:false}).addTo(map);
 
-  const layerState=new Map(); let selectedLayer=null; let selectedId=null; let selectedFeature=null; let selectedGraphic=null; let refreshTimer=null; let detailVersion=0; let refreshVersion=0;
+  const layerState=new Map(); let selectedLayer=null; let selectedId=null; let selectedFeature=null; let selectedGraphic=null; let selectionLabel=null; let refreshTimer=null; let detailVersion=0; let refreshVersion=0;
   const withWater=document.getElementById('showWithWater'), withoutWater=document.getElementById('showWithoutWater');
   withWater.closest('fieldset').insertAdjacentHTML('beforeend','<p class="small text-secondary mb-0 mt-2">Acércate al mapa para distinguir los símbolos de cada lote.</p>');
   function waterVisible(key,feature){
@@ -17,8 +18,8 @@
   function applyWaterFilters(){
     for(const [key,st] of layerState)if(key==='lotes'||key==='codigosfijos')renderLayer(st);
     if(selectedFeature&&!waterVisible(selectedLayer,selectedFeature)){
-      if(selectedGraphic)map.removeLayer(selectedGraphic);
-      selectedGraphic=null;selectedFeature=null;selectedLayer=null;selectedId=null;++detailVersion;
+      if(selectedGraphic)map.removeLayer(selectedGraphic);if(selectionLabel)map.removeLayer(selectionLabel);
+      selectedGraphic=null;selectionLabel=null;selectedFeature=null;selectedLayer=null;selectedId=null;++detailVersion;
       document.getElementById('detailPanel').classList.add('d-none');
     }
     renderLegend();
@@ -80,7 +81,13 @@
   async function refreshVisibleLayers(){
     const version=++refreshVersion;
     loading.classList.remove('d-none'); try{
-      const jobs=[]; for(const [key,st] of layerState){if(!st.visible)continue;jobs.push((async()=>{const r=await fetch(`${api}/api/capas/${key}/geojson?bbox=${encodeURIComponent(currentBbox())}&limit=1800`,{credentials:'include'});if(!r.ok)return;const gj=await r.json();if(version!==refreshVersion)return;st.data=gj;renderLayer(st);})());} await Promise.all(jobs);
+      const jobs=[]; for(const [key,st] of layerState){
+        if(!st.visible)continue;
+        // Los lotes y códigos son densos: se muestran al acercarse para mantener el mapa legible y ágil.
+        if((key==='lotes'||key==='codigosfijos')&&map.getZoom()<16){st.data={type:'FeatureCollection',features:[]};renderLayer(st);continue;}
+        const limit=key==='lotes'?350:key==='codigosfijos'?600:900;
+        jobs.push((async()=>{const r=await fetch(`${api}/api/capas/${key}/geojson?bbox=${encodeURIComponent(currentBbox())}&limit=${limit}`,{credentials:'include'});if(!r.ok)return;const gj=await r.json();if(version!==refreshVersion)return;st.data=gj;renderLayer(st);})());
+      } await Promise.all(jobs);
     } finally { if(version===refreshVersion)loading.classList.add('d-none'); }
   }
   function scheduleRefresh(){clearTimeout(refreshTimer);refreshTimer=setTimeout(refreshVisibleLayers,250);} map.on('moveend',scheduleRefresh); map.on('mousemove',e=>document.getElementById('coords').textContent=`Lon: ${e.latlng.lng.toFixed(6)} · Lat: ${e.latlng.lat.toFixed(6)}`);
@@ -126,7 +133,19 @@
       section.querySelectorAll('[data-water-code]').forEach(button=>button.addEventListener('click',()=>openSearchResult({layer:'codigosfijos',id:Number(button.dataset.waterCode)})));
     }catch(error){if(current())document.getElementById('waterDetail').innerHTML=`<h3 class="h6">Agua potable</h3><p class="small text-danger">${escapeHtml(error.message)}</p>`;}
   }
-  function selectFeature(key,feature,layer){ if(!waterVisible(key,feature)){resultStatus.textContent='La entidad está oculta por el filtro de agua. Active su casilla para mostrarla.';return;} selectedFeature=feature;selectedLayer=key;selectedId=feature.id; if(selectedGraphic)map.removeLayer(selectedGraphic); try{selectedGraphic=L.geoJSON(feature,{style:{color:'#f59e0b',weight:5,fillOpacity:.18},pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:10,color:'#f59e0b',weight:4,fillOpacity:.25})}).addTo(map);}catch{} showDetail(key,feature); highlightResult(key,feature.id); }
+  function selectionName(key,feature){const p=feature.properties||{};return key==='vias'?(p.Nombre||'Vía seleccionada'):key==='lotes'?`Lote ${p.NroLote??feature.id}`:key==='manzanas'?`UV ${p.UV??'-'} · MZA ${p.MZA??feature.id}`:`Código ${p.CodFijo??feature.id}`;}
+  function selectFeature(key,feature,layer){
+    if(!waterVisible(key,feature)){resultStatus.textContent='La entidad está oculta por el filtro de agua. Active su casilla para mostrarla.';return;}
+    selectedFeature=feature;selectedLayer=key;selectedId=feature.id;
+    if(selectedGraphic)map.removeLayer(selectedGraphic);if(selectionLabel)map.removeLayer(selectionLabel);
+    try{
+      selectedGraphic=L.geoJSON(feature,{pane:'selectionPane',interactive:false,style:{color:'#facc15',weight:10,opacity:1,fillColor:'#facc15',fillOpacity:.28,dashArray:'12 6'},pointToLayer:(f,ll)=>L.circleMarker(ll,{pane:'selectionPane',radius:14,color:'#facc15',weight:5,fillColor:'#ef4444',fillOpacity:1})}).addTo(map);
+      selectedGraphic.eachLayer(item=>item.bringToFront?.());
+      const center=selectedGraphic.getBounds().getCenter();
+      selectionLabel=L.marker(center,{interactive:false,icon:L.divIcon({className:'selection-label',html:`<span>✓ ${escapeHtml(selectionName(key,feature))}</span>`,iconAnchor:[0,34]})}).addTo(map);
+    }catch{}
+    showDetail(key,feature);highlightResult(key,feature.id);
+  }
   function highlightResult(key,id){document.querySelectorAll('.result-item').forEach(x=>x.classList.toggle('active',x.dataset.layer===key&&String(x.dataset.id)===String(id)));}
 
   async function doSearch(){
@@ -138,7 +157,7 @@
   async function openSearchResult(row){
     const r=await fetch(`${api}/api/capas/${row.layer}/${row.id}`,{credentials:'include'});if(!r.ok)return;const feature=await r.json();if(Array.isArray(feature.bbox)){const b=feature.bbox;if(b[0]===b[2]&&b[1]===b[3])map.setView([b[1],b[0]],18);else map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[40,40],maxZoom:19});}selectFeature(row.layer,feature,null);
   }
-  function clearResults(){results.innerHTML='';resultCount.textContent='0';resultStatus.textContent='Sin consulta activa.';document.getElementById('searchText').value='';if(selectedGraphic){map.removeLayer(selectedGraphic);selectedGraphic=null;}document.getElementById('detailPanel').classList.add('d-none');}
+  function clearResults(){results.innerHTML='';resultCount.textContent='0';resultStatus.textContent='Sin consulta activa.';document.getElementById('searchText').value='';if(selectedGraphic){map.removeLayer(selectedGraphic);selectedGraphic=null;}if(selectionLabel){map.removeLayer(selectionLabel);selectionLabel=null;}document.getElementById('detailPanel').classList.add('d-none');}
   function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 
   document.getElementById('searchBtn').addEventListener('click',doSearch);document.getElementById('searchText').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});document.getElementById('clearBtn').addEventListener('click',clearResults);document.getElementById('detailClose').addEventListener('click',()=>document.getElementById('detailPanel').classList.add('d-none'));
