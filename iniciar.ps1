@@ -1,5 +1,10 @@
+param([switch]$LocalDB)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+. "$PSScriptRoot/conexion-base.ps1"
+if (-not $env:ConnectionStrings__DefaultConnection -or $LocalDB) {
+    $env:ConnectionStrings__DefaultConnection = Get-ArquisConnectionString -LocalDB:$LocalDB
+}
 $dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
 if (-not $dotnet) { $dotnet = 'C:\Program Files\dotnet\dotnet.exe' }
 if (-not (Test-Path $dotnet)) { throw 'Instale el SDK de .NET 10.' }

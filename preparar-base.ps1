@@ -1,10 +1,11 @@
+param([string]$ConnectionString, [switch]$LocalDB)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
-$localdb = 'C:\Program Files\Microsoft SQL Server\160\Tools\Binn\SqlLocalDB.exe'
-if (-not (Test-Path $localdb)) { throw 'Instale SQL Server 2022 LocalDB.' }
-& $localdb start MSSQLLocalDB
-if ($LASTEXITCODE -ne 0) { throw 'No se pudo iniciar LocalDB.' }
-$cn = New-Object System.Data.SqlClient.SqlConnection 'Server=(localdb)\MSSQLLocalDB;Database=master;Integrated Security=True;TrustServerCertificate=True'
+. "$PSScriptRoot/conexion-base.ps1"
+if (-not $ConnectionString) { $ConnectionString = Get-ArquisConnectionString -LocalDB:$LocalDB -Start }
+$builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder $ConnectionString
+$builder["Initial Catalog"] = 'master'
+$cn = New-Object System.Data.SqlClient.SqlConnection $builder.ConnectionString
 $cn.Open()
 try {
     $check = $cn.CreateCommand()

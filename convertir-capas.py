@@ -47,6 +47,8 @@ with (root / '.setup/capas.sql').open('w', encoding='utf-8') as output:
     output.write('USE VisorDatosSIG; SET XACT_ABORT ON;\n')
     for table, filename, columns in layers:
         path = root / '03_DatosPrueba/DatosSIG_Reproj' / (filename + '_4326.shp')
+        if not path.exists():
+            path = root / '03_DatosPrueba' / (filename + '_4326.shp')
         cpg = path.with_suffix('.cpg')
         encoding = cpg.read_text().strip() if cpg.exists() else 'utf-8'
         if encoding.isdigit():

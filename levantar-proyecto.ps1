@@ -1,6 +1,7 @@
 param(
     [switch]$PrepararBase,
-    [switch]$ImportarCapas
+    [switch]$ImportarCapas,
+    [switch]$LocalDB
 )
 
 $ErrorActionPreference = 'Stop'
@@ -12,12 +13,12 @@ try {
     if (-not (Test-Path $dotnet)) { throw 'Falta el SDK .NET 10. Consulte COMO_EJECUTAR.md, paso 1.' }
     $sdks = & $dotnet --list-sdks
     if ($LASTEXITCODE -ne 0 -or -not ($sdks -match '^10\.')) { throw 'Instale el SDK .NET 10 (el runtime solo no alcanza). Consulte COMO_EJECUTAR.md.' }
-    $localdb = 'C:\Program Files\Microsoft SQL Server\160\Tools\Binn\SqlLocalDB.exe'
-    if (-not (Test-Path $localdb)) { throw 'Falta SQL Server 2022 LocalDB. Consulte COMO_EJECUTAR.md, paso 1.' }
-    & $localdb start MSSQLLocalDB
-    if ($LASTEXITCODE -ne 0) { throw 'No se pudo iniciar LocalDB para este usuario de Windows.' }
-
-    $cn = New-Object System.Data.SqlClient.SqlConnection 'Server=(localdb)\MSSQLLocalDB;Database=master;Integrated Security=True;TrustServerCertificate=True'
+    . "$PSScriptRoot/conexion-base.ps1"
+    $connectionString = Get-ArquisConnectionString -LocalDB:$LocalDB -Start
+    $env:ConnectionStrings__DefaultConnection = $connectionString
+    $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder $connectionString
+    $builder["Initial Catalog"] = 'master'
+    $cn = New-Object System.Data.SqlClient.SqlConnection $builder.ConnectionString
     try {
         $cn.Open()
         $check = $cn.CreateCommand()
@@ -30,7 +31,7 @@ try {
         }
     } finally { $cn.Dispose() }
 
-    $hasShapes = Test-Path '03_DatosPrueba/DatosSIG_Reproj/*.shp'
+    $hasShapes = (Test-Path '03_DatosPrueba/DatosSIG_Reproj/*.shp') -or (Test-Path '03_DatosPrueba/*.shp')
     if ($ImportarCapas -and -not $hasShapes) { throw 'Copie las capas en 03_DatosPrueba/DatosSIG_Reproj. Consulte 03_DatosPrueba/README.md.' }
     if ($ImportarCapas -or ($newDatabase -and $hasShapes)) {
         $python = (Get-Command py -ErrorAction SilentlyContinue).Source
@@ -41,7 +42,7 @@ try {
     }
     if ($needsPreparation) {
         Write-Host 'Preparando la base y las relaciones espaciales. Puede tardar varios minutos.'
-        & "$PSScriptRoot/preparar-base.ps1"
+        & "$PSScriptRoot/preparar-base.ps1" -ConnectionString $connectionString
     } else { Write-Host 'La base ya esta preparada; se conservan los usuarios y datos.' }
     if ($newDatabase -and -not $hasShapes -and -not (Test-Path '.setup/capas.sql')) {
         Write-Warning 'La base se creo sin capas. El mapa no tendra lotes hasta importar los archivos SHP.'

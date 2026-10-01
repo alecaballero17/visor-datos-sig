@@ -9,6 +9,7 @@
 .DS_Store
 .setup/
 03_DatosPrueba/DatosSIG_Reproj/
+03_DatosPrueba/Exp_*
 .env
 .env.*
 !.env.example

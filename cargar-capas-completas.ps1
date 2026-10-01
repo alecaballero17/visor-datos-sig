@@ -1,7 +1,9 @@
+param([switch]$LocalDB)
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$connectionString = 'Server=localhost;Database=VisorDatosSIG;Integrated Security=True;TrustServerCertificate=True'
+. "$PSScriptRoot/conexion-base.ps1"
+$connectionString = Get-ArquisConnectionString -LocalDB:$LocalDB
 $sqlFile = Join-Path $PSScriptRoot '.setup\capas.sql'
 if (-not (Test-Path -LiteralPath $sqlFile)) { throw 'No existe .setup\capas.sql. Ejecute primero convertir-capas.py.' }
 

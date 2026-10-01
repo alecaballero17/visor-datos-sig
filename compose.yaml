@@ -1,0 +1,15 @@
+name: arquis
+services:
+  sql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: Developer
+      MSSQL_SA_PASSWORD: ${ARQUIS_SQL_PASSWORD:?Ejecute LEVANTAR_ARQUIS.cmd}
+    ports:
+      - "127.0.0.1:14330:1433"
+    volumes:
+      - sql-data:/var/opt/mssql
+    restart: unless-stopped
+volumes:
+  sql-data:

@@ -101,7 +101,7 @@ sequenceDiagram
 
 - Windows 10/11.
 - [SDK de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0).
-- SQL Server 2022 o LocalDB.
+- Docker Desktop con contenedores Linux (SQL Server 2022 se ejecuta en Docker).
 - Python 3 para convertir las capas SHP.
 - Internet para NuGet y el mapa base.
 
@@ -124,21 +124,19 @@ Consulta [las instrucciones de datos](03_DatosPrueba/README.md) antes de usar in
 
 ### Crear la base y cargar capas
 
-Con LocalDB, usa el lanzador:
+Con Docker Desktop abierto, usa el lanzador (tambien acepta las capas directamente en `03_DatosPrueba`):
 
 ```powershell
 .\LEVANTAR_ARQUIS.cmd
 ```
 
-Con una instancia local de SQL Server, crea la base con los scripts de `02_BaseDatos`. Luego:
+Antes del primer arranque, instala la dependencia para convertir las capas:
 
 ```powershell
 py -m pip install --no-deps --target .setup/pythonlibs pyshp
-py convertir-capas.py
-powershell -ExecutionPolicy Bypass -File .\cargar-capas-completas.ps1
 ```
 
-La carga se realiza por lotes y reemplaza las entidades cartográficas existentes; úsala solo en una base de desarrollo.
+El lanzador carga las tablas vacias y conserva los datos existentes. Las credenciales locales se generan en `.setup/sql.env` y SQL Server conserva la base en un volumen Docker. Para importar capas agregadas despues del primer arranque, usa `LEVANTAR_ARQUIS.cmd -ImportarCapas`. El arranque antiguo con LocalDB sigue disponible mediante `-LocalDB`.
 
 ### Ejecutar el visor
 
