@@ -1,0 +1,110 @@
+@page "/signup"
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
+@using System.Text
+@inject NavigationManager Navigation
+@inject HttpClient Http
+
+<PageTitle>Visor de Datos - Registrarse</PageTitle>
+
+<div class="login-shell">
+    <Card CssClass="login-card mx-auto mt-5" style="max-width: 400px;">
+        <CardBody CssClass="p-4 p-md-5">
+            <div class="brand-mark mb-3 text-center">A</div>
+            <h1 class="h3 mb-1 text-center">Arquis</h1>
+            <p class="text-secondary mb-4 text-center">Crear cuenta nueva</p>
+
+            <EditForm Model="@registerModel" OnValidSubmit="HandleRegister" FormName="signupForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger small mb-3" />
+
+                <TextInput @bind-Value="registerModel.Nombre" Label="Nombre" Required="true" />
+                <TextInput @bind-Value="registerModel.Email" Label="Email" Required="true" />
+                
+                <div>
+                    <PasswordInput @bind-Value="registerModel.Password" Label="Contraseña" Required="true" />
+                    <small class="text-secondary d-block mt-n2 mb-3">Mínimo 8 caracteres.</small>
+                </div>
+
+                @if (!string.IsNullOrEmpty(registerError))
+                {
+                    <div class="alert alert-danger mt-2" role="alert">@registerError</div>
+                }
+                
+                @if (!string.IsNullOrEmpty(registerNotice))
+                {
+                    <div class="alert alert-success mt-2" role="status">@registerNotice</div>
+                }
+
+                <ButtonPrimary Type="submit" CssClass="w-100 mt-3" Icon="bi bi-person-plus">
+                    Crear cuenta
+                </ButtonPrimary>
+            </EditForm>
+
+            <ButtonLink CssClass="w-100 mt-3" OnClick="GoToLogin">
+                Volver a Iniciar sesión
+            </ButtonLink>
+        </CardBody>
+    </Card>
+</div>
+
+@code {
+    private string registerError = string.Empty;
+    private string registerNotice = string.Empty;
+    private RegisterModel registerModel = new();
+
+    private void GoToLogin()
+    {
+        Navigation.NavigateTo("/login");
+    }
+
+    private async Task HandleRegister()
+    {
+        registerError = string.Empty;
+        registerNotice = string.Empty;
+
+        if (registerModel.Password.Length < 8)
+        {
+            registerError = "La contraseña debe tener al menos 8 caracteres.";
+            return;
+        }
+
+        var content = new StringContent(JsonSerializer.Serialize(registerModel), Encoding.UTF8, "application/json");
+
+        try
+        {
+            var response = await Http.PostAsync("api/autenticacion/registrar", content);
+            var responseStr = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                registerNotice = "Cuenta creada. Redirigiendo al inicio de sesión...";
+                StateHasChanged();
+                await Task.Delay(1500);
+                Navigation.NavigateTo("/login");
+            }
+            else
+            {
+                using var doc = JsonDocument.Parse(responseStr);
+                registerError = doc.RootElement.GetProperty("mensaje").GetString() ?? "Error al registrar.";
+            }
+        }
+        catch (Exception)
+        {
+            registerError = "No se pudo conectar con el servidor.";
+        }
+    }
+
+    public class RegisterModel
+    {
+        [Required(ErrorMessage = "El nombre es obligatorio.")]
+        public string Nombre { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "El email es obligatorio.")]
+        [EmailAddress(ErrorMessage = "Formato de email inválido.")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "La contraseña es obligatoria.")]
+        public string Password { get; set; } = string.Empty;
+    }
+}

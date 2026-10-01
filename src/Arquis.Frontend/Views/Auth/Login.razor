@@ -1,0 +1,95 @@
+@page "/login"
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
+@using System.Text
+@inject NavigationManager Navigation
+@inject HttpClient Http
+
+<PageTitle>Visor de Datos - Iniciar sesión</PageTitle>
+
+<div class="login-shell">
+    <Card CssClass="login-card mx-auto mt-5" style="max-width: 400px;">
+        <CardBody CssClass="p-4 p-md-5">
+            <div class="brand-mark mb-3 text-center">A</div>
+            <h1 class="h3 mb-1 text-center">Arquis</h1>
+            <p class="text-secondary mb-4 text-center">Visor de datos geográficos</p>
+
+            <EditForm Model="@loginModel" OnValidSubmit="HandleLogin" FormName="loginForm">
+                <DataAnnotationsValidator />
+                <ValidationSummary class="text-danger small mb-3" />
+
+                <TextInput @bind-Value="loginModel.Usuario" Label="Usuario o email" Required="true" />
+                <PasswordInput @bind-Value="loginModel.Password" Label="Contraseña" Required="true" />
+
+                @if (!string.IsNullOrEmpty(loginError))
+                {
+                    <div class="alert alert-danger mt-2" role="alert">@loginError</div>
+                }
+                
+                @if (!string.IsNullOrEmpty(loginNotice))
+                {
+                    <div class="alert alert-success mt-2" role="status">@loginNotice</div>
+                }
+
+                <ButtonPrimary Type="submit" CssClass="w-100 mt-3" Icon="bi bi-box-arrow-in-right">
+                    Ingresar
+                </ButtonPrimary>
+            </EditForm>
+
+            <ButtonLink CssClass="w-100 mt-3" OnClick="GoToSignup">
+                Registrar usuario
+            </ButtonLink>
+        </CardBody>
+    </Card>
+</div>
+
+@code {
+    private string loginError = string.Empty;
+    private string loginNotice = string.Empty;
+    private LoginModel loginModel = new();
+
+    private void GoToSignup()
+    {
+        Navigation.NavigateTo("/signup");
+    }
+
+    private async Task HandleLogin()
+    {
+        loginError = string.Empty;
+        loginNotice = string.Empty;
+
+        var content = new StringContent(JsonSerializer.Serialize(loginModel), Encoding.UTF8, "application/json");
+
+        try
+        {
+            var response = await Http.PostAsync("api/autenticacion/iniciar", content);
+            var responseStr = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                loginNotice = "Sesión iniciada con éxito. Redirigiendo...";
+                StateHasChanged();
+                await Task.Delay(1000);
+                Navigation.NavigateTo("/dashboard");
+            }
+            else
+            {
+                using var doc = JsonDocument.Parse(responseStr);
+                loginError = doc.RootElement.GetProperty("mensaje").GetString() ?? "Error de autenticación.";
+            }
+        }
+        catch (Exception)
+        {
+            loginError = "No se pudo conectar con el servidor.";
+        }
+    }
+
+    public class LoginModel
+    {
+        [Required(ErrorMessage = "El usuario es obligatorio.")]
+        public string Usuario { get; set; } = string.Empty;
+        
+        [Required(ErrorMessage = "La contraseña es obligatoria.")]
+        public string Password { get; set; } = string.Empty;
+    }
+}

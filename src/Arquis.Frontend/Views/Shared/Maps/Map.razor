@@ -1,0 +1,14 @@
+@inherits MapBaseComponent
+
+<div id="@mapElementId" class="map-container" style="@MapContainerStyle" @attributes="AdditionalAttributes">
+    @if (!isLoaded)
+    {
+        <div class="d-flex justify-content-center align-items-center h-100 bg-light">
+            <span class="text-secondary">
+                <i class="bi bi-geo-alt me-2"></i>Cargando componente mapa base...
+            </span>
+        </div>
+    }
+</div>
+
+

@@ -1,0 +1,22 @@
+<header class="app-header">
+    <ButtonPrimary CssClass="btn-sm btn-outline-light d-md-none" aria-label="Abrir panel" OnClick="ToggleSidebar">
+        ☰
+    </ButtonPrimary>
+    <div><strong>Arquis</strong><span class="d-none d-sm-inline"> · VisorDatosSIG</span></div>
+    
+    <div class="ms-auto d-flex align-items-center gap-2">
+        <span class="small">@UserName</span>
+        <ButtonLink CssClass="btn-sm btn-light text-dark" OnClick="OnLogout">Salir</ButtonLink>
+    </div>
+</header>
+
+@code {
+    [Parameter] public string UserName { get; set; } = "Usuario";
+    [Parameter] public EventCallback OnLogout { get; set; }
+    [Parameter] public EventCallback OnToggleSidebar { get; set; }
+
+    private async Task ToggleSidebar()
+    {
+        await OnToggleSidebar.InvokeAsync();
+    }
+}

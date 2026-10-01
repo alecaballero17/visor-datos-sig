@@ -1,6 +1,7 @@
 using Arquis.Backend.Data;
 using Arquis.Backend.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,6 +9,10 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<SqlConnectionFactory>();
+builder.Services.AddDbContext<ArquisDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
+        x => x.UseNetTopologySuite()));
+
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<GeoDataService>();
 
@@ -46,6 +51,18 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ArquisDbContext>();
+    db.Database.Migrate();
+
+    // Rebuild spatial indices dynamically if there is data
+    // Arquis.Backend.Data.SpatialIndexOptimizer.OptimizeIndicesAsync(db).GetAwaiter().GetResult();
+
+    // Seed data
+    Arquis.Backend.Data.DbSeeder.SeedAsync(db).GetAwaiter().GetResult();
+}
 
 if (app.Environment.IsDevelopment())
 {

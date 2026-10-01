@@ -1,0 +1,10 @@
+@inherits LabelBaseComponent
+
+<label class="@ComputedCssClass" @attributes="AdditionalAttributes">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <i class="@Icon me-1"></i>
+    }
+    @Text
+    @ChildContent
+</label>

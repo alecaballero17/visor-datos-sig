@@ -1,4 +1,819 @@
-html,body{height:100%;margin:0}.login-shell{min-height:100vh;display:grid;place-items:center;background:#f3f6f9;padding:1rem}.login-card{width:min(100%,420px);border:0}.brand-mark{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;background:#0d6efd;color:white;font-weight:800;font-size:1.4rem}.app-shell{height:100vh;display:flex;flex-direction:column;overflow:hidden}.app-header{height:56px;flex:0 0 56px;background:#17365d;color:#fff;display:flex;align-items:center;padding:0 .8rem;gap:.8rem}.app-body{flex:1;min-height:0;display:flex}.sidebar{width:360px;flex:0 0 360px;background:#fff;border-right:1px solid #d9e0e7;display:flex;flex-direction:column;overflow:auto;z-index:1001}.map-wrap{position:relative;flex:1;min-width:0}.map-wrap #map{position:absolute;inset:0}.results-panel{min-height:0}.result-item{cursor:pointer}.legend-swatch{display:inline-block;width:24px;height:5px;margin-right:8px;vertical-align:middle}.legend-dot{width:12px;height:12px;border-radius:50%}.map-loading{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:900;background:white;border-radius:6px;padding:.5rem .8rem;box-shadow:0 2px 12px #0002}.coords{position:absolute;bottom:8px;right:8px;z-index:900;background:#fff;padding:.2rem .5rem;border-radius:4px;font-size:.75rem;box-shadow:0 1px 6px #0002}.detail-panel{position:absolute;top:12px;right:12px;z-index:900;width:min(360px,calc(100% - 24px));max-height:50%;overflow:auto;background:#fff;border-radius:8px;padding:1rem;box-shadow:0 4px 18px #0003}.prop-table{font-size:.82rem;word-break:break-word}.leaflet-container{font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-.water-marker{background:#fff;border:1px solid currentColor;border-radius:50%;box-shadow:0 1px 5px #0004;display:grid;place-items:center}.water-marker span{display:block;width:18px;height:18px}.water-marker svg{width:100%;height:100%}.water-yes{color:#0284c7}.water-no{color:#dc2626}.water-legend{display:flex;align-items:center;gap:8px}.water-legend span{display:inline-flex;flex-shrink:0;width:26px;height:26px}.water-legend svg{width:26px;height:26px}
-.selection-label{background:transparent;border:0}.selection-label span{display:block;white-space:nowrap;background:#172554;color:#fff;border:3px solid #facc15;border-radius:999px;padding:.35rem .7rem;font-size:.8rem;font-weight:800;box-shadow:0 3px 12px #0008;text-shadow:none}
-@media(max-width:767.98px){.sidebar{position:absolute;top:56px;bottom:0;left:0;width:min(90vw,360px);transform:translateX(-101%);transition:transform .2s}.sidebar.open{transform:translateX(0)}.app-body{position:relative}.detail-panel{top:auto;bottom:44px;max-height:42%}}
+/* ═══════════════════════════════════════════════════════════════════════════
+   ARQUIS · VISOR SIG — Design System
+   ───────────────────────────────────────────────────────────────────────────
+   TABLA DE CONTENIDOS
+   1. Tema (custom properties)
+   2. Animaciones & transiciones
+   3. Reset / base
+   4. Tipografía
+   5. Layout (app-shell, app-header, app-body)
+   6. Sidebar
+   7. Mapa y overlays
+   8. Panel de detalle
+   9. Resultados y búsqueda
+   10. Leyenda
+   11. Marcadores de agua
+   12. Selección de features
+   13. Login
+   14. Componentes utilitarios (badges, tablas)
+   15. Responsive (≤768 px)
+═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ─── 1. TEMA ─────────────────────────────────────────────────────────────── */
+/*
+  Para cambiar el tema completo solo edita estas variables.
+  Todos los componentes heredan de :root.
+  Puedes crear un tema oscuro con [data-theme="dark"] { ... }.
+*/
+:root {
+  /* Paleta principal */
+  --color-brand-900:  #0f2a50;
+  --color-brand-800:  #17365d;
+  --color-brand-700:  #1d4170;
+  --color-brand-600:  #2456a0;
+  --color-brand-500:  #2c6fc8;
+  --color-brand-400:  #4d8ce0;
+  --color-brand-100:  #dbeafe;
+
+  /* Acento */
+  --color-accent:     #facc15;
+  --color-accent-dark:#d97706;
+
+  /* Semánticos */
+  --color-success:    #22c55e;
+  --color-warning:    #f59e0b;
+  --color-danger:     #ef4444;
+  --color-info:       #0284c7;
+
+  /* Agua */
+  --color-water-yes:  #0284c7;
+  --color-water-no:   #dc2626;
+
+  /* Capas de mapa */
+  --color-layer-manzanas: #dc2626;
+  --color-layer-lotes:    #38bdf8;
+  --color-layer-codigos:  #f59e0b;
+  --color-layer-vias:     #64748b;
+
+  /* Neutros */
+  --color-surface:    #ffffff;
+  --color-surface-2:  #f8fafc;
+  --color-surface-3:  #f1f5f9;
+  --color-border:     #d9e0e7;
+  --color-border-2:   #cbd5e1;
+  --color-text:       #1e293b;
+  --color-text-muted: #64748b;
+  --color-text-light: #94a3b8;
+
+  /* Encabezado */
+  --header-bg:        var(--color-brand-800);
+  --header-color:     #ffffff;
+  --header-height:    56px;
+
+  /* Sidebar */
+  --sidebar-width:    360px;
+  --sidebar-bg:       var(--color-surface);
+  --sidebar-border:   var(--color-border);
+
+  /* Radios */
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+  --radius-full: 9999px;
+
+  /* Sombras */
+  --shadow-sm:  0 1px 4px rgba(0,0,0,.08);
+  --shadow-md:  0 2px 12px rgba(0,0,0,.12);
+  --shadow-lg:  0 4px 18px rgba(0,0,0,.16);
+  --shadow-xl:  0 8px 32px rgba(0,0,0,.20);
+
+  /* Tipografía */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+  --font-size-xs:  0.70rem;
+  --font-size-sm:  0.80rem;
+  --font-size-base: 1rem;
+  --font-size-lg:  1.125rem;
+
+  /* Espaciado base */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Transiciones */
+  --transition-fast:   150ms ease;
+  --transition-base:   250ms ease;
+  --transition-slow:   400ms cubic-bezier(.4,0,.2,1);
+  --transition-spring: 350ms cubic-bezier(.34,1.56,.64,1);
+
+  /* z-index stack */
+  --z-sidebar:  1001;
+  --z-overlay:   900;
+  --z-selection: 650;
+  --z-tooltip:   950;
+}
+
+/* Tema oscuro (actívalo con <html data-theme="dark">) */
+[data-theme="dark"] {
+  --color-surface:    #0f172a;
+  --color-surface-2:  #1e293b;
+  --color-surface-3:  #334155;
+  --color-border:     #334155;
+  --color-border-2:   #475569;
+  --color-text:       #f1f5f9;
+  --color-text-muted: #94a3b8;
+  --color-text-light: #64748b;
+
+  --header-bg:        #020617;
+  --sidebar-bg:       #0f172a;
+  --sidebar-border:   #1e293b;
+}
+
+
+/* ─── 2. ANIMACIONES & TRANSICIONES ──────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .5; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* Clases de animación reutilizables */
+.anim-fade-in        { animation: fadeIn        var(--transition-base) both; }
+.anim-fade-in-up     { animation: fadeInUp      var(--transition-slow) both; }
+.anim-fade-in-down   { animation: fadeInDown    var(--transition-slow) both; }
+.anim-slide-in-left  { animation: slideInLeft   var(--transition-slow) both; }
+.anim-scale-in       { animation: scaleIn       var(--transition-spring) both; }
+.anim-pulse          { animation: pulse 2s ease infinite; }
+.anim-spin           { animation: spin  .8s linear infinite; }
+
+/* Delays */
+.anim-delay-1 { animation-delay: 75ms; }
+.anim-delay-2 { animation-delay: 150ms; }
+.anim-delay-3 { animation-delay: 225ms; }
+.anim-delay-4 { animation-delay: 300ms; }
+
+
+/* ─── 3. RESET / BASE ─────────────────────────────────────────────────────── */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-surface-3);
+}
+
+
+/* ─── 4. TIPOGRAFÍA ──────────────────────────────────────────────────────── */
+
+.label-caps {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+}
+
+.text-sm   { font-size: var(--font-size-sm); }
+.text-xs   { font-size: var(--font-size-xs); }
+.text-muted { color: var(--color-text-muted); }
+
+
+/* ─── 5. LAYOUT ──────────────────────────────────────────────────────────── */
+
+.app-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--color-surface-3);
+}
+
+/* Encabezado */
+.app-header {
+  flex: 0 0 var(--header-height);
+  height: var(--header-height);
+  background: var(--header-bg);
+  color: var(--header-color);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  gap: var(--space-3);
+  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  animation: fadeInDown var(--transition-slow) both;
+}
+
+.app-header .brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-500);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1rem;
+  color: #fff;
+  flex-shrink: 0;
+  transition: transform var(--transition-spring);
+}
+
+.app-header .brand-mark:hover {
+  transform: scale(1.08);
+}
+
+.app-header .user-chip {
+  font-size: var(--font-size-sm);
+  background: rgba(255,255,255,.12);
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-3);
+  transition: background var(--transition-fast);
+}
+
+.app-header .user-chip:hover {
+  background: rgba(255,255,255,.2);
+}
+
+/* Cuerpo principal */
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+
+/* ─── 6. SIDEBAR ─────────────────────────────────────────────────────────── */
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex: 0 0 var(--sidebar-width);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: var(--z-sidebar);
+  animation: slideInLeft var(--transition-slow) both;
+
+  /* Scrollbar personalizado */
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-2) transparent;
+}
+
+.sidebar::-webkit-scrollbar        { width: 4px; }
+.sidebar::-webkit-scrollbar-track  { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb  {
+  background: var(--color-border-2);
+  border-radius: var(--radius-full);
+}
+
+/* Secciones del sidebar */
+.sidebar section,
+.sidebar .sidebar-section {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  animation: fadeIn var(--transition-base) both;
+}
+
+/* Etiquetas de sección */
+.sidebar .section-title {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-2);
+}
+
+/* Input de búsqueda */
+.sidebar .input-group .form-control {
+  border-color: var(--color-border-2);
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  font-size: var(--font-size-sm);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow   var(--transition-fast);
+}
+
+.sidebar .input-group .form-control:focus {
+  border-color: var(--color-brand-500);
+  box-shadow: 0 0 0 3px rgba(44,111,200,.15);
+}
+
+.sidebar .btn-primary {
+  background: var(--color-brand-600);
+  border-color: var(--color-brand-600);
+  font-size: var(--font-size-sm);
+  transition:
+    background     var(--transition-fast),
+    border-color   var(--transition-fast),
+    transform      var(--transition-spring);
+}
+
+.sidebar .btn-primary:hover {
+  background: var(--color-brand-700);
+  border-color: var(--color-brand-700);
+  transform: translateY(-1px);
+}
+
+.sidebar .btn-primary:active {
+  transform: translateY(0);
+}
+
+/* Checkboxes de capa */
+.sidebar .form-check {
+  transition: opacity var(--transition-fast);
+}
+
+.sidebar .form-check-input {
+  border-color: var(--color-border-2);
+  transition:
+    background-color var(--transition-fast),
+    border-color     var(--transition-fast);
+}
+
+.sidebar .form-check-input:checked {
+  background-color: var(--color-brand-500);
+  border-color:     var(--color-brand-500);
+}
+
+
+/* ─── 7. MAPA Y OVERLAYS ─────────────────────────────────────────────────── */
+
+.map-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.map-wrap #map {
+  position: absolute;
+  inset: 0;
+}
+
+/* Indicador de carga */
+.map-loading {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-overlay);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  box-shadow: var(--shadow-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  animation: fadeInDown var(--transition-fast) both;
+  transition: opacity var(--transition-fast);
+}
+
+.map-loading::before {
+  content: "";
+  display: block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--color-brand-100);
+  border-top-color: var(--color-brand-500);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+/* Coordenadas */
+.coords {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: var(--z-overlay);
+  background: var(--color-surface);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  box-shadow: var(--shadow-sm);
+  color: var(--color-text-muted);
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+
+/* Fuente de Leaflet */
+.leaflet-container {
+  font-family: var(--font-sans);
+}
+
+
+/* ─── 8. PANEL DE DETALLE ────────────────────────────────────────────────── */
+
+.detail-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: var(--z-overlay);
+  width: min(360px, calc(100% - 24px));
+  max-height: 50%;
+  overflow: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--color-border);
+  animation: scaleIn var(--transition-spring) both;
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-2) transparent;
+}
+
+.detail-panel::-webkit-scrollbar       { width: 4px; }
+.detail-panel::-webkit-scrollbar-thumb {
+  background: var(--color-border-2);
+  border-radius: var(--radius-full);
+}
+
+.detail-panel.d-none {
+  display: none;
+}
+
+.prop-table {
+  font-size: var(--font-size-sm);
+  word-break: break-word;
+}
+
+.prop-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  white-space: nowrap;
+  padding-right: var(--space-3);
+  width: 40%;
+}
+
+.prop-table td {
+  color: var(--color-text);
+}
+
+/* Water detail card */
+.detail-panel .border.rounded {
+  border-color: var(--color-border) !important;
+  border-radius: var(--radius-md) !important;
+  animation: fadeInUp var(--transition-slow) both;
+}
+
+.detail-panel .btn-outline-primary {
+  border-color: var(--color-brand-500);
+  color: var(--color-brand-600);
+  font-size: var(--font-size-sm);
+  border-radius: var(--radius-sm);
+  transition:
+    background var(--transition-fast),
+    color       var(--transition-fast),
+    transform   var(--transition-spring);
+}
+
+.detail-panel .btn-outline-primary:hover {
+  background: var(--color-brand-500);
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+
+/* ─── 9. RESULTADOS Y BÚSQUEDA ───────────────────────────────────────────── */
+
+.results-panel {
+  flex: 1;
+  min-height: 0;
+  padding: var(--space-3) var(--space-4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Lista de resultados */
+#results {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-2) transparent;
+}
+
+#results::-webkit-scrollbar       { width: 4px; }
+#results::-webkit-scrollbar-thumb {
+  background: var(--color-border-2);
+  border-radius: var(--radius-full);
+}
+
+/* Ítem de resultado */
+.result-item {
+  cursor: pointer;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  transition:
+    background    var(--transition-fast),
+    border-color  var(--transition-fast),
+    transform     var(--transition-fast);
+  animation: fadeInUp var(--transition-slow) both;
+}
+
+.result-item:hover {
+  background: var(--color-surface-2);
+  border-left-color: var(--color-brand-400);
+  transform: translateX(2px);
+}
+
+.result-item.active {
+  background: var(--color-brand-100);
+  border-left-color: var(--color-brand-600);
+}
+
+.result-item .fw-semibold {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.result-item .text-secondary {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Badge de conteo */
+#resultCount {
+  background: var(--color-brand-600) !important;
+  font-size: var(--font-size-xs);
+  border-radius: var(--radius-full);
+  min-width: 20px;
+  text-align: center;
+  transition:
+    background  var(--transition-fast),
+    transform   var(--transition-spring);
+}
+
+
+/* ─── 10. LEYENDA ────────────────────────────────────────────────────────── */
+
+.legend-swatch {
+  display: inline-block;
+  width: 24px;
+  height: 5px;
+  margin-right: var(--space-2);
+  vertical-align: middle;
+  border-radius: 2px;
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: var(--space-2);
+  vertical-align: middle;
+}
+
+#legend .small {
+  color: var(--color-text-muted);
+  animation: fadeIn var(--transition-slow) both;
+}
+
+
+/* ─── 11. MARCADORES DE AGUA ──────────────────────────────────────────────── */
+
+.water-marker {
+  background: var(--color-surface);
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  place-items: center;
+  transition: transform var(--transition-spring);
+}
+
+.water-marker:hover {
+  transform: scale(1.2);
+}
+
+.water-marker span {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.water-marker svg {
+  width: 100%;
+  height: 100%;
+}
+
+.water-yes { color: var(--color-water-yes); }
+.water-no  { color: var(--color-water-no); }
+
+.water-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.water-legend span {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+}
+
+.water-legend svg {
+  width: 26px;
+  height: 26px;
+}
+
+
+/* ─── 12. SELECCIÓN DE FEATURES ──────────────────────────────────────────── */
+
+.selection-label {
+  background: transparent;
+  border: 0;
+  pointer-events: none;
+}
+
+.selection-label span {
+  display: block;
+  white-space: nowrap;
+  background: var(--color-brand-900);
+  color: #fff;
+  border: 3px solid var(--color-accent);
+  border-radius: var(--radius-full);
+  padding: 0.35rem 0.7rem;
+  font-size: var(--font-size-sm);
+  font-weight: 800;
+  box-shadow: var(--shadow-xl);
+  text-shadow: none;
+  animation: scaleIn var(--transition-spring) both;
+}
+
+
+/* ─── 13. LOGIN ───────────────────────────────────────────────────────────── */
+
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--color-brand-900) 0%, var(--color-brand-700) 60%, var(--color-brand-500) 100%);
+  padding: var(--space-4);
+}
+
+.login-card {
+  width: min(100%, 420px);
+  border: 0;
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-xl);
+  animation: scaleIn var(--transition-spring) both;
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  background: var(--color-brand-500);
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.4rem;
+  box-shadow: var(--shadow-md);
+  transition: transform var(--transition-spring);
+}
+
+.brand-mark:hover {
+  transform: scale(1.08) rotate(-3deg);
+}
+
+
+/* ─── 14. COMPONENTES UTILITARIOS ────────────────────────────────────────── */
+
+/* Tabla de propiedades */
+.table.prop-table thead th {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid var(--color-border-2);
+}
+
+/* Botones con transición base */
+.btn {
+  transition:
+    background    var(--transition-fast),
+    border-color  var(--transition-fast),
+    color         var(--transition-fast),
+    box-shadow    var(--transition-fast),
+    transform     var(--transition-spring);
+}
+
+.btn:active {
+  transform: scale(.97);
+}
+
+/* Skeleton loader (para estados de carga) */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-border)   25%,
+    var(--color-surface-3) 50%,
+    var(--color-border)   75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-sm);
+}
+
+
+/* ─── 15. RESPONSIVE (≤ 768 px) ──────────────────────────────────────────── */
+
+@media (max-width: 767.98px) {
+  /* Sidebar deslizable */
+  .sidebar {
+    position: absolute;
+    top: var(--header-height);
+    bottom: 0;
+    left: 0;
+    width: min(90vw, var(--sidebar-width));
+    transform: translateX(-101%);
+    transition: transform var(--transition-slow);
+    box-shadow: var(--shadow-xl);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* Backdrop al abrir sidebar */
+  .sidebar.open::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: -1;
+    animation: fadeIn var(--transition-fast) both;
+  }
+
+  .app-body {
+    position: relative;
+  }
+
+  /* Panel de detalle en móvil: desde abajo */
+  .detail-panel {
+    top: auto;
+    bottom: 44px;
+    right: 8px;
+    left: 8px;
+    width: auto;
+    max-height: 42%;
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-sm);
+    animation: fadeInUp var(--transition-slow) both;
+  }
+}

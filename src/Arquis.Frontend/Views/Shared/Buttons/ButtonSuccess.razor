@@ -1,0 +1,13 @@
+@inherits ButtonBaseComponent
+
+<button type="@Type" class="@ComputedCssClass" @onclick="OnClick" @attributes="AdditionalAttributes">
+    @if (!string.IsNullOrEmpty(Icon))
+    {
+        <i class="@Icon me-1"></i>
+    }
+    @ChildContent
+</button>
+
+@code {
+    protected override string DefaultCssClass => "btn btn-success";
+}
