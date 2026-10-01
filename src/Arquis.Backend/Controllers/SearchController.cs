@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Arquis.Backend.Controllers;
 
 [ApiController]
-[Authorize]
+//[Authorize]
 [Route("api/busqueda")]
 public sealed class SearchController(GeoDataService geo) : ControllerBase
 {

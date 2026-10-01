@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Arquis.Backend.Controllers;
 
 [ApiController]
-[Authorize]
+//[Authorize]
 [Route("api/capas")]
 public sealed class LayersController(GeoDataService geo) : ControllerBase
 {

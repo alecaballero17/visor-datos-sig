@@ -6,7 +6,7 @@ using Microsoft.Data.SqlClient;
 namespace Arquis.Backend.Controllers;
 
 [ApiController]
-[Authorize]
+//[Authorize]
 [Route("api/agua-potable")]
 public sealed class AguaPotableController(SqlConnectionFactory connections) : ControllerBase
 {
@@ -29,14 +29,14 @@ public sealed class AguaPotableController(SqlConnectionFactory connections) : Co
         var sql = """
             SELECT c.IdCodigo,c.CodFijo,c.CodF_SIG,c.Nombre,c.Estado,c.EstadoVerificado,
                    CASE WHEN @PorLote=1 THEN @Id ELSE c.IdLote END AS IdLote,l.NroLote,m.UV,m.MZA,
-                   CASE WHEN c.Geom.STGeometryType()='Point' THEN c.Geom.STX END AS Longitud,
-                   CASE WHEN c.Geom.STGeometryType()='Point' THEN c.Geom.STY END AS Latitud
+                   CASE WHEN c.Geom.STGeometryType()='Point' THEN c.Geom.Long END AS Longitud,
+                   CASE WHEN c.Geom.STGeometryType()='Point' THEN c.Geom.Lat END AS Latitud
             FROM dbo.CodigosFijos c
             LEFT JOIN dbo.Lotes l ON l.IdLote=CASE WHEN @PorLote=1 THEN @Id ELSE c.IdLote END
             LEFT JOIN dbo.Manzanas m ON m.IdManzana=l.IdManzana
             WHERE
             """ + (porLote ? " (c.IdLote=@Id OR c.Geom.STIntersects(@LoteGeom)=1)" : " c.IdCodigo=@Id") + " ORDER BY c.IdCodigo";
-        if (porLote) sql = "DECLARE @LoteGeom geometry; SELECT @LoteGeom=Geom FROM dbo.Lotes WHERE IdLote=@Id; " + sql;
+        if (porLote) sql = "DECLARE @LoteGeom geography; SELECT @LoteGeom=Geom FROM dbo.Lotes WHERE IdLote=@Id; " + sql;
         await using var cmd = new SqlCommand(sql, cn);
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.Parameters.AddWithValue("@PorLote", porLote);
