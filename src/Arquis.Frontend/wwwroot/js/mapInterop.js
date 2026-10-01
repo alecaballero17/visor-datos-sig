@@ -1,4 +1,4 @@
-﻿// ── Motor de mapa Arquis ─────────────────────────────────────────────────────
+// ── Motor de mapa Arquis ─────────────────────────────────────────────────────
 // Inicializado desde Blazor: JS.InvokeVoidAsync("arquis.init")
 // ────────────────────────────────────────────────────────────────────────────
 window.arquis = (() => {
@@ -240,8 +240,7 @@ window.arquis = (() => {
     rows.forEach((row,i)=>{
       const btn=document.createElement('button');
       btn.type='button';
-      btn.className='list-group-item list-group-item-action result-item anim-fade-in-up';
-      btn.style.animationDelay=`${i*40}ms`;
+      btn.className='list-group-item list-group-item-action result-item';
       btn.dataset.layer=row.layer; btn.dataset.id=row.id;
       btn.innerHTML=`<div class="fw-semibold">${esc(row.label)}</div><small class="text-secondary">${titleOf(row.layer)} · ID ${row.id}</small>`;
       btn.addEventListener('click',()=>openSearchResult(row));
