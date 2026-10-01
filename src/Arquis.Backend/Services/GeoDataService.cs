@@ -1,159 +1,197 @@
-using System.Data;
 using Arquis.Backend.Data;
 using Arquis.Backend.Models;
-using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using NetTopologySuite.Geometries;
-using NetTopologySuite.IO;
 
 namespace Arquis.Backend.Services;
 
-public sealed class GeoDataService(SqlConnectionFactory connectionFactory, IConfiguration configuration)
+public sealed class GeoDataService(ArquisDbContext context, IConfiguration configuration)
 {
-    private sealed record LayerDef(string Key, string Table, string Id, string[] Columns, string[] Search, string GeometryType, object Style);
-
-    private static readonly IReadOnlyDictionary<string, LayerDef> Layers = new Dictionary<string, LayerDef>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["manzanas"] = new("manzanas", "dbo.Manzanas", "IdManzana", ["IdOrigen","UV_MZA","UV","MZA"], ["UV_MZA","UV","MZA"], "Polygon", new { color="#dc2626", weight=2, fillOpacity=0.08 }),
-        ["lotes"] = new("lotes", "dbo.Lotes", "IdLote", ["IdOrigen","NroLote","IdManzana"], ["NroLote"], "Polygon", new { color="#38bdf8", weight=1, fillOpacity=0.06 }),
-        ["codigosfijos"] = new("codigosfijos", "dbo.CodigosFijos", "IdCodigo", ["CodF_SQL","CodF_SIG","CodFijo","Nombre","Estado","EstadoVerificado","FechaCambioEstado","IdLote","Longitud","Latitud"], ["CodF_SIG","CodFijo","Nombre"], "Point", new { color="#f59e0b", radius=3 }),
-        ["vias"] = new("vias", "dbo.Vias", "IdVia", ["OBJECTID","Nombre","TipoVia","OSMID"], ["Nombre","TipoVia","OSMID"], "LineString", new { color="#a855f7", weight=3 })
-    };
-
     private int DefaultLimit => configuration.GetValue("Viewer:DefaultFeatureLimit", 1500);
     private int MaxLimit => configuration.GetValue("Viewer:MaxFeatureLimit", 5000);
+
+    private static readonly IReadOnlyDictionary<string, (string Title, string Type, object Style)> LayerMetadata = new Dictionary<string, (string, string, object)>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["manzanas"] = ("Manzanas", "Polygon", new { color="#dc2626", weight=2, fillOpacity=0.08 }),
+        ["lotes"] = ("Lotes", "Polygon", new { color="#38bdf8", weight=1, fillOpacity=0.06 }),
+        ["codigosfijos"] = ("Códigos fijos", "Point", new { color="#f59e0b", radius=3 }),
+        ["vias"] = ("Vías", "LineString", new { color="#a855f7", weight=3 })
+    };
 
     public async Task<IReadOnlyList<LayerInfo>> GetLayersAsync(CancellationToken ct)
     {
         var result = new List<LayerInfo>();
-        foreach (var def in Layers.Values)
-            result.Add(new LayerInfo(def.Key, Title(def.Key), def.GeometryType, def.Id, def.Search, def.Style, await GetExtentAsync(def, ct)));
+        foreach (var (key, meta) in LayerMetadata)
+        {
+            var extent = await GetExtentAsync(key, ct);
+            result.Add(new LayerInfo(key, meta.Title, meta.Type, $"Id{meta.Title.Split(' ')[0]}", [], meta.Style, extent));
+        }
         return result;
     }
 
     public async Task<object> GetGeoJsonAsync(string layer, string? bbox, string? query, int? limit, CancellationToken ct)
     {
-        var def = GetLayer(layer);
         var take = Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit);
-        var sql = $"SELECT TOP (@Take) {Escape(def.Id)} AS FeatureId, {string.Join(",", def.Columns.Select(Escape))}, {WaterColumns(def)}Geom.STAsText() AS Wkt FROM {def.Table} AS entidad WHERE Geom IS NOT NULL";
-        var parameters = new List<SqlParameter> { new("@Take", SqlDbType.Int) { Value = take } };
-
-        if (TryParseBbox(bbox, out var bboxWkt))
+        Geometry? bboxGeom = null;
+        if (TryParseBbox(bbox, out var wkt))
         {
-            sql += " AND Geom.STIntersects(geometry::STGeomFromText(@BboxWkt,4326)) = 1";
-            parameters.Add(new SqlParameter("@BboxWkt", SqlDbType.NVarChar, -1) { Value = bboxWkt });
+            bboxGeom = new NetTopologySuite.IO.WKTReader().Read(wkt);
+            bboxGeom.SRID = 4326;
         }
-        if (!string.IsNullOrWhiteSpace(query) && def.Search.Length > 0)
-        {
-            var clauses = def.Search.Select(c => $"CONVERT(NVARCHAR(200),{Escape(c)}) LIKE @Q");
-            sql += " AND (" + string.Join(" OR ", clauses) + ")";
-            parameters.Add(new SqlParameter("@Q", SqlDbType.NVarChar, 220) { Value = $"%{query.Trim()}%" });
-        }
-        sql += $" ORDER BY {Escape(def.Id)}";
 
-        await using var cn = connectionFactory.Create();
-        await cn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, cn);
-        cmd.Parameters.AddRange(parameters.ToArray());
-        await using var rd = await cmd.ExecuteReaderAsync(ct);
+        var qStr = query?.Trim();
         var features = new List<object>();
-        var wktReader = new WKTReader();
-        while (await rd.ReadAsync(ct))
+        var isTruncated = false;
+
+        switch (layer.ToLowerInvariant())
         {
-            var props = new Dictionary<string, object?> { [def.Id] = rd["FeatureId"] };
-            foreach (var col in def.Columns) props[col] = rd[col] is DBNull ? null : rd[col];
-            var geom = wktReader.Read(Convert.ToString(rd["Wkt"])!);
-            AddWaterProperties(def, props, rd, geom);
-            features.Add(new { type="Feature", id=rd["FeatureId"], geometry=ToGeoJsonGeometry(geom), properties=props });
+            case "manzanas":
+                var qM = context.Manzanas.Where(m => m.Geom != null).AsQueryable();
+                if (bboxGeom != null) qM = qM.Where(m => m.Geom!.Intersects(bboxGeom));
+                if (!string.IsNullOrWhiteSpace(qStr)) qM = qM.Where(m => m.UV_MZA!.Contains(qStr) || m.UV!.Contains(qStr) || m.MZA!.Contains(qStr));
+                
+                var manzanas = await qM.OrderBy(m => m.IdManzana).Take(take).ToListAsync(ct);
+                isTruncated = manzanas.Count >= take;
+                features.AddRange(manzanas.Select(m => new {
+                    type = "Feature", id = m.IdManzana, geometry = ToGeoJsonGeometry(m.Geom!),
+                    properties = new { m.IdManzana, m.IdOrigen, m.UV_MZA, m.UV, m.MZA }
+                }));
+                break;
+
+            case "lotes":
+                var qL = context.Lotes.Where(l => l.Geom != null).AsQueryable();
+                if (bboxGeom != null) qL = qL.Where(l => l.Geom!.Intersects(bboxGeom));
+                if (!string.IsNullOrWhiteSpace(qStr)) qL = qL.Where(l => l.NroLote!.Contains(qStr));
+                
+                var lotesData = await qL.OrderBy(l => l.IdLote).Take(take)
+                    .Select(l => new {
+                        l,
+                        TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote || (c.Geom != null && c.Geom.Intersects(l.Geom!)))
+                    }).ToListAsync(ct);
+                
+                isTruncated = lotesData.Count >= take;
+                features.AddRange(lotesData.Select(x => {
+                    var point = x.l.Geom!.InteriorPoint;
+                    return new {
+                        type = "Feature", id = x.l.IdLote, geometry = ToGeoJsonGeometry(x.l.Geom!),
+                        properties = new { x.l.IdLote, x.l.IdOrigen, x.l.NroLote, x.l.IdManzana, TieneAgua = x.TieneAgua, AguaLongitud = point.X, AguaLatitud = point.Y }
+                    };
+                }));
+                break;
+
+            case "codigosfijos":
+                var qC = context.CodigosFijos.Where(c => c.Geom != null).AsQueryable();
+                if (bboxGeom != null) qC = qC.Where(c => c.Geom!.Intersects(bboxGeom));
+                if (!string.IsNullOrWhiteSpace(qStr)) qC = qC.Where(c => c.CodF_SIG!.Contains(qStr) || c.CodFijo.ToString()!.Contains(qStr) || c.Nombre!.Contains(qStr));
+                
+                var codigos = await qC.OrderBy(c => c.IdCodigo).Take(take).ToListAsync(ct);
+                isTruncated = codigos.Count >= take;
+                features.AddRange(codigos.Select(c => new {
+                    type = "Feature", id = c.IdCodigo, geometry = ToGeoJsonGeometry(c.Geom!),
+                    properties = new { c.IdCodigo, c.CodF_SQL, c.CodF_SIG, c.CodFijo, c.Nombre, c.Estado, c.EstadoVerificado, c.FechaCambioEstado, c.IdLote, c.Longitud, c.Latitud, TieneAgua = true }
+                }));
+                break;
+
+            case "vias":
+                var qV = context.Vias.Where(v => v.Geom != null).AsQueryable();
+                if (bboxGeom != null) qV = qV.Where(v => v.Geom!.Intersects(bboxGeom));
+                if (!string.IsNullOrWhiteSpace(qStr)) qV = qV.Where(v => v.Nombre!.Contains(qStr) || v.TipoVia!.Contains(qStr) || v.OSMID!.Contains(qStr));
+                
+                var vias = await qV.OrderBy(v => v.IdVia).Take(take).ToListAsync(ct);
+                isTruncated = vias.Count >= take;
+                features.AddRange(vias.Select(v => new {
+                    type = "Feature", id = v.IdVia, geometry = ToGeoJsonGeometry(v.Geom!),
+                    properties = new { v.IdVia, v.OBJECTID, v.Nombre, v.TipoVia, v.OSMID }
+                }));
+                break;
+
+            default:
+                throw new KeyNotFoundException("Capa no válida.");
         }
-        return new { type="FeatureCollection", name=def.Key, features, count=features.Count, truncated=features.Count >= take };
+
+        return new { type = "FeatureCollection", name = layer, features, count = features.Count, truncated = isTruncated };
     }
 
     public async Task<object?> GetByIdAsync(string layer, int id, CancellationToken ct)
     {
-        var def = GetLayer(layer);
-        var sql = $"SELECT {Escape(def.Id)} AS FeatureId, {string.Join(",", def.Columns.Select(Escape))}, {WaterColumns(def)}Geom.STAsText() AS Wkt FROM {def.Table} AS entidad WHERE {Escape(def.Id)}=@Id AND Geom IS NOT NULL";
-        await using var cn = connectionFactory.Create();
-        await cn.OpenAsync(ct);
-        await using var cmd = new SqlCommand(sql, cn);
-        cmd.Parameters.Add(new SqlParameter("@Id", SqlDbType.Int){Value=id});
-        await using var rd = await cmd.ExecuteReaderAsync(ct);
-        if (!await rd.ReadAsync(ct)) return null;
-        var props = new Dictionary<string, object?> { [def.Id] = rd["FeatureId"] };
-        foreach (var col in def.Columns) props[col] = rd[col] is DBNull ? null : rd[col];
-        var geom = new WKTReader().Read(Convert.ToString(rd["Wkt"])!);
-        AddWaterProperties(def, props, rd, geom);
-        return new { type="Feature", id, geometry=ToGeoJsonGeometry(geom), properties=props, bbox=GetBbox(geom) };
+        return layer.ToLowerInvariant() switch
+        {
+            "manzanas" => await context.Manzanas.Where(m => m.IdManzana == id && m.Geom != null)
+                .Select(m => new { type = "Feature", id, geometry = ToGeoJsonGeometry(m.Geom!), properties = new { m.IdManzana, m.IdOrigen, m.UV_MZA, m.UV, m.MZA }, bbox = GetBbox(m.Geom!) }).FirstOrDefaultAsync(ct),
+            
+            "lotes" => await context.Lotes.Where(l => l.IdLote == id && l.Geom != null)
+                .Select(l => new {
+                    l, TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote || (c.Geom != null && c.Geom.Intersects(l.Geom!)))
+                })
+                .Select(x => new {
+                    type = "Feature", id, geometry = ToGeoJsonGeometry(x.l.Geom!), 
+                    properties = new { x.l.IdLote, x.l.IdOrigen, x.l.NroLote, x.l.IdManzana, TieneAgua = x.TieneAgua, AguaLongitud = x.l.Geom!.InteriorPoint.X, AguaLatitud = x.l.Geom!.InteriorPoint.Y }, bbox = GetBbox(x.l.Geom!)
+                }).FirstOrDefaultAsync(ct),
+            
+            "codigosfijos" => await context.CodigosFijos.Where(c => c.IdCodigo == id && c.Geom != null)
+                .Select(c => new { type = "Feature", id, geometry = ToGeoJsonGeometry(c.Geom!), properties = new { c.IdCodigo, c.CodF_SQL, c.CodF_SIG, c.CodFijo, c.Nombre, c.Estado, c.EstadoVerificado, c.FechaCambioEstado, c.IdLote, c.Longitud, c.Latitud, TieneAgua = true }, bbox = GetBbox(c.Geom!) }).FirstOrDefaultAsync(ct),
+            
+            "vias" => await context.Vias.Where(v => v.IdVia == id && v.Geom != null)
+                .Select(v => new { type = "Feature", id, geometry = ToGeoJsonGeometry(v.Geom!), properties = new { v.IdVia, v.OBJECTID, v.Nombre, v.TipoVia, v.OSMID }, bbox = GetBbox(v.Geom!) }).FirstOrDefaultAsync(ct),
+            
+            _ => null
+        };
     }
 
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(string text, string? layer, int page, int pageSize, CancellationToken ct)
     {
-        text = (text ?? "").Trim();
-        if (text.Length == 0) return [];
+        var qStr = (text ?? "").Trim();
+        if (qStr.Length == 0) return [];
         page = Math.Max(1, page); pageSize = Math.Clamp(pageSize, 1, 100);
-        var targets = string.IsNullOrWhiteSpace(layer) ? Layers.Values : [GetLayer(layer)];
+
         var all = new List<SearchResult>();
-        foreach (var def in targets)
+        var checkLayer = string.IsNullOrWhiteSpace(layer) ? null : layer.ToLowerInvariant();
+
+        if (checkLayer == null || checkLayer == "codigosfijos")
         {
-            var labelExpr = def.Key switch
-            {
-                "codigosfijos" => "CONCAT(CodFijo, ' - ', ISNULL(Nombre,''))",
-                "manzanas" => "CONCAT('UV ',ISNULL(UV,''),' / MZA ',ISNULL(MZA,''))",
-                "lotes" => "CONCAT('Lote ',ISNULL(NroLote,''))",
-                "vias" => "CONCAT(ISNULL(Nombre,''),' ',ISNULL(TipoVia,''))",
-                _ => $"CONVERT(NVARCHAR(50),{Escape(def.Id)})"
-            };
-            var searchClauses = string.Join(" OR ", def.Search.Select(c => $"CONVERT(NVARCHAR(200),{Escape(c)}) LIKE @Q"));
-            var sql = $"SELECT TOP (100) {Escape(def.Id)} AS FeatureId, {labelExpr} AS Label, {string.Join(",", def.Columns.Select(Escape))}, Geom.STAsText() AS Wkt FROM {def.Table} WHERE Geom IS NOT NULL AND ({searchClauses}) ORDER BY {Escape(def.Id)}";
-            await using var cn = connectionFactory.Create();
-            await cn.OpenAsync(ct);
-            await using var cmd = new SqlCommand(sql, cn);
-            cmd.Parameters.Add(new SqlParameter("@Q", SqlDbType.NVarChar, 220){Value=$"%{text}%"});
-            await using var rd = await cmd.ExecuteReaderAsync(ct);
-            var wkt = new WKTReader();
-            while (await rd.ReadAsync(ct))
-            {
-                var props = new Dictionary<string, object?>();
-                foreach (var col in def.Columns) props[col] = rd[col] is DBNull ? null : rd[col];
-                var g = wkt.Read(Convert.ToString(rd["Wkt"])!);
-                all.Add(new SearchResult(def.Key, Convert.ToInt32(rd["FeatureId"]), Convert.ToString(rd["Label"]) ?? def.Key, props, GetBbox(g)));
-            }
+            var dataC = await context.CodigosFijos.Where(c => c.Geom != null && (c.CodF_SIG!.Contains(qStr) || c.CodFijo.ToString()!.Contains(qStr) || c.Nombre!.Contains(qStr)))
+                .Take(100).Select(c => new { c.IdCodigo, c.CodFijo, c.Nombre, c.Geom }).ToListAsync(ct);
+            all.AddRange(dataC.Select(c => new SearchResult("codigosfijos", c.IdCodigo, $"{c.CodFijo} - {c.Nombre}", new Dictionary<string, object?> { ["IdCodigo"] = c.IdCodigo, ["CodFijo"] = c.CodFijo, ["Nombre"] = c.Nombre }, GetBbox(c.Geom!))));
         }
-        return all.Skip((page-1)*pageSize).Take(pageSize).ToList();
+        if (checkLayer == null || checkLayer == "manzanas")
+        {
+            var dataM = await context.Manzanas.Where(m => m.Geom != null && (m.UV_MZA!.Contains(qStr) || m.UV!.Contains(qStr) || m.MZA!.Contains(qStr)))
+                .Take(100).Select(m => new { m.IdManzana, m.UV, m.MZA, m.Geom }).ToListAsync(ct);
+            all.AddRange(dataM.Select(m => new SearchResult("manzanas", m.IdManzana, $"UV {m.UV} / MZA {m.MZA}", new Dictionary<string, object?> { ["IdManzana"] = m.IdManzana, ["UV"] = m.UV, ["MZA"] = m.MZA }, GetBbox(m.Geom!))));
+        }
+        if (checkLayer == null || checkLayer == "lotes")
+        {
+            var dataL = await context.Lotes.Where(l => l.Geom != null && l.NroLote!.Contains(qStr))
+                .Take(100).Select(l => new { l.IdLote, l.NroLote, l.Geom }).ToListAsync(ct);
+            all.AddRange(dataL.Select(l => new SearchResult("lotes", l.IdLote, $"Lote {l.NroLote}", new Dictionary<string, object?> { ["IdLote"] = l.IdLote, ["NroLote"] = l.NroLote }, GetBbox(l.Geom!))));
+        }
+        if (checkLayer == null || checkLayer == "vias")
+        {
+            var dataV = await context.Vias.Where(v => v.Geom != null && (v.Nombre!.Contains(qStr) || v.TipoVia!.Contains(qStr) || v.OSMID!.Contains(qStr)))
+                .Take(100).Select(v => new { v.IdVia, v.Nombre, v.Geom, v.TipoVia }).ToListAsync(ct);
+            all.AddRange(dataV.Select(v => new SearchResult("vias", v.IdVia, $"{v.Nombre} {v.TipoVia}", new Dictionary<string, object?> { ["IdVia"] = v.IdVia, ["Nombre"] = v.Nombre }, GetBbox(v.Geom!))));
+        }
+
+        return all.Skip((page - 1) * pageSize).Take(pageSize).ToList();
     }
 
-    private async Task<double[]?> GetExtentAsync(LayerDef def, CancellationToken ct)
+    private async Task<double[]?> GetExtentAsync(string layer, CancellationToken ct)
     {
-        var sql = $"SELECT geometry::EnvelopeAggregate(Geom).STEnvelope().STAsText() FROM {def.Table} WHERE Geom IS NOT NULL";
+        var table = layer.ToLowerInvariant() switch {
+            "manzanas" => "dbo.Manzanas", "lotes" => "dbo.Lotes",
+            "codigosfijos" => "dbo.CodigosFijos", "vias" => "dbo.Vias", _ => null
+        };
+        if (table == null) return null;
+
         try
         {
-            await using var cn = connectionFactory.Create();
-            await cn.OpenAsync(ct);
-            await using var cmd = new SqlCommand(sql, cn);
-            var raw = await cmd.ExecuteScalarAsync(ct);
-            if (raw is null or DBNull) return null;
-            var g = new WKTReader().Read(Convert.ToString(raw)!);
-            return GetBbox(g);
+            var result = await context.Database.SqlQueryRaw<string>($"SELECT geometry::EnvelopeAggregate(Geom).STEnvelope().STAsText() as Value FROM {table} WHERE Geom IS NOT NULL").ToListAsync(ct);
+            var raw = result.FirstOrDefault();
+            if (string.IsNullOrEmpty(raw)) return null;
+            return GetBbox(new NetTopologySuite.IO.WKTReader().Read(raw));
         }
         catch { return null; }
     }
-
-    private static string WaterColumns(LayerDef def) => def.Key == "lotes"
-        ? "CAST(CASE WHEN EXISTS (SELECT 1 FROM dbo.CodigosFijos c WHERE c.IdLote=entidad.IdLote) OR EXISTS (SELECT 1 FROM dbo.CodigosFijos c WITH (INDEX(SIX_CodigosFijos_Geom)) WHERE c.Geom.STIntersects(entidad.Geom)=1) THEN 1 ELSE 0 END AS bit) AS TieneAgua, "
-        : "";
-
-    private static void AddWaterProperties(LayerDef def, Dictionary<string, object?> props, System.Data.Common.DbDataReader rd, Geometry geom)
-    {
-        if (def.Key == "codigosfijos") props["TieneAgua"] = true;
-        if (def.Key != "lotes") return;
-        props["TieneAgua"] = (bool)rd["TieneAgua"];
-        var point = geom.InteriorPoint;
-        props["AguaLongitud"] = point.X;
-        props["AguaLatitud"] = point.Y;
-    }
-
-    private static LayerDef GetLayer(string key) => Layers.TryGetValue(key, out var d) ? d : throw new KeyNotFoundException("Capa no válida.");
-    private static string Escape(string identifier) => $"[{identifier.Replace("]", "]]", StringComparison.Ordinal)}]";
-    private static string Title(string key) => key switch { "manzanas"=>"Manzanas", "lotes"=>"Lotes", "codigosfijos"=>"Códigos fijos", "vias"=>"Vías", _=>key };
 
     private static bool TryParseBbox(string? bbox, out string wkt)
     {
@@ -162,33 +200,33 @@ public sealed class GeoDataService(SqlConnectionFactory connectionFactory, IConf
         var p = bbox.Split(',', StringSplitOptions.TrimEntries);
         if (p.Length != 4 || !p.Select(x => double.TryParse(x, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _)).All(x => x)) return false;
         var nums = p.Select(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
-        var minX=nums[0]; var minY=nums[1]; var maxX=nums[2]; var maxY=nums[3];
-        if (minX>=maxX || minY>=maxY) return false;
+        var minX = nums[0]; var minY = nums[1]; var maxX = nums[2]; var maxY = nums[3];
+        if (minX >= maxX || minY >= maxY) return false;
         wkt = FormattableString.Invariant($"POLYGON(({minX} {minY},{maxX} {minY},{maxX} {maxY},{minX} {maxY},{minX} {minY}))");
         return true;
     }
 
     private static object ToGeoJsonGeometry(Geometry g) => g switch
     {
-        Point p => new { type="Point", coordinates=new[]{p.X,p.Y} },
-        LineString l => new { type="LineString", coordinates=l.Coordinates.Select(c => new[]{c.X,c.Y}).ToArray() },
-        Polygon p => new { type="Polygon", coordinates=PolygonCoords(p) },
-        MultiPoint mp => new { type="MultiPoint", coordinates=mp.Geometries.Cast<Point>().Select(p=>new[]{p.X,p.Y}).ToArray() },
-        MultiLineString ml => new { type="MultiLineString", coordinates=ml.Geometries.Cast<LineString>().Select(l=>l.Coordinates.Select(c=>new[]{c.X,c.Y}).ToArray()).ToArray() },
-        MultiPolygon mp => new { type="MultiPolygon", coordinates=mp.Geometries.Cast<Polygon>().Select(PolygonCoords).ToArray() },
-        GeometryCollection gc => new { type="GeometryCollection", geometries=gc.Geometries.Select(ToGeoJsonGeometry).ToArray() },
+        Point p => new { type = "Point", coordinates = new[] { p.X, p.Y } },
+        LineString l => new { type = "LineString", coordinates = l.Coordinates.Select(c => new[] { c.X, c.Y }).ToArray() },
+        Polygon p => new { type = "Polygon", coordinates = PolygonCoords(p) },
+        MultiPoint mp => new { type = "MultiPoint", coordinates = mp.Geometries.Cast<Point>().Select(p => new[] { p.X, p.Y }).ToArray() },
+        MultiLineString ml => new { type = "MultiLineString", coordinates = ml.Geometries.Cast<LineString>().Select(l => l.Coordinates.Select(c => new[] { c.X, c.Y }).ToArray()).ToArray() },
+        MultiPolygon mp => new { type = "MultiPolygon", coordinates = mp.Geometries.Cast<Polygon>().Select(PolygonCoords).ToArray() },
+        GeometryCollection gc => new { type = "GeometryCollection", geometries = gc.Geometries.Select(ToGeoJsonGeometry).ToArray() },
         _ => throw new NotSupportedException($"Geometría {g.GeometryType} no soportada.")
     };
 
     private static double[][][] PolygonCoords(Polygon p)
     {
-        var rings = new List<double[][]> { p.ExteriorRing.Coordinates.Select(c=>new[]{c.X,c.Y}).ToArray() };
-        for (var i=0;i<p.NumInteriorRings;i++) rings.Add(p.GetInteriorRingN(i).Coordinates.Select(c=>new[]{c.X,c.Y}).ToArray());
+        var rings = new List<double[][]> { p.ExteriorRing.Coordinates.Select(c => new[] { c.X, c.Y }).ToArray() };
+        for (var i = 0; i < p.NumInteriorRings; i++) rings.Add(p.GetInteriorRingN(i).Coordinates.Select(c => new[] { c.X, c.Y }).ToArray());
         return rings.ToArray();
     }
 
     private static double[] GetBbox(Geometry g)
     {
-        var e=g.EnvelopeInternal; return [e.MinX,e.MinY,e.MaxX,e.MaxY];
+        var e = g.EnvelopeInternal; return [e.MinX, e.MinY, e.MaxX, e.MaxY];
     }
 }
