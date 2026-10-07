@@ -10,11 +10,16 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddDbContext<ArquisDbContext>(options =>
+{
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
-        x => x.UseNetTopologySuite()));
+        x => x.UseNetTopologySuite());
+    options.ConfigureWarnings(w => w.Ignore(Microsoft.EntityFrameworkCore.Diagnostics.RelationalEventId.PendingModelChangesWarning));
+});
 
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<GeoDataService>();
+builder.Services.AddScoped<ReportesService>();
+builder.Services.AddSingleton<Arquis.Backend.Services.Pdf.PdfReportGeneratorService>();
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

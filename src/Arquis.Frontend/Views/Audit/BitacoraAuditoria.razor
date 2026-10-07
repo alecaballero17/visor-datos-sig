@@ -1,0 +1,243 @@
+@page "/bitacora"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject IUserFriendlyErrorService ErrorService
+
+<PageTitle>Bitácora de Auditoría del Sistema · Arquis SIG</PageTitle>
+
+<div class="audit-page-container d-flex flex-column h-100 w-100 bg-light">
+    <!-- Barra Superior -->
+    <header class="app-header shadow-sm">
+        <div class="d-flex align-items-center gap-2">
+            <a href="/dashboard" class="btn btn-sm btn-outline-light rounded-pill px-3 d-flex align-items-center gap-1" title="Volver al Visor de Mapas">
+                <i class="bi bi-arrow-left"></i>
+                <span>Volver al Mapa</span>
+            </a>
+            <div class="brand-mark ms-2">A</div>
+            <div class="fw-bold fs-6">Arquis <span class="fw-normal opacity-75 d-none d-sm-inline">· Bitácora de Auditoría y Trazabilidad</span></div>
+        </div>
+
+        <div class="ms-auto d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-light rounded-pill px-3" @onclick="LoadAuditLogs">
+                <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+            </button>
+        </div>
+    </header>
+
+    <!-- Contenido Principal -->
+    <main class="flex-grow-1 p-3 p-md-4 overflow-auto">
+        <div class="container-fluid max-w-7xl">
+            <!-- Tarjetas de Resumen KPI -->
+            <div class="row g-3 mb-4">
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <span class="text-muted small text-uppercase fw-semibold">Eventos Registrados</span>
+                                <h3 class="fw-bold mb-0 text-dark">@logs.Count</h3>
+                            </div>
+                            <div class="bg-primary-subtle text-primary rounded-circle p-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
+                                <i class="bi bi-shield-check fs-4"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <span class="text-muted small text-uppercase fw-semibold">Informes Prediales</span>
+                                <h3 class="fw-bold mb-0 text-primary">@logs.Count(l => l.TipoReporte == "Predial")</h3>
+                            </div>
+                            <div class="bg-info-subtle text-info rounded-circle p-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
+                                <i class="bi bi-house-door fs-4"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <span class="text-muted small text-uppercase fw-semibold">Informes de Sector</span>
+                                <h3 class="fw-bold mb-0 text-success">@logs.Count(l => l.TipoReporte == "Sector/Barrio" || l.TipoReporte == "Sector")</h3>
+                            </div>
+                            <div class="bg-success-subtle text-success rounded-circle p-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
+                                <i class="bi bi-grid-3x3-gap fs-4"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-sm-6 col-lg-3">
+                    <div class="card border-0 shadow-sm rounded-4 p-3 bg-white">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <span class="text-muted small text-uppercase fw-semibold">Integridad de Registro</span>
+                                <h4 class="fw-bold mb-0 text-success fs-5">Inalterable</h4>
+                            </div>
+                            <div class="bg-warning-subtle text-warning rounded-circle p-3 d-flex align-items-center justify-content-center" style="width:48px;height:48px">
+                                <i class="bi bi-database-check fs-4"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel de Tabla con Filtros -->
+            <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                <div class="card-header bg-white border-bottom p-3 p-md-4">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                        <div>
+                            <h5 class="fw-bold mb-1 text-dark">Registro Oficial de Trazabilidad y Emisiones</h5>
+                            <p class="text-muted small mb-0">Cada reporte emitido por operadores catastrales queda registrado en esta tabla para efectos de auditoría y control.</p>
+                        </div>
+
+                        <!-- Filtros Rápidos -->
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="input-group input-group-sm" style="width:240px">
+                                <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" class="form-control bg-light border-start-0" placeholder="Buscar por referencia o usuario..." @bind="searchFilter" @bind:event="oninput" />
+                            </div>
+
+                            <select class="form-select form-select-sm" style="width:160px" @bind="selectedTypeFilter">
+                                <option value="">Todos los tipos</option>
+                                <option value="Predial">Predial (Lotes)</option>
+                                <option value="Sector/Barrio">Sector / Barrio</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body p-0">
+                    @if (isLoading)
+                    {
+                        <div class="text-center py-5">
+                            <span class="spinner-border text-primary" role="status"></span>
+                            <div class="mt-2 text-muted small">Cargando registros de la bitácora...</div>
+                        </div>
+                    }
+                    else if (filteredLogs.Count == 0)
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-journal-x fs-1 d-block mb-2 text-secondary"></i>
+                            <div class="fw-semibold">No se encontraron registros de auditoría</div>
+                            <small>No hay eventos registrados que coincidan con los filtros actuales.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-uppercase small text-muted">
+                                    <tr>
+                                        <th class="ps-4">Folio</th>
+                                        <th>Fecha / Hora</th>
+                                        <th>Operador</th>
+                                        <th>Tipo</th>
+                                        <th>Referencia Territorial</th>
+                                        <th>Acción Registrada</th>
+                                        <th class="pe-4">Detalle Técnico</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var log in filteredLogs)
+                                    {
+                                        <tr>
+                                            <td class="ps-4 font-monospace text-muted small">#@log.IdBitacora</td>
+                                            <td>
+                                                <div class="fw-semibold small text-dark">@log.Fecha.ToLocalTime().ToString("dd/MM/yyyy")</div>
+                                                <div class="text-muted text-xs">@log.Fecha.ToLocalTime().ToString("HH:mm:ss")</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-dark border rounded-pill px-2 py-1">
+                                                    <i class="bi bi-person me-1 text-primary"></i>@log.Usuario
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @(log.TipoReporte == "Predial" ? "bg-primary-subtle text-primary" : "bg-success-subtle text-success") rounded-pill px-2">
+                                                    @log.TipoReporte
+                                                </span>
+                                            </td>
+                                            <td class="fw-semibold text-dark small">@log.Referencia</td>
+                                            <td class="small text-muted">@log.Accion</td>
+                                            <td class="pe-4 small text-secondary">@(log.Detalle ?? "—")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+                
+                <div class="card-footer bg-white border-top p-3 d-flex justify-content-between align-items-center">
+                    <span class="small text-muted">Mostrando @filteredLogs.Count de @logs.Count registros de auditoría</span>
+                    <a href="/dashboard" class="btn btn-sm btn-outline-secondary rounded-pill px-3">Volver al Visor de Mapas</a>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+@code {
+    private bool isLoading = true;
+    private List<BitacoraItemModel> logs = new();
+    private string searchFilter = string.Empty;
+    private string selectedTypeFilter = string.Empty;
+
+    private List<BitacoraItemModel> filteredLogs
+    {
+        get
+        {
+            var res = logs.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(selectedTypeFilter))
+            {
+                res = res.Where(l => l.TipoReporte.Contains(selectedTypeFilter, StringComparison.OrdinalIgnoreCase));
+            }
+            if (!string.IsNullOrWhiteSpace(searchFilter))
+            {
+                var term = searchFilter.Trim();
+                res = res.Where(l => (l.Referencia?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                     (l.Usuario?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                                     (l.Accion?.Contains(term, StringComparison.OrdinalIgnoreCase) ?? false));
+            }
+            return res.ToList();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAuditLogs();
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        isLoading = true;
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<BitacoraItemModel>>("api/reportes/bitacora?limite=100");
+            logs = res ?? new();
+        }
+        catch (Exception ex)
+        {
+            ErrorService.FromException(ex, "consulta de bitácora de auditoría", () => LoadAuditLogs());
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public class BitacoraItemModel
+    {
+        public long IdBitacora { get; set; }
+        public DateTime Fecha { get; set; }
+        public string Usuario { get; set; } = string.Empty;
+        public string TipoReporte { get; set; } = string.Empty;
+        public string Referencia { get; set; } = string.Empty;
+        public string Accion { get; set; } = string.Empty;
+        public string? Detalle { get; set; }
+    }
+}

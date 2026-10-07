@@ -1,22 +1,35 @@
-<header class="app-header">
-    <ButtonPrimary CssClass="btn-sm btn-outline-light d-md-none" aria-label="Abrir panel" OnClick="ToggleSidebar">
-        ☰
-    </ButtonPrimary>
-    <div><strong>Arquis</strong><span class="d-none d-sm-inline"> · VisorDatosSIG</span></div>
+<header class="app-header shadow-sm">
+    <div class="d-flex align-items-center gap-2">
+        <div class="brand-mark">A</div>
+        <div class="fw-bold fs-6">Arquis <span class="fw-normal opacity-75 d-none d-sm-inline">· Visor Territorial SIG</span></div>
+    </div>
     
     <div class="ms-auto d-flex align-items-center gap-2">
-        <span class="small">@UserName</span>
-        <ButtonLink CssClass="btn-sm btn-light text-dark" OnClick="OnLogout">Salir</ButtonLink>
+        <button type="button" class="btn btn-sm btn-outline-light d-flex align-items-center gap-1 rounded-pill px-3 shadow-none"
+                @onclick="OpenReports"
+                title="Generar Dictámenes Técnicos Oficiales en PDF">
+            <i class="bi bi-file-earmark-pdf"></i>
+            <span class="d-none d-sm-inline">Reportes & Dictámenes</span>
+        </button>
+        <a href="/bitacora" class="btn btn-sm btn-outline-light d-flex align-items-center gap-1 rounded-pill px-3 shadow-none text-decoration-none"
+           title="Apartado de Trazabilidad y Bitácora Oficial">
+            <i class="bi bi-journal-check"></i>
+            <span class="d-none d-md-inline">Bitácora</span>
+        </a>
+        <span class="small d-none d-md-inline user-chip">
+            <i class="bi bi-person-circle me-1"></i>@UserName
+        </span>
+        <ButtonLink CssClass="btn-sm btn-light text-dark rounded-pill px-3" OnClick="OnLogout">Salir</ButtonLink>
     </div>
 </header>
 
 @code {
     [Parameter] public string UserName { get; set; } = "Usuario";
     [Parameter] public EventCallback OnLogout { get; set; }
-    [Parameter] public EventCallback OnToggleSidebar { get; set; }
+    [Parameter] public EventCallback OnOpenReports { get; set; }
 
-    private async Task ToggleSidebar()
+    private async Task OpenReports()
     {
-        await OnToggleSidebar.InvokeAsync();
+        await OnOpenReports.InvokeAsync();
     }
 }

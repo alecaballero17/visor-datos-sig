@@ -1,38 +1,125 @@
 @page "/dashboard"
+@implements IDisposable
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject HttpClient Http
 @inject IConfiguration Config
+@inject IUserFriendlyErrorService ErrorService
 
 <PageTitle>Visor SIG - Dashboard</PageTitle>
 
 <div id="app" class="app-shell" data-api="@apiBase">
-    <Header UserName="@userName" OnToggleSidebar="ToggleSidebar" OnLogout="Logout" />
+    <Header UserName="@userName" OnLogout="Logout" OnOpenReports="OpenGeneralReports" />
 
-    <div class="app-body">
-        <Sidebar IsOpen="isSidebarOpen" />
+    <div class="app-body position-relative flex-grow-1 w-100 h-100">
+        <main class="map-wrap position-relative flex-grow-1 w-100 h-100" role="main" aria-label="Visor territorial interactivo">
+            <!-- Sistema de Alertas y Notificaciones Amigables -->
+            <UserFriendlyAlert />
 
-        <main class="map-wrap position-relative">
-            <div id="map" style="position:absolute;inset:0"></div>
-            <div id="loading" class="map-loading d-none">Cargando capas…</div>
-            <div id="coords" class="coords"></div>
-            <div id="detailPanel" class="detail-panel d-none">
-                <button id="detailClose" class="btn-close float-end" aria-label="Cerrar"></button>
-                <div id="detailContent"></div>
-            </div>
+            <!-- Mapa base Leaflet -->
+            <div id="map" class="w-100 h-100" style="position:absolute;inset:0;" aria-label="Mapa territorial interactivo"></div>
+            <div id="loading" class="map-loading d-none" role="status" aria-live="polite">Cargando capas cartográficas…</div>
+            <div id="coords" class="coords" aria-hidden="true"></div>
+
+            <!-- 1. Buscador Reactivo tipo Google Maps flotante -->
+            <MapSearchBar OnResultSelected="HandleSearchResultSelected"
+                          OnSearchCleared="HandleSearchCleared" />
+
+            <!-- 2. Barra de Filtros Reactivos -->
+            <MapFiltersBar WaterFilter="currentWaterFilter"
+                           WaterFilterChanged="HandleWaterFilterChanged"
+                           ShowLotes="showLotes"
+                           ShowLotesChanged="HandleShowLotesChanged"
+                           ShowCodigos="showCodigos"
+                           ShowCodigosChanged="HandleShowCodigosChanged"
+                           ShowManzanas="showManzanas"
+                           ShowManzanasChanged="HandleShowManzanasChanged"
+                           ShowVias="showVias"
+                           ShowViasChanged="HandleShowViasChanged"
+                           OnToggleMetrics="OpenMetricsModal" />
+
+            <!-- 3. Ficha de Diagnóstico y Análisis Predial Reactivo (Al hacer clic o buscar) -->
+            @if (hasSelectedProperty)
+            {
+                <PropertyDetailCard LayerKey="@selectedLayer"
+                                    FeatureId="@selectedId"
+                                    Properties="@selectedProperties"
+                                    Bbox="@selectedBbox"
+                                    OnClose="CloseDetailCard"
+                                    OnCenterRequest="CenterOnSelected"
+                                    OnLocateWaterCode="LocateWaterCode"
+                                    OnRequestFormalReport="OpenReportForLote" />
+            }
+
+            <!-- 4. Modal de Diagnóstico y Métricas Urbanas del Sector -->
+            <UrbanMetricsWidget @bind-IsOpen="isMetricsModalOpen"
+                                OnRequestSectorReport="OpenReportForSector" />
+
+            <!-- 5. Modal de Informe Técnico Ejecutivo y Bitácora de Auditoría -->
+            <ExecutiveReportModal @bind-IsOpen="isReportModalOpen"
+                                  SelectedLoteId="reportLoteId"
+                                  SelectedUV="reportUV"
+                                  SelectedMZA="reportMZA"
+                                  CurrentUserName="@userName" />
         </main>
     </div>
 </div>
 
 @code {
-    private bool isSidebarOpen = false;
     private string userName = "Cargando...";
     private string apiBase = string.Empty;
+    private DotNetObjectReference<Dashboard>? dotNetRef;
+
+    // Estado reactivo de selección
+    private bool hasSelectedProperty = false;
+    private string selectedLayer = "lotes";
+    private int selectedId = 0;
+    private Dictionary<string, object?> selectedProperties = new();
+    private double[]? selectedBbox = null;
+
+    // Estado reactivo de filtros
+    private WaterFilterMode currentWaterFilter = WaterFilterMode.Todos;
+    private bool showLotes = true;
+    private bool showCodigos = true;
+    private bool showManzanas = true;
+    private bool showVias = true;
+
+    // Estado del modal de análisis
+    private bool isMetricsModalOpen = false;
+
+    // Estado del modal de informes ejecutivos y bitácora
+    private bool isReportModalOpen = false;
+    private int? reportLoteId = null;
+    private string? reportUV = null;
+    private string? reportMZA = null;
+
+    private void OpenGeneralReports()
+    {
+        reportLoteId = hasSelectedProperty ? selectedId : null;
+        reportUV = reportLoteId.HasValue ? null : "Central";
+        reportMZA = null;
+        isReportModalOpen = true;
+    }
+
+    private void OpenReportForLote(int loteId)
+    {
+        reportLoteId = loteId;
+        reportUV = null;
+        reportMZA = null;
+        isReportModalOpen = true;
+    }
+
+    private void OpenReportForSector((string uv, string mza) sector)
+    {
+        reportLoteId = null;
+        reportUV = sector.uv;
+        reportMZA = sector.mza;
+        isReportModalOpen = true;
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        // Resuelve la base URL del backend desde configuración
-        apiBase = Config["ApiBaseUrl"] ?? Http.BaseAddress?.ToString().TrimEnd('/') ?? string.Empty;
+        apiBase = Config["BackendBaseUrl"] ?? Config["ApiBaseUrl"] ?? Http.BaseAddress?.ToString().TrimEnd('/') ?? "http://localhost:5080";
 
         try
         {
@@ -47,32 +134,178 @@
                 Navigation.NavigateTo("/login");
             }
         }
-        catch { userName = "Desconocido"; }
+        catch
+        {
+            userName = "Usuario Catastro";
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Arranca el motor JS completo una vez que el DOM está listo
-            await JS.InvokeVoidAsync("arquis.init");
+            dotNetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("arquis.init", dotNetRef);
         }
+    }
+
+    // Invocado desde JavaScript cuando el usuario hace click en un polígono / punto del mapa
+    [JSInvokable]
+    public async Task OnFeatureSelectedFromMap(string layer, int id, string propertiesJson, double[]? bbox)
+    {
+        selectedLayer = layer;
+        selectedId = id;
+        selectedBbox = bbox;
+
+        try
+        {
+            selectedProperties = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(propertiesJson)
+                                 ?? new Dictionary<string, object?>();
+        }
+        catch
+        {
+            selectedProperties = new Dictionary<string, object?>();
+        }
+
+        hasSelectedProperty = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public async Task OnClearSelectionFromMap()
+    {
+        hasSelectedProperty = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    [JSInvokable]
+    public void OnMapError(string userTitle, string userExplanation)
+    {
+        ErrorService.Notify(new UserErrorMessage
+        {
+            Title = userTitle,
+            Message = userExplanation,
+            Recommendation = "Puedes intentar mover el mapa o verificar si el servidor está respondiendo.",
+            Severity = ErrorSeverity.Warning,
+            Icon = "bi-map"
+        });
+    }
+
+    // Manejador cuando el usuario selecciona un resultado en el buscador tipo Google Maps
+    private async Task HandleSearchResultSelected(SearchResultItem item)
+    {
+        selectedLayer = item.Layer;
+        selectedId = item.Id;
+        selectedBbox = item.Bbox;
+
+        if (item.Properties != null)
+        {
+            selectedProperties = new Dictionary<string, object?>(item.Properties);
+        }
+        else
+        {
+            selectedProperties = new Dictionary<string, object?>();
+        }
+
+        hasSelectedProperty = true;
+
+        // Vuela suavemente a la entidad y enciende el resplandor / iluminación en el mapa
+        await JS.InvokeVoidAsync("arquis.highlightFeature", item.Layer, item.Id, true);
+        StateHasChanged();
+    }
+
+    private async Task HandleSearchCleared()
+    {
+        hasSelectedProperty = false;
+        await JS.InvokeVoidAsync("arquis.clearHighlight");
+        StateHasChanged();
+    }
+
+    // Manejadores de Filtros Reactivos
+    private async Task HandleWaterFilterChanged(WaterFilterMode mode)
+    {
+        currentWaterFilter = mode;
+        await JS.InvokeVoidAsync("arquis.setWaterFilter", mode.ToString());
+    }
+
+    private async Task HandleShowLotesChanged(bool visible)
+    {
+        showLotes = visible;
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "lotes", visible);
+    }
+
+    private async Task HandleShowCodigosChanged(bool visible)
+    {
+        showCodigos = visible;
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "codigosfijos", visible);
+    }
+
+    private async Task HandleShowManzanasChanged(bool visible)
+    {
+        showManzanas = visible;
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "manzanas", visible);
+    }
+
+    private async Task HandleShowViasChanged(bool visible)
+    {
+        showVias = visible;
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "vias", visible);
+    }
+
+    private void OpenMetricsModal()
+    {
+        isMetricsModalOpen = true;
+    }
+
+    private async Task CloseDetailCard()
+    {
+        hasSelectedProperty = false;
+        await JS.InvokeVoidAsync("arquis.clearHighlight");
+        StateHasChanged();
+    }
+
+    private async Task CenterOnSelected()
+    {
+        if (selectedBbox != null && selectedBbox.Length == 4)
+        {
+            await JS.InvokeVoidAsync("arquis.flyToBbox", (object)selectedBbox);
+        }
+        else if (selectedProperties.TryGetValue("AguaLatitud", out var latVal) &&
+                 selectedProperties.TryGetValue("AguaLongitud", out var lonVal) &&
+                 double.TryParse(latVal?.ToString(), out var lat) &&
+                 double.TryParse(lonVal?.ToString(), out var lon))
+        {
+            await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lon, 18);
+        }
+        else if (selectedProperties.TryGetValue("Latitud", out var latVal2) &&
+                 selectedProperties.TryGetValue("Longitud", out var lonVal2) &&
+                 double.TryParse(latVal2?.ToString(), out var lat2) &&
+                 double.TryParse(lonVal2?.ToString(), out var lon2))
+        {
+            await JS.InvokeVoidAsync("arquis.centerOnCoords", lat2, lon2, 18);
+        }
+    }
+
+    private async Task LocateWaterCode(int codigoId)
+    {
+        await JS.InvokeVoidAsync("arquis.highlightFeature", "codigosfijos", codigoId, true);
+    }
+
+
+    private async Task Logout()
+    {
+        await Http.PostAsync("api/autenticacion/cerrar", null);
+        Navigation.NavigateTo("/login");
+    }
+
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
     }
 
     private class SessionData
     {
         public string? usuario { get; set; }
         public string? nombre { get; set; }
-    }
-
-    private void ToggleSidebar()
-    {
-        isSidebarOpen = !isSidebarOpen;
-    }
-
-    private async Task Logout()
-    {
-        await Http.PostAsync("api/autenticacion/cerrar", null);
-        Navigation.NavigateTo("/login");
     }
 }

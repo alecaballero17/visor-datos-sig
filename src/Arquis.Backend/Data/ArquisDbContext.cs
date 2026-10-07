@@ -20,6 +20,7 @@ namespace Arquis.Backend.Data
         public DbSet<Via> Vias { get; set; } = null!;
         public DbSet<BitacoraAcceso> BitacoraAccesos { get; set; } = null!;
         public DbSet<BitacoraMigracion> BitacoraMigraciones { get; set; } = null!;
+        public DbSet<BitacoraReporte> BitacoraReportes { get; set; } = null!;
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
