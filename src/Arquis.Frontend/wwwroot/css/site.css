@@ -67,8 +67,8 @@
   --color-text-light: #94a3b8;
 
   /* Encabezado */
-  --header-bg:        var(--color-brand-800);
-  --header-color:     #ffffff;
+  --header-bg:        #ffffff;
+  --header-color:     #202124;
   --header-height:    56px;
 
   /* Sidebar */
@@ -90,7 +90,7 @@
   --shadow-xl:  0 8px 32px rgba(0,0,0,.20);
 
   /* Tipografía */
-  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
   --font-size-xs:  0.70rem;
   --font-size-sm:  0.80rem;
@@ -239,13 +239,14 @@ body {
 .app-header {
   flex: 0 0 var(--header-height);
   height: var(--header-height);
-  background: var(--header-bg);
-  color: var(--header-color);
+  background: #ffffff;
+  color: #202124;
   display: flex;
   align-items: center;
   padding: 0 var(--space-3);
   gap: var(--space-3);
-  box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  border-bottom: 1px solid #dadce0;
+  box-shadow: 0 1px 2px 0 rgba(60,64,67,0.1);
   animation: fadeInDown var(--transition-slow) both;
 }
 
@@ -1126,141 +1127,210 @@ body {
   position: absolute;
   top: 14px;
   right: 14px;
-  width: min(420px, calc(100vw - 28px));
+  width: min(390px, calc(100vw - 28px));
   max-height: calc(100% - 28px);
   background: #ffffff;
-  border-radius: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  border: 1px solid #dadce0;
   z-index: 1000;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px 0 rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
 }
 
 .property-analysis-card.is-minimized {
-  max-height: 64px;
+  max-height: 72px;
 }
 
 .card-top-bar {
-  padding: 12px 16px;
-  border-bottom: 1px solid #f1f5f9;
-  background: #fafafa;
+  padding: 14px 16px 10px 16px;
+  border-bottom: 1px solid #f1f3f4;
+  background: #ffffff;
 }
 
-.property-type-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-size: 1.15rem;
-  flex-shrink: 0;
+.gmaps-type-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #5f6368;
+  background: #f1f3f4;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.badge-lote    { background: #e0f2fe; color: #0284c7; }
-.badge-agua    { background: #fef3c7; color: #d97706; }
-.badge-manzana { background: #fee2e2; color: #dc2626; }
-.badge-via     { background: #f1f5f9; color: #475569; }
-.badge-default { background: #e2e8f0; color: #334155; }
+.gmaps-badge-success {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #137333;
+  background: #e6f4ea;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.gmaps-badge-neutral {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #5f6368;
+  background: #f1f3f4;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
 
 .property-title {
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #202124;
+  line-height: 1.3;
 }
 
 .property-subtitle {
-  font-size: 0.75rem;
-  color: #64748b;
+  font-size: 0.8rem;
+  color: #5f6368;
+  margin-top: 2px;
 }
 
 .btn-win-action {
   border: none;
   background: transparent;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  color: #64748b;
+  color: #5f6368;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
 .btn-win-action:hover {
-  background: #e2e8f0;
-  color: #0f172a;
+  background: #f1f3f4;
+  color: #202124;
 }
 
 .btn-win-close:hover {
-  background: #fee2e2;
-  color: #dc2626;
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+/* Fila de Acciones estilo Google Maps Chips */
+.gmaps-actions-row {
+  background: #ffffff;
+}
+
+.gmaps-action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid #dadce0;
+  background: #ffffff;
+  color: #1a73e8;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.gmaps-action-pill:hover {
+  background: #f8fafd;
+  border-color: #1a73e8;
+}
+
+.gmaps-action-pill.primary {
+  background: #1a73e8;
+  color: #ffffff;
+  border-color: #1a73e8;
+}
+
+.gmaps-action-pill.primary:hover {
+  background: #1557b0;
+  border-color: #1557b0;
+}
+
+/* Pestañas Planas estilo Google Material */
+.gmaps-tabs {
+  display: flex;
+  border-bottom: 1px solid #dadce0;
+  background: #ffffff;
+  gap: 4px;
+}
+
+.gmaps-tab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 12px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #5f6368;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.gmaps-tab-btn:hover {
+  color: #202124;
+}
+
+.gmaps-tab-btn.active {
+  color: #1a73e8;
+  border-bottom: 2px solid #1a73e8;
+  font-weight: 600;
 }
 
 .card-main-content {
-  padding: 14px 16px;
   overflow-y: auto;
-  max-height: calc(85vh - 70px);
+  max-height: calc(85vh - 180px);
   scrollbar-width: thin;
 }
 
-.analysis-tabs .nav-link {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #64748b;
-  border-radius: 8px;
-  padding: 6px 8px;
+/* Lista de Información de Lugar estilo Google Maps */
+.gmaps-info-list {
+  display: flex;
+  flex-direction: column;
 }
 
-.analysis-tabs .nav-link.active {
-  background: #0f2a50;
-  color: #ffffff;
+.gmaps-info-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f3f4;
 }
 
-/* Semáforos y Banners de Diagnóstico */
-.status-banner {
-  border-radius: 14px;
-  padding: 12px 14px;
+.gmaps-info-item:last-child {
+  border-bottom: none;
 }
 
-.banner-active-service {
-  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-  border: 1px solid #bbf7d0;
-}
-
-.banner-inactive-service {
-  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
-  border: 1px solid #fde68a;
-}
-
-.status-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  font-size: 1.2rem;
+.gmaps-info-icon {
+  width: 20px;
+  color: #5f6368;
+  font-size: 1.05rem;
+  display: flex;
+  justify-content: center;
+  margin-top: 1px;
   flex-shrink: 0;
 }
 
-.metric-card {
-  transition: transform var(--transition-fast);
+.gmaps-info-body {
+  flex: 1;
+  min-width: 0;
 }
 
-.metric-card:hover {
-  transform: translateY(-1px);
+.gmaps-info-label {
+  font-size: 0.72rem;
+  color: #5f6368;
+  margin-bottom: 1px;
 }
 
-.metric-label {
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.metric-val {
-  font-size: 0.85rem;
+.gmaps-info-value {
+  font-size: 0.84rem;
+  color: #202124;
+  font-weight: 500;
+  word-break: break-word;
 }
 
 /* Modal de Métricas Urbanas */

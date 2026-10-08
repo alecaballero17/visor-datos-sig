@@ -10,9 +10,9 @@ public static class PdfMetadataTableComponent
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(6).Text(sectionTitle).FontSize(10.5f).Bold().FontColor("#0f2a50");
+            col.Item().PaddingBottom(4).Text(sectionTitle).FontSize(9.5f).Bold().FontColor("#202124");
 
-            col.Item().Border(1).BorderColor("#e2e8f0").Table(table =>
+            col.Item().Border(1).BorderColor("#dadce0").Table(table =>
             {
                 table.ColumnsDefinition(columns =>
                 {
@@ -25,25 +25,25 @@ public static class PdfMetadataTableComponent
                     var item1 = items[i];
                     var hasSecond = i + 1 < items.Count;
                     var item2 = hasSecond ? items[i + 1] : default;
-                    var bg = (i / 2) % 2 == 0 ? "#f8fafc" : "#ffffff";
+                    var bg = (i / 2) % 2 == 0 ? "#f8f9fa" : "#ffffff";
 
-                    table.Cell().Background(bg).Padding(6).Row(r =>
+                    table.Cell().Background(bg).PaddingVertical(3.5f).PaddingHorizontal(6).Row(r =>
                     {
-                        r.RelativeItem(4).Text(item1.Label).FontSize(8.5f).FontColor("#64748b").SemiBold();
-                        r.RelativeItem(6).Text(item1.Value).FontSize(8.5f).FontColor("#0f172a").Bold();
+                        r.RelativeItem(4).Text(item1.Label).FontSize(8).FontColor("#5f6368");
+                        r.RelativeItem(6).Text(item1.Value).FontSize(8).FontColor("#202124").SemiBold();
                     });
 
                     if (hasSecond)
                     {
-                        table.Cell().Background(bg).Padding(6).Row(r =>
+                        table.Cell().Background(bg).PaddingVertical(3.5f).PaddingHorizontal(6).Row(r =>
                         {
-                            r.RelativeItem(4).Text(item2.Label).FontSize(8.5f).FontColor("#64748b").SemiBold();
-                            r.RelativeItem(6).Text(item2.Value).FontSize(8.5f).FontColor("#0f172a").Bold();
+                            r.RelativeItem(4).Text(item2.Label).FontSize(8).FontColor("#5f6368");
+                            r.RelativeItem(6).Text(item2.Value).FontSize(8).FontColor("#202124").SemiBold();
                         });
                     }
                     else
                     {
-                        table.Cell().Background(bg).Padding(6).Text("");
+                        table.Cell().Background(bg).Padding(3.5f).Text("");
                     }
                 }
             });

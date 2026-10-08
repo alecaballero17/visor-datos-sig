@@ -14,16 +14,16 @@ public static class SvgVectorHelper
         if (geom == null || geom.IsEmpty)
         {
             return $@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 {width} {height}"" width=""100%"" height=""100%"">
-                <rect width=""{width}"" height=""{height}"" fill=""#f8fafc"" rx=""8"" stroke=""#e2e8f0""/>
-                <text x=""{width/2}"" y=""{height/2}"" font-family=""sans-serif"" font-size=""14"" fill=""#94a3b8"" text-anchor=""middle"">
+                <rect width=""{width}"" height=""{height}"" fill=""#f8f9fa"" rx=""6"" stroke=""#dadce0"" stroke-width=""1""/>
+                <text x=""{width/2}"" y=""{height/2}"" font-family=""sans-serif"" font-size=""12"" fill=""#5f6368"" text-anchor=""middle"">
                     Geometría vectorial no disponible
                 </text>
             </svg>";
         }
 
         var env = geom.EnvelopeInternal;
-        var padX = env.Width * 0.15;
-        var padY = env.Height * 0.15;
+        var padX = env.Width * 0.18;
+        var padY = env.Height * 0.18;
         if (padX < 0.00001) padX = 0.0005;
         if (padY < 0.00001) padY = 0.0005;
 
@@ -35,24 +35,20 @@ public static class SvgVectorHelper
         var rangeX = maxX - minX;
         var rangeY = maxY - minY;
 
-        // Proyección a coordenadas SVG (eje Y invertido)
         double ToSvgX(double x) => ((x - minX) / rangeX) * (width - 40) + 20;
         double ToSvgY(double y) => height - (((y - minY) / rangeY) * (height - 40) + 20);
 
         var sb = new StringBuilder();
         sb.AppendLine($@"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 {width} {height}"" width=""100%"" height=""100%"">");
         
-        // Fondo y grilla
-        sb.AppendLine($@"  <rect width=""{width}"" height=""{height}"" fill=""#f8fafc"" rx=""10"" stroke=""#cbd5e1"" stroke-width=""1.5""/>");
+        // Marco de mapa estilo Google
+        sb.AppendLine($@"  <rect width=""{width}"" height=""{height}"" fill=""#ffffff"" rx=""6"" stroke=""#dadce0"" stroke-width=""1""/>");
         sb.AppendLine(@"  <defs>
-            <pattern id=""grid"" width=""25"" height=""25"" patternUnits=""userSpaceOnUse"">
-                <path d=""M 25 0 L 0 0 0 25"" fill=""none"" stroke=""#f1f5f9"" stroke-width=""1""/>
+            <pattern id=""ggrid"" width=""20"" height=""20"" patternUnits=""userSpaceOnUse"">
+                <path d=""M 20 0 L 0 0 0 20"" fill=""none"" stroke=""#f1f3f4"" stroke-width=""0.8""/>
             </pattern>
-            <filter id=""shadow"" x=""-10%"" y=""-10%"" width=""130%"" height=""130%"">
-                <feDropShadow dx=""0"" dy=""3"" stdDeviation=""4"" flood-color=""#0f172a"" flood-opacity=""0.15""/>
-            </filter>
         </defs>");
-        sb.AppendLine($@"  <rect width=""{width}"" height=""{height}"" fill=""url(#grid)"" rx=""10""/>");
+        sb.AppendLine($@"  <rect width=""{width}"" height=""{height}"" fill=""url(#ggrid)"" rx=""6""/>");
 
         // Polígonos
         var polygons = new List<Polygon>();
@@ -63,8 +59,9 @@ public static class SvgVectorHelper
                 if (mp.GetGeometryN(i) is Polygon subP) polygons.Add(subP);
         }
 
-        var strokeColor = hasWater ? "#0284c7" : "#0f766e";
-        var fillColor = hasWater ? "rgba(2, 132, 199, 0.20)" : "rgba(15, 118, 110, 0.18)";
+        // Colores estilo Google Maps (azul Google #1a73e8)
+        var strokeColor = "#1a73e8";
+        var fillColor = "rgba(26, 115, 232, 0.14)";
 
         int verticeNum = 1;
         var verticeMarkers = new StringBuilder();
@@ -81,42 +78,43 @@ public static class SvgVectorHelper
                 var sy = ToSvgY(coords[i].Y).ToString("F1", CultureInfo.InvariantCulture);
                 pointsStr.Append($"{sx},{sy} ");
 
-                // Marcadores de vértice (solo primeros 12 vértices para no saturar)
-                if (i < coords.Length - 1 && verticeNum <= 12)
+                // Vértices discretos
+                if (i < coords.Length - 1 && verticeNum <= 8)
                 {
-                    verticeMarkers.AppendLine($@"  <circle cx=""{sx}"" cy=""{sy}"" r=""4.5"" fill=""#ffffff"" stroke=""{strokeColor}"" stroke-width=""2""/>");
-                    verticeMarkers.AppendLine($@"  <text x=""{sx}"" y=""{ToSvgY(coords[i].Y) - 7:F1}"" font-family=""sans-serif"" font-size=""9"" font-weight=""bold"" fill=""#334155"" text-anchor=""middle"">V{verticeNum}</text>");
+                    verticeMarkers.AppendLine($@"  <circle cx=""{sx}"" cy=""{sy}"" r=""3"" fill=""#ffffff"" stroke=""#1a73e8"" stroke-width=""1.5""/>");
+                    verticeMarkers.AppendLine($@"  <text x=""{sx}"" y=""{ToSvgY(coords[i].Y) - 5:F1}"" font-family=""sans-serif"" font-size=""7.5"" font-weight=""600"" fill=""#5f6368"" text-anchor=""middle"">V{verticeNum}</text>");
                     verticeNum++;
                 }
             }
 
-            sb.AppendLine($@"  <polygon points=""{pointsStr.ToString().Trim()}"" fill=""{fillColor}"" stroke=""{strokeColor}"" stroke-width=""2.5"" filter=""url(#shadow)"" stroke-linejoin=""round""/>");
+            sb.AppendLine($@"  <polygon points=""{pointsStr.ToString().Trim()}"" fill=""{fillColor}"" stroke=""{strokeColor}"" stroke-width=""2"" stroke-linejoin=""round""/>");
         }
 
-        // Vértices encima del polígono
         sb.Append(verticeMarkers.ToString());
 
-        // Conexión de agua (si tiene coordenada de agua)
+        // Punto de acometida / conexión (Google Red Pin)
         if (waterPoint != null && !waterPoint.IsEmpty)
         {
             var wx = ToSvgX(waterPoint.X).ToString("F1", CultureInfo.InvariantCulture);
             var wy = ToSvgY(waterPoint.Y).ToString("F1", CultureInfo.InvariantCulture);
-            sb.AppendLine($@"  <circle cx=""{wx}"" cy=""{wy}"" r=""7"" fill=""#f59e0b"" stroke=""#ffffff"" stroke-width=""2"" filter=""url(#shadow)""/>");
-            sb.AppendLine($@"  <text x=""{wx}"" y=""{double.Parse(wy, CultureInfo.InvariantCulture) + 16:F1}"" font-family=""sans-serif"" font-size=""8.5"" font-weight=""bold"" fill=""#b45309"" text-anchor=""middle"">Punto Conexión</text>");
+            sb.AppendLine($@"  <circle cx=""{wx}"" cy=""{wy}"" r=""5"" fill=""#ea4335"" stroke=""#ffffff"" stroke-width=""1.5""/>");
+            sb.AppendLine($@"  <text x=""{wx}"" y=""{double.Parse(wy, CultureInfo.InvariantCulture) + 12:F1}"" font-family=""sans-serif"" font-size=""7"" font-weight=""600"" fill=""#202124"" text-anchor=""middle"">Acometida</text>");
         }
 
-        // Rosa de los vientos / Flecha Norte
-        sb.AppendLine($@"  <g transform=""translate({width - 45}, 20)"">
-            <circle cx=""16"" cy=""16"" r=""14"" fill=""#ffffff"" stroke=""#cbd5e1"" stroke-width=""1.2""/>
-            <polygon points=""16,6 20,20 16,17 12,20"" fill=""#0284c7""/>
-            <polygon points=""16,26 20,20 16,17 12,20"" fill=""#94a3b8""/>
-            <text x=""16"" y=""4"" font-family=""sans-serif"" font-size=""9"" font-weight=""bold"" fill=""#0f172a"" text-anchor=""middle"">N</text>
+        // Flecha Norte sobria
+        sb.AppendLine($@"  <g transform=""translate({width - 34}, 14)"">
+            <circle cx=""10"" cy=""10"" r=""9"" fill=""#ffffff"" stroke=""#dadce0"" stroke-width=""1""/>
+            <polygon points=""10,3 12.5,12 10,10.5 7.5,12"" fill=""#1a73e8""/>
+            <polygon points=""10,17 12.5,12 10,10.5 7.5,12"" fill=""#9aa0a6""/>
+            <text x=""10"" y=""2"" font-family=""sans-serif"" font-size=""6.5"" font-weight=""bold"" fill=""#5f6368"" text-anchor=""middle"">N</text>
         </g>");
 
-        // Barra de escala de referencia
-        sb.AppendLine($@"  <g transform=""translate(20, {height - 24})"">
-            <rect x=""0"" y=""0"" width=""80"" height=""4"" fill=""#0f172a"" rx=""1""/>
-            <text x=""0"" y=""14"" font-family=""sans-serif"" font-size=""8.5"" fill=""#64748b"">Croquis Territorial Catastral</text>
+        // Barra de escala sobria estilo Google Maps
+        sb.AppendLine($@"  <g transform=""translate(14, {height - 18})"">
+            <line x1=""0"" y1=""0"" x2=""50"" y2=""0"" stroke=""#5f6368"" stroke-width=""1.5""/>
+            <line x1=""0"" y1=""-3"" x2=""0"" y2=""3"" stroke=""#5f6368"" stroke-width=""1.5""/>
+            <line x1=""50"" y1=""-3"" x2=""50"" y2=""3"" stroke=""#5f6368"" stroke-width=""1.5""/>
+            <text x=""0"" y=""9"" font-family=""sans-serif"" font-size=""6.5"" fill=""#5f6368"">Croquis de ubicación</text>
         </g>");
 
         sb.AppendLine("</svg>");

@@ -3,30 +3,37 @@
 @inject IJSRuntime JS
 @inject IUserFriendlyErrorService ErrorService
 
-<div class="property-analysis-card shadow-xl anim-scale-in @(isMinimized ? "is-minimized" : "")"
+<div class="property-analysis-card anim-scale-in @(isMinimized ? "is-minimized" : "")"
      role="region"
-     aria-label="Ficha de información y diagnóstico del predio">
+     aria-label="Ficha de información del lugar">
     <!-- Tirador táctil para móvil -->
     <div class="card-mobile-drag-handle d-lg-none" @onclick="ToggleMinimize" title="Alternar tamaño de la ficha" aria-hidden="true"></div>
 
-    <!-- Barra superior de la tarjeta -->
-    <div class="card-top-bar d-flex justify-content-between align-items-center">
-        <div class="d-flex align-items-center gap-2">
-            <span class="property-type-icon @GetBadgeTypeClass()" aria-hidden="true">
-                <i class="bi @GetTypeIcon()"></i>
-            </span>
-            <div>
-                <h5 class="property-title mb-0">@GetDisplayTitle()</h5>
-                <span class="property-subtitle">@GetDisplaySubtitle()</span>
+    <!-- Barra superior de la tarjeta estilo Google Maps Place Header -->
+    <div class="card-top-bar d-flex justify-content-between align-items-start">
+        <div class="flex-grow-1 me-2">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="gmaps-type-badge">@GetLayerDisplayName()</span>
+                @if (HasWaterService)
+                {
+                    <span class="gmaps-badge-success">● Conexión Activa</span>
+                }
+                else
+                {
+                    <span class="gmaps-badge-neutral">● Sin Conexión</span>
+                }
             </div>
+            <h5 class="property-title mb-0">@GetDisplayTitle()</h5>
+            <div class="property-subtitle">@GetDisplaySubtitle()</div>
         </div>
+
         <div class="card-window-actions d-flex align-items-center gap-1">
             <button type="button"
                     class="btn-win-action"
                     @onclick="ToggleMinimize"
                     title="@(isMinimized ? "Expandir ficha" : "Minimizar ficha")"
-                    aria-label="@(isMinimized ? "Expandir ficha de predio" : "Minimizar ficha de predio")">
-                <i class="bi @(isMinimized ? "bi-arrows-angle-expand" : "bi-dash-lg")" aria-hidden="true"></i>
+                    aria-label="@(isMinimized ? "Expandir ficha" : "Minimizar ficha")">
+                <i class="bi @(isMinimized ? "bi-chevron-up" : "bi-dash-lg")" aria-hidden="true"></i>
             </button>
             <button type="button"
                     class="btn-win-action btn-win-close"
@@ -40,221 +47,160 @@
 
     @if (!isMinimized)
     {
-        <div class="card-main-content">
-            <!-- Pestañas de análisis accesibles -->
-            <ul class="nav nav-pills nav-fill analysis-tabs mb-3" role="tablist" aria-label="Secciones de análisis predial">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link @(activeTab == "resumen" ? "active" : "")"
-                            role="tab"
-                            id="tab-resumen"
-                            aria-selected="@(activeTab == "resumen")"
-                            aria-controls="panel-resumen"
-                            @onclick='() => activeTab = "resumen"'>
-                        <i class="bi bi-shield-check me-1" aria-hidden="true"></i>Diagnóstico
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link @(activeTab == "servicios" ? "active" : "")"
-                            role="tab"
-                            id="tab-servicios"
-                            aria-selected="@(activeTab == "servicios")"
-                            aria-controls="panel-servicios"
-                            @onclick='() => activeTab = "servicios"'>
-                        <i class="bi bi-droplet-half me-1" aria-hidden="true"></i>Agua Potable
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link @(activeTab == "catastro" ? "active" : "")"
-                            role="tab"
-                            id="tab-catastro"
-                            aria-selected="@(activeTab == "catastro")"
-                            aria-controls="panel-catastro"
-                            @onclick='() => activeTab = "catastro"'>
-                        <i class="bi bi-geo-alt me-1" aria-hidden="true"></i>Ficha Predial
-                    </button>
-                </li>
-            </ul>
+        <!-- Barra de Acciones estilo Google Maps (Centrar, Dictamen PDF, Copiar) -->
+        <div class="gmaps-actions-row px-3 py-2 border-bottom d-flex align-items-center gap-2">
+            <button type="button" class="gmaps-action-pill primary" @onclick="CenterOnMap" title="Centrar este predio en el mapa">
+                <i class="bi bi-geo-alt-fill"></i>
+                <span>Centrar</span>
+            </button>
+            <button type="button" class="gmaps-action-pill" @onclick="RequestFormalReport" title="Generar dictamen técnico oficial en PDF">
+                <i class="bi bi-file-earmark-pdf"></i>
+                <span>Dictamen PDF</span>
+            </button>
+            <button type="button" class="gmaps-action-pill" @onclick="CopyReport" title="Copiar ficha técnica al portapapeles">
+                <i class="bi @(isCopied ? "bi-check2 text-success" : "bi-clipboard")"></i>
+                <span>@(isCopied ? "Copiado" : "Copiar")</span>
+            </button>
+        </div>
 
+        <!-- Pestañas planas estilo Google Material -->
+        <div class="gmaps-tabs px-3 pt-2">
+            <button type="button" class="gmaps-tab-btn @(activeTab == "resumen" ? "active" : "")" @onclick='() => activeTab = "resumen"'>
+                Diagnóstico
+            </button>
+            <button type="button" class="gmaps-tab-btn @(activeTab == "servicios" ? "active" : "")" @onclick='() => activeTab = "servicios"'>
+                Agua Potable
+            </button>
+            <button type="button" class="gmaps-tab-btn @(activeTab == "catastro" ? "active" : "")" @onclick='() => activeTab = "catastro"'>
+                Ficha Predial
+            </button>
+        </div>
+
+        <div class="card-main-content px-3 pb-3">
             @if (isLoadingFicha)
             {
                 <div class="py-4 text-center text-muted">
                     <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
-                    <div class="small fw-semibold">Consultando registro de servicios catastrales...</div>
+                    <div class="small fw-semibold text-secondary">Consultando registro catastral...</div>
                 </div>
             }
             else
             {
                 @if (activeTab == "resumen")
                 {
-                    <!-- TAB 1: DIAGNÓSTICO URBANO Y RESUMEN VISUAL -->
+                    <!-- TAB 1: DIAGNÓSTICO URBANO Y LISTA DE DETALLES TIPO GOOGLE MAPS -->
                     <div class="tab-resumen-content anim-fade-in">
-                        <!-- Banner Semáforo Principal de Agua Potable -->
-                        @if (HasWaterService)
-                        {
-                            <div class="status-banner banner-active-service shadow-sm mb-3">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="status-avatar bg-success text-white">
-                                        <i class="bi bi-check-circle-fill"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <h6 class="fw-bold text-success mb-1">Servicio de Agua Potable ACTIVO</h6>
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
-                                                Con Conexión
-                                            </span>
-                                        </div>
-                                        <p class="small text-secondary mb-2">
-                                            Este predio cuenta con acometida y código fijo registrado en la red pública de distribución.
-                                        </p>
-                                        @if (!string.IsNullOrWhiteSpace(TitularName))
-                                        {
-                                            <div class="registered-holder-box p-2 rounded bg-light border">
-                                                <small class="text-muted d-block text-uppercase" style="font-size:0.68rem; letter-spacing:0.05em;">Abonado / Titular Registrado:</small>
-                                                <div class="fw-bold text-dark fs-6 text-truncate">
-                                                    <i class="bi bi-person-badge me-1 text-primary"></i>@TitularName
-                                                </div>
-                                            </div>
-                                        }
+                        <div class="gmaps-info-list mb-3">
+                            @if (!string.IsNullOrWhiteSpace(TitularName))
+                            {
+                                <div class="gmaps-info-item">
+                                    <div class="gmaps-info-icon"><i class="bi bi-person"></i></div>
+                                    <div class="gmaps-info-body">
+                                        <div class="gmaps-info-label">Titular / Abonado Registrado</div>
+                                        <div class="gmaps-info-value">@TitularName</div>
                                     </div>
                                 </div>
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="status-banner banner-inactive-service shadow-sm mb-3">
-                                <div class="d-flex align-items-start gap-3">
-                                    <div class="status-avatar bg-warning text-dark">
-                                        <i class="bi bi-exclamation-triangle-fill"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center justify-content-between">
-                                            <h6 class="fw-bold text-warning-emphasis mb-1">Sin Conexión de Agua Registrada</h6>
-                                            <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">
-                                                Sin Suministro
-                                            </span>
-                                        </div>
-                                        <p class="small text-secondary mb-2">
-                                            El lote no presenta código fijo vinculado en catastro. Se encuentra en condición de predio sin suministro registrado.
-                                        </p>
-                                        <div class="recommendation-badge p-2 rounded bg-light border border-warning-subtle">
-                                            <small class="text-warning-emphasis d-block fw-semibold">
-                                                <i class="bi bi-info-circle me-1"></i>Acción sugerida:
-                                            </small>
-                                            <span class="small text-secondary">
-                                                Verificar si existe tendido matriz sobre la vía para tramitar nueva acometida domiciliaria.
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        }
+                            }
 
-                        <!-- Cuadrícula de Métricas Clave (KPIs) -->
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <div class="metric-card p-2 rounded border bg-surface h-100">
-                                    <span class="metric-label d-block text-muted">Clasificación</span>
-                                    <span class="metric-val fw-bold text-primary">
-                                        <i class="bi bi-building me-1"></i>Predio Urbano
-                                    </span>
+                            <div class="gmaps-info-item">
+                                <div class="gmaps-info-icon"><i class="bi bi-geo-alt"></i></div>
+                                <div class="gmaps-info-body">
+                                    <div class="gmaps-info-label">Ubicación Catastral</div>
+                                    <div class="gmaps-info-value">Unidad Vecinal @(GetProp("UV") ?? "Central"), Manzana @(GetProp("MZA") ?? "-"), Lote @(GetProp("NroLote") ?? FeatureId.ToString())</div>
                                 </div>
                             </div>
-                            <div class="col-6">
-                                <div class="metric-card p-2 rounded border bg-surface h-100">
-                                    <span class="metric-label d-block text-muted">Factibilidad Red</span>
-                                    <span class="metric-val fw-bold text-dark">
-                                        <i class="bi bi-water me-1 text-info"></i>En Red Matriz
-                                    </span>
+
+                            <div class="gmaps-info-item">
+                                <div class="gmaps-info-icon"><i class="bi bi-droplet"></i></div>
+                                <div class="gmaps-info-body">
+                                    <div class="gmaps-info-label">Infraestructura de Agua Potable</div>
+                                    @if (HasWaterService)
+                                    {
+                                        <div class="gmaps-info-value" style="color:#137333;">Conexión registrada con acometida y código fijo activo</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="gmaps-info-value" style="color:#5f6368;">Sin suministro de agua registrado en el padrón</div>
+                                    }
                                 </div>
                             </div>
-                            <div class="col-6">
-                                <div class="metric-card p-2 rounded border bg-surface h-100">
-                                    <span class="metric-label d-block text-muted">Zona Catastral</span>
-                                    <span class="metric-val fw-bold text-dark">
-                                        UV @(GetProp("UV") ?? GetProp("Uv") ?? "Central")
-                                    </span>
+
+                            @if (CoordinatesAvailable)
+                            {
+                                <div class="gmaps-info-item">
+                                    <div class="gmaps-info-icon"><i class="bi bi-compass"></i></div>
+                                    <div class="gmaps-info-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="gmaps-info-label">Coordenadas WGS84</div>
+                                            <div class="gmaps-info-value font-monospace" style="font-size:0.78rem;">@CoordinatesString</div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0" style="color:#1a73e8; font-size:0.75rem;" @onclick="CopyCoords">
+                                            Copiar
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col-6">
-                                <div class="metric-card p-2 rounded border bg-surface h-100">
-                                    <span class="metric-label d-block text-muted">Sector / Manzana</span>
-                                    <span class="metric-val fw-bold text-dark">
-                                        MZA @(GetProp("MZA") ?? GetProp("Manzana") ?? "-")
-                                    </span>
-                                </div>
-                            </div>
+                            }
                         </div>
 
-                        <!-- Barra de Herramientas y Acciones Rápidas -->
-                        <div class="d-flex flex-wrap gap-2 pt-1 border-top">
-                            <button type="button" class="btn btn-sm btn-primary flex-grow-1" @onclick="CenterOnMap">
-                                <i class="bi bi-crosshair me-1"></i>Centrar Predio
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="RequestFormalReport" title="Generar informe técnico estructurado para imprimir o exponer">
-                                <i class="bi bi-file-earmark-bar-graph-fill me-1"></i>Informe Formal
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="CopyReport" title="Copiar resumen para informe">
-                                <i class="bi @(isCopied ? "bi-check2" : "bi-clipboard") me-1"></i>
-                                @(isCopied ? "¡Copiado!" : "Copiar")
-                            </button>
+                        <!-- Métricas territoriales complementarias -->
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                    <span class="small d-block text-muted" style="font-size:0.7rem;">CLASIFICACIÓN</span>
+                                    <span class="fw-semibold" style="color:#202124; font-size:0.85rem;">Predio Urbano</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                    <span class="small d-block text-muted" style="font-size:0.7rem;">RED MATRIZ</span>
+                                    <span class="fw-semibold" style="color:#1a73e8; font-size:0.85rem;">Disponible en Vía</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 }
                 else if (activeTab == "servicios")
                 {
-                    <!-- TAB 2: DETALLES HUMANIZADOS DEL AGUA POTABLE -->
+                    <!-- TAB 2: DETALLES DEL AGUA POTABLE -->
                     <div class="tab-servicios-content anim-fade-in">
                         @if (fichaAgua?.Registros != null && fichaAgua.Registros.Count > 0)
                         {
-                            <div class="mb-3">
-                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle mb-2">
-                                    <i class="bi bi-water me-1"></i>@fichaAgua.Registros.Count conexión(es) detectada(s)
-                                </span>
+                            <div class="small text-secondary mb-2">
+                                Se detectaron @fichaAgua.Registros.Count conexión(es) vinculada(s) a este predio.
                             </div>
 
                             @foreach (var reg in fichaAgua.Registros)
                             {
-                                <div class="service-account-card p-3 rounded border mb-2 bg-light">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="p-3 rounded border mb-2" style="background:#ffffff; border-color:#dadce0 !important;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
                                         <div>
-                                            <span class="text-muted small text-uppercase fw-semibold" style="font-size:0.7rem">Código de Suministro:</span>
-                                            <div class="h6 fw-bold text-primary mb-0">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">CÓDIGO DE SUMINISTRO</span>
+                                            <div class="fw-bold" style="color:#1a73e8; font-size:1rem;">
                                                 #@(reg.CodigoFijo ?? reg.IdCodigo)
                                             </div>
                                         </div>
-                                        <span class="@reg.EstadoServicioBadgeClass">
+                                        <span class="px-2 py-0.5 rounded small fw-semibold" style="background:#e6f4ea; color:#137333; font-size:0.75rem;">
                                             @reg.EstadoServicioTexto
                                         </span>
                                     </div>
 
-                                    <table class="table table-sm table-borderless small mb-2">
-                                        <tbody>
-                                            <tr>
-                                                <th class="text-secondary ps-0" style="width:40%">Titular de Cuenta:</th>
-                                                <td class="fw-semibold text-dark">@(reg.NombreRegistrado ?? "No especificado")</td>
-                                            </tr>
-                                            <tr>
-                                                <th class="text-secondary ps-0">Clave Catastral SIG:</th>
-                                                <td class="font-monospace text-dark">@(reg.CodigoSig ?? "—")</td>
-                                            </tr>
-                                            <tr>
-                                                <th class="text-secondary ps-0">Ubicación Toma:</th>
-                                                <td>Lote @(reg.NumeroLote ?? "Principal"), Manzana @(reg.Manzana ?? "—")</td>
-                                            </tr>
-                                            @if (reg.Latitud.HasValue && reg.Longitud.HasValue)
-                                            {
-                                                <tr>
-                                                    <th class="text-secondary ps-0">Coordenadas:</th>
-                                                    <td class="font-monospace small">@reg.Latitud.Value.ToString("F5"), @reg.Longitud.Value.ToString("F5")</td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
+                                    <div class="small" style="color:#3c4043;">
+                                        <div class="mb-1"><span class="text-secondary">Titular:</span> <strong>@(reg.NombreRegistrado ?? "No especificado")</strong></div>
+                                        <div class="mb-1"><span class="text-secondary">Clave SIG:</span> <span class="font-monospace">@(reg.CodigoSig ?? "—")</span></div>
+                                        <div class="mb-1"><span class="text-secondary">Ubicación:</span> Lote @(reg.NumeroLote ?? "Principal"), Manzana @(reg.Manzana ?? "—")</div>
+                                        @if (reg.Latitud.HasValue && reg.Longitud.HasValue)
+                                        {
+                                            <div class="mb-2"><span class="text-secondary">GPS:</span> <span class="font-monospace" style="font-size:0.75rem;">@reg.Latitud.Value.ToString("F5"), @reg.Longitud.Value.ToString("F5")</span></div>
+                                        }
+                                    </div>
 
                                     @if (LayerKey == "lotes")
                                     {
-                                        <button type="button" class="btn btn-sm btn-outline-primary w-100" @onclick="() => HighlightWaterPoint(reg.IdCodigo)">
-                                            <i class="bi bi-geo-alt-fill me-1 text-warning"></i>Alumbrar acometida en el mapa
+                                        <button type="button" class="btn btn-sm w-100 d-flex align-items-center justify-content-center gap-1 mt-2"
+                                                style="border: 1px solid #dadce0; background:#f8f9fa; color:#1a73e8; font-weight:500; font-size:0.8rem;"
+                                                @onclick="() => HighlightWaterPoint(reg.IdCodigo)">
+                                            <i class="bi bi-geo-alt"></i>
+                                            <span>Localizar acometida en el mapa</span>
                                         </button>
                                     }
                                 </div>
@@ -262,55 +208,42 @@
                         }
                         else
                         {
-                            <div class="text-center py-4 text-secondary">
-                                <i class="bi bi-droplet-slash fs-1 text-muted d-block mb-2"></i>
-                                <h6>Sin registros de agua potable</h6>
-                                <p class="small text-muted mb-0">
-                                    No se encontraron códigos fijos vinculados a la geometría de este predio.
-                                </p>
+                            <div class="text-center py-4" style="color:#5f6368;">
+                                <i class="bi bi-droplet-slash fs-2 d-block mb-2 text-muted"></i>
+                                <div class="fw-semibold">Sin registros de agua potable</div>
+                                <small class="text-muted">No se encontraron códigos fijos vinculados a la geometría de este predio.</small>
                             </div>
                         }
                     </div>
                 }
                 else
                 {
-                    <!-- TAB 3: FICHA PREDIAL Y CATASTRO SIN JERGA -->
+                    <!-- TAB 3: FICHA PREDIAL CATASTRAL -->
                     <div class="tab-catastro-content anim-fade-in">
-                        <div class="p-2 bg-light rounded border mb-3">
-                            <h6 class="small text-uppercase text-muted fw-bold mb-2">Identificación Cartográfica</h6>
-                            <table class="table table-sm prop-table mb-0">
+                        <div class="border rounded overflow-hidden mb-3" style="border-color:#dadce0 !important;">
+                            <div class="px-3 py-2 border-bottom" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                <span class="small fw-bold text-uppercase" style="color:#5f6368; font-size:0.72rem; letter-spacing:0.3px;">Identificación Cartográfica</span>
+                            </div>
+                            <table class="table table-sm mb-0" style="font-size:0.8rem;">
                                 <tbody>
-                                    <tr>
-                                        <th>Capa Cartográfica</th>
-                                        <td><span class="badge bg-secondary-subtle text-secondary">@GetLayerDisplayName()</span></td>
+                                    <tr style="border-bottom:1px solid #f1f3f4;">
+                                        <td class="text-secondary ps-3" style="width:45%;">Capa Cartográfica</td>
+                                        <td class="fw-semibold text-dark pe-3">@GetLayerDisplayName()</td>
                                     </tr>
-                                    <tr>
-                                        <th>Identificador Único</th>
-                                        <td class="font-monospace">Ref-@FeatureId</td>
+                                    <tr style="border-bottom:1px solid #f1f3f4;">
+                                        <td class="text-secondary ps-3">Identificador Único</td>
+                                        <td class="font-monospace text-dark pe-3">Ref-@FeatureId</td>
                                     </tr>
                                     @foreach (var kvp in FriendlyProperties)
                                     {
-                                        <tr>
-                                            <th>@kvp.Key</th>
-                                            <td class="fw-semibold">@kvp.Value</td>
+                                        <tr style="border-bottom:1px solid #f1f3f4;">
+                                            <td class="text-secondary ps-3">@kvp.Key</td>
+                                            <td class="fw-semibold text-dark pe-3">@kvp.Value</td>
                                         </tr>
                                     }
                                 </tbody>
                             </table>
                         </div>
-
-                        @if (CoordinatesAvailable)
-                        {
-                            <div class="p-2 bg-white rounded border">
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="small text-muted fw-semibold">Georreferenciación GPS:</span>
-                                    <button class="btn btn-sm btn-link text-decoration-none p-0" @onclick="CopyCoords">
-                                        <i class="bi bi-copy me-1"></i>Copiar
-                                    </button>
-                                </div>
-                                <code class="small d-block text-secondary mt-1">@CoordinatesString</code>
-                            </div>
-                        }
                     </div>
                 }
             }
@@ -445,29 +378,11 @@
         return "Registro Catastral Verificado";
     }
 
-    private string GetTypeIcon() => LayerKey switch
-    {
-        "lotes" => "bi-house-door-fill",
-        "codigosfijos" => "bi-droplet-fill",
-        "manzanas" => "bi-grid-3x3-gap-fill",
-        "vias" => "bi-signpost-split-fill",
-        _ => "bi-geo-alt-fill"
-    };
-
-    private string GetBadgeTypeClass() => LayerKey switch
-    {
-        "lotes" => "badge-lote",
-        "codigosfijos" => "badge-agua",
-        "manzanas" => "badge-manzana",
-        "vias" => "badge-via",
-        _ => "badge-default"
-    };
-
     private string GetLayerDisplayName() => LayerKey switch
     {
         "lotes" => "Lotes y Predios",
-        "codigosfijos" => "Códigos Fijos / Agua Potable",
-        "manzanas" => "Manzanas Urbanas",
+        "codigosfijos" => "Conexión de Agua",
+        "manzanas" => "Manzana Urbana",
         "vias" => "Red Vial",
         _ => LayerKey
     };
@@ -485,7 +400,6 @@
                 var strVal = v.ToString() ?? "";
                 if (string.IsNullOrWhiteSpace(strVal)) continue;
 
-                // Traducir campos técnicos a español legible para humanos
                 switch (k.ToLowerInvariant())
                 {
                     case "nrolote":
@@ -518,7 +432,6 @@
                     case "idmanzana":
                         dict["ID de Manzana"] = strVal;
                         break;
-                    // Excluir id internos crudos o coordenadas ya mostradas
                     case "idlote":
                     case "idcodigo":
                     case "idvia":

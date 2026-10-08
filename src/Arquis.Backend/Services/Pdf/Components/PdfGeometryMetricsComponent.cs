@@ -13,7 +13,7 @@ public static class PdfGeometryMetricsComponent
     {
         container.Column(col =>
         {
-            col.Item().PaddingBottom(4).Text("REPRESENTACIÓN VECTORIAL Y PLANIMETRÍA").FontSize(9.5f).Bold().FontColor("#0f2a50");
+            col.Item().PaddingBottom(4).Text("REPRESENTACIÓN VECTORIAL Y PLANIMETRÍA").FontSize(9.5f).Bold().FontColor("#202124");
 
             col.Item().Row(r =>
             {
@@ -23,9 +23,9 @@ public static class PdfGeometryMetricsComponent
                 // Resumen Métrico
                 r.RelativeItem(5).PaddingLeft(8).Column(c =>
                 {
-                    c.Item().Border(1).BorderColor("#cbd5e1").Background("#f8fafc").Padding(6).Column(box =>
+                    c.Item().Border(1).BorderColor("#dadce0").Background("#f8f9fa").Padding(6).Column(box =>
                     {
-                        box.Item().Text("MÉTRICAS CARTOGRÁFICAS").FontSize(8).Bold().FontColor("#0f2a50");
+                        box.Item().Text("MÉTRICAS CARTOGRÁFICAS").FontSize(8).Bold().FontColor("#202124");
                         
                         double areaM2 = 0;
                         double perimM = 0;
@@ -42,19 +42,19 @@ public static class PdfGeometryMetricsComponent
                             centroid = geom.Centroid.Coordinate;
                         }
 
-                        box.Item().PaddingTop(2).Text($"Superficie: {areaM2:N1} m²").FontSize(8).SemiBold().FontColor("#0284c7");
-                        box.Item().Text($"Perímetro: {perimM:N1} m").FontSize(7.5f).FontColor("#334155");
-                        box.Item().Text($"Vértices: {verticesCount} puntos").FontSize(7.5f).FontColor("#334155");
-                        box.Item().Text($"Sistema: WGS84 (EPSG:4326)").FontSize(7.5f).FontColor("#64748b");
+                        box.Item().PaddingTop(2).Text($"Superficie: {areaM2:N1} m²").FontSize(8).SemiBold().FontColor("#1a73e8");
+                        box.Item().Text($"Perímetro: {perimM:N1} m").FontSize(7.5f).FontColor("#3c4043");
+                        box.Item().Text($"Vértices: {verticesCount} puntos").FontSize(7.5f).FontColor("#3c4043");
+                        box.Item().Text($"Sistema: WGS84 (EPSG:4326)").FontSize(7.5f).FontColor("#5f6368");
                         if (centroid != null)
                         {
-                            box.Item().Text($"Centroide: {centroid.X:F5}, {centroid.Y:F5}").FontSize(7.5f).FontColor("#64748b");
+                            box.Item().Text($"Centroide: {centroid.X:F5}, {centroid.Y:F5}").FontSize(7.5f).FontColor("#5f6368");
                         }
                     });
 
                     // Tabla condensada de coordenadas de vértices
-                    c.Item().PaddingTop(4).Text("VÉRTICES (WGS84)").FontSize(7.5f).Bold().FontColor("#475569");
-                    c.Item().Border(1).BorderColor("#e2e8f0").Table(t =>
+                    c.Item().PaddingTop(4).Text("VÉRTICES (WGS84)").FontSize(7.5f).Bold().FontColor("#5f6368");
+                    c.Item().Border(1).BorderColor("#dadce0").Table(t =>
                     {
                         t.ColumnsDefinition(cols =>
                         {
@@ -65,9 +65,9 @@ public static class PdfGeometryMetricsComponent
 
                         t.Header(h =>
                         {
-                            h.Cell().Background("#e2e8f0").Padding(1.5f).Text("V").FontSize(6.5f).Bold();
-                            h.Cell().Background("#e2e8f0").Padding(1.5f).Text("Longitud (X)").FontSize(6.5f).Bold();
-                            h.Cell().Background("#e2e8f0").Padding(1.5f).Text("Latitud (Y)").FontSize(6.5f).Bold();
+                            h.Cell().Background("#f8f9fa").BorderBottom(1).BorderColor("#dadce0").Padding(1.5f).Text("V").FontSize(6.5f).Bold().FontColor("#5f6368");
+                            h.Cell().Background("#f8f9fa").BorderBottom(1).BorderColor("#dadce0").Padding(1.5f).Text("Longitud (X)").FontSize(6.5f).Bold().FontColor("#5f6368");
+                            h.Cell().Background("#f8f9fa").BorderBottom(1).BorderColor("#dadce0").Padding(1.5f).Text("Latitud (Y)").FontSize(6.5f).Bold().FontColor("#5f6368");
                         });
 
                         var coords = geom?.Coordinates ?? Array.Empty<Coordinate>();

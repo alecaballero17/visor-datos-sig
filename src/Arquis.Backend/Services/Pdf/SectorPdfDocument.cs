@@ -48,23 +48,23 @@ public class SectorPdfDocument : IDocument
 
     private void ComposeContent(IContainer container)
     {
-        container.PaddingVertical(10).Column(col =>
+        container.PaddingVertical(6).Column(col =>
         {
-            col.Spacing(10);
+            col.Spacing(6);
 
             // 1. Resumen Ejecutivo de Cobertura
             var pct = _model.TotalPredios > 0 ? (_model.PrediosConServicio * 100.0 / _model.TotalPredios) : 0;
-            col.Item().Border(1.2f).BorderColor("#bae6fd").Background("#f0f9ff").Padding(12).Column(c =>
+            col.Item().Border(1).BorderColor("#dadce0").Background("#f8f9fa").Padding(8).Column(c =>
             {
                 c.Item().Row(r =>
                 {
-                    r.RelativeItem().Text($"COBERTURA DE AGUA POTABLE DEL SECTOR: {pct:F1}%").FontSize(11).Bold().FontColor("#0369a1");
-                    r.ConstantItem(120).AlignRight().Text($"{_model.PrediosConServicio} de {_model.TotalPredios} Lotes").FontSize(9).Bold().FontColor("#0284c7");
+                    r.RelativeItem().Text($"COBERTURA DE AGUA POTABLE: {pct:F1}%").FontSize(10).Bold().FontColor("#202124");
+                    r.ConstantItem(120).AlignRight().Text($"{_model.PrediosConServicio} de {_model.TotalPredios} Predios").FontSize(8.5f).Bold().FontColor("#1a73e8");
                 });
 
-                c.Item().PaddingTop(4).Text(
-                    $"El sector analizado (Unidad Vecinal {_model.UnidadVecinal}, Manzana {_model.Manzana}) cuenta con un total catastrado de {_model.TotalPredios} predios, de los cuales {_model.PrediosConServicio} disponen de conexión verificada y {_model.PrediosSinServicio} carecen de servicio formal."
-                ).FontSize(8.5f).FontColor("#334155");
+                c.Item().PaddingTop(3).Text(
+                    $"Sector UV {_model.UnidadVecinal}, MZA {_model.Manzana} cuenta con {_model.TotalPredios} lotes catastrados ({_model.PrediosConServicio} con suministro verificado y {_model.PrediosSinServicio} sin conexión formal)."
+                ).FontSize(8).FontColor("#3c4043");
             });
 
             // 2. Ficha de Datos del Sector
@@ -89,8 +89,8 @@ public class SectorPdfDocument : IDocument
             {
                 col.Item().Column(sec =>
                 {
-                    sec.Item().PaddingBottom(4).Text("INVENTARIO PREDIAL DEL SECTOR").FontSize(9.5f).Bold().FontColor("#0f2a50");
-                    sec.Item().Border(1).BorderColor("#e2e8f0").Table(t =>
+                    sec.Item().PaddingBottom(4).Text("INVENTARIO PREDIAL DEL SECTOR").FontSize(9.5f).Bold().FontColor("#202124");
+                    sec.Item().Border(1).BorderColor("#dadce0").Table(t =>
                     {
                         t.ColumnsDefinition(cols =>
                         {
@@ -101,20 +101,20 @@ public class SectorPdfDocument : IDocument
 
                         t.Header(h =>
                         {
-                            h.Cell().Background("#0f2a50").Padding(4).Text("N° Lote").FontSize(8).Bold().FontColor("#ffffff");
-                            h.Cell().Background("#0f2a50").Padding(4).Text("Agua Potable").FontSize(8).Bold().FontColor("#ffffff");
-                            h.Cell().Background("#0f2a50").Padding(4).Text("Código Suministro").FontSize(8).Bold().FontColor("#ffffff");
+                            h.Cell().Background("#f8f9fa").BorderBottom(1).BorderColor("#dadce0").Padding(3).Text("N° Lote").FontSize(7.5f).Bold().FontColor("#5f6368");
+                            h.Cell().Background("#f8f9fa").BorderBottom(1).BorderColor("#dadce0").Padding(3).Text("Agua Potable").FontSize(7.5f).Bold().FontColor("#5f6368");
+                            h.Cell().Background("#f8f9fa").BorderBottom(1).BorderColor("#dadce0").Padding(3).Text("Código Suministro").FontSize(7.5f).Bold().FontColor("#5f6368");
                         });
 
                         var sampleLotes = _model.Predios.Take(8).ToList();
                         for (int i = 0; i < sampleLotes.Count; i++)
                         {
                             var item = sampleLotes[i];
-                            var bg = i % 2 == 0 ? "#ffffff" : "#f8fafc";
-                            t.Cell().Background(bg).Padding(3).Text($"Lote {item.NumeroLote}").FontSize(7.5f).FontColor("#0f172a");
-                            t.Cell().Background(bg).Padding(3).Text(item.TieneAgua ? "✔ Con Agua" : "✖ Sin Agua").FontSize(7.5f)
-                                .FontColor(item.TieneAgua ? "#16a34a" : "#dc2626").Bold();
-                            t.Cell().Background(bg).Padding(3).Text(item.CodigoSuministro ?? (item.TieneAgua ? "Activo" : "No asignado")).FontSize(7.5f).FontColor("#64748b");
+                            var bg = i % 2 == 0 ? "#ffffff" : "#f8f9fa";
+                            t.Cell().Background(bg).Padding(2.5f).Text($"Lote {item.NumeroLote}").FontSize(7).FontColor("#202124");
+                            t.Cell().Background(bg).Padding(2.5f).Text(item.TieneAgua ? "Con Suministro" : "Sin Suministro").FontSize(7)
+                                .FontColor(item.TieneAgua ? "#137333" : "#5f6368").SemiBold();
+                            t.Cell().Background(bg).Padding(2.5f).Text(item.CodigoSuministro ?? (item.TieneAgua ? "Activo" : "No asignado")).FontSize(7).FontColor("#5f6368");
                         }
                     });
                 });

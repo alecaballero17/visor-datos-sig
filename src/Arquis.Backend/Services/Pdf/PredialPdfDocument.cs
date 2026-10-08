@@ -75,14 +75,14 @@ public class PredialPdfDocument : IDocument
             col.Item().Element(c => PdfGeometryMetricsComponent.Render(c, _geometry, _model.TieneAgua, _waterPoint));
 
             // 4. Dictamen Técnico y Recomendaciones Urbanísticas
-            col.Item().Border(1).BorderColor("#e2e8f0").Background("#ffffff").Padding(10).Column(d =>
+            col.Item().Border(1).BorderColor("#dadce0").Background("#ffffff").Padding(8).Column(d =>
             {
-                d.Item().Text("DICTAMEN Y RECOMENDACIÓN TÉCNICA").FontSize(9.5f).Bold().FontColor("#0f2a50");
-                d.Item().PaddingTop(4).Text(
+                d.Item().Text("DICTAMEN TÉCNICO Y RECOMENDACIÓN").FontSize(9).Bold().FontColor("#202124");
+                d.Item().PaddingTop(3).Text(
                     _model.TieneAgua
-                        ? "1. Predio apto para trámites de derecho propietario, regularización de plano de lote o permiso de edificación.\n2. Se certifica que la infraestructura de agua potable se encuentra en operación normal.\n3. Los linderos y vértices se encuentran debidamente georreferenciados en el sistema catastral municipal."
-                        : "1. Se recomienda a la parte interesada coordinar con la entidad prestadora de servicios de agua potable para la instalación de acometida formal.\n2. Los límites perimétricos y la geometría cartográfica están registrados y reconocidos en el plano base municipal."
-                ).FontSize(8.5f).FontColor("#334155").LineHeight(1.3f);
+                        ? "1. Predio verificado con infraestructura activa de agua potable en el sistema municipal.\n2. Linderos y vértices debidamente georreferenciados en el plano base catastral.\n3. Apto para trámites administrativos de derecho propietario y licencias urbanísticas."
+                        : "1. No se registra conexión de agua potable en el padrón catastral.\n2. Se sugiere gestionar la solicitud de acometida formal ante la administración de servicios básicos.\n3. Geometría perimétrica reconocida en la base cartográfica municipal."
+                ).FontSize(8).FontColor("#3c4043").LineHeight(1.25f);
             });
 
             // 5. Trazabilidad de Bitácora
