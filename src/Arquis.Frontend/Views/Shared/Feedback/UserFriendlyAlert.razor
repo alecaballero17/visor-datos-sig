@@ -1,0 +1,136 @@
+@implements IDisposable
+@inject IUserFriendlyErrorService ErrorService
+@inject NavigationManager Navigation
+
+@if (activeMessages.Count > 0)
+{
+    <div class="user-friendly-alert-container" role="region" aria-label="Notificaciones del sistema" aria-live="polite">
+        @foreach (var msg in activeMessages)
+        {
+            <div class="user-friendly-toast shadow-xl anim-fade-in-down @msg.AlertCssClass"
+                 role="alert"
+                 id="msg-@msg.Id"
+                 tabindex="0">
+                <div class="toast-body-layout d-flex align-items-start gap-3 p-3">
+                    <div class="toast-icon-badge @msg.BadgeCssClass" aria-hidden="true">
+                        <i class="bi @msg.Icon fs-4"></i>
+                    </div>
+
+                    <div class="toast-text-content flex-grow-1 min-w-0">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <h6 class="toast-title mb-0 fw-bold">@msg.Title</h6>
+                            <button type="button"
+                                    class="btn-close btn-close-sm ms-2"
+                                    @onclick="() => Dismiss(msg.Id)"
+                                    aria-label="Cerrar notificación"></button>
+                        </div>
+
+                        <p class="toast-message mb-1 small text-dark">
+                            @msg.Message
+                        </p>
+
+                        @if (!string.IsNullOrWhiteSpace(msg.Recommendation))
+                        {
+                            <div class="toast-recommendation small text-secondary mt-1">
+                                <i class="bi bi-lightbulb me-1 text-warning-emphasis"></i>
+                                <span>@msg.Recommendation</span>
+                            </div>
+                        }
+
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 pt-1 border-top border-black border-opacity-10">
+                            @if (!string.IsNullOrWhiteSpace(msg.ActionText))
+                            {
+                                <button type="button"
+                                        class="btn btn-sm btn-primary rounded-pill px-3 py-1 fw-semibold"
+                                        @onclick="() => ExecuteAction(msg)">
+                                    <i class="bi bi-arrow-repeat me-1"></i>@msg.ActionText
+                                </button>
+                            }
+
+                            @if (!string.IsNullOrWhiteSpace(msg.TechnicalDetail))
+                            {
+                                <details class="toast-tech-details ms-auto">
+                                    <summary class="small text-muted" style="cursor: pointer; font-size: 0.72rem;">
+                                        Detalles para soporte
+                                    </summary>
+                                    <pre class="bg-black bg-opacity-75 text-light p-2 rounded mt-1 mb-0 font-monospace" style="font-size: 0.7rem; max-width: 320px; max-height: 120px; overflow: auto; white-space: pre-wrap;">@msg.TechnicalDetail</pre>
+                                </details>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<UserErrorMessage> activeMessages = new();
+
+    protected override void OnInitialized()
+    {
+        ErrorService.OnNotification += HandleNewNotification;
+        ErrorService.OnDismiss += HandleDismiss;
+    }
+
+    private void HandleNewNotification(UserErrorMessage msg)
+    {
+        InvokeAsync(() =>
+        {
+            activeMessages.RemoveAll(m => m.Title == msg.Title);
+            activeMessages.Insert(0, msg);
+
+            if (activeMessages.Count > 4)
+            {
+                activeMessages.RemoveAt(activeMessages.Count - 1);
+            }
+
+            StateHasChanged();
+
+            // Auto-cerrar alertas informativas o de advertencia tras 8 segundos
+            if (msg.Severity != ErrorSeverity.Danger)
+            {
+                _ = Task.Delay(8000).ContinueWith(_ =>
+                {
+                    InvokeAsync(() => Dismiss(msg.Id));
+                });
+            }
+        });
+    }
+
+    private void HandleDismiss(string messageId)
+    {
+        InvokeAsync(() =>
+        {
+            activeMessages.RemoveAll(m => m.Id == messageId);
+            StateHasChanged();
+        });
+    }
+
+    private void Dismiss(string messageId)
+    {
+        activeMessages.RemoveAll(m => m.Id == messageId);
+        StateHasChanged();
+    }
+
+    private async Task ExecuteAction(UserErrorMessage msg)
+    {
+        if (msg.ActionText == "Ir a Iniciar Sesión")
+        {
+            Navigation.NavigateTo("/login");
+            return;
+        }
+
+        if (msg.OnAction != null)
+        {
+            Dismiss(msg.Id);
+            await msg.OnAction.Invoke();
+        }
+    }
+
+    public void Dispose()
+    {
+        ErrorService.OnNotification -= HandleNewNotification;
+        ErrorService.OnDismiss -= HandleDismiss;
+    }
+}

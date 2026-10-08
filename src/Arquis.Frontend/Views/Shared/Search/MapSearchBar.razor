@@ -1,0 +1,380 @@
+@using System.Threading
+@inject HttpClient Http
+@inject IUserFriendlyErrorService ErrorService
+
+<div class="gmaps-search-container @(IsFocused ? "is-focused" : "") @(hasResults ? "has-dropdown" : "")"
+     role="search"
+     aria-label="Búsqueda catastral">
+    <div class="gmaps-search-bar shadow-lg">
+        <span class="search-leading-icon" aria-hidden="true">
+            @if (isLoading)
+            {
+                <span class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Buscando...</span>
+                </span>
+            }
+            else
+            {
+                <i class="bi bi-search text-secondary"></i>
+            }
+        </span>
+
+        <input type="text"
+               class="gmaps-search-input"
+               role="combobox"
+               aria-autocomplete="list"
+               aria-expanded="@isOpenDropdown"
+               aria-controls="gmaps-search-results"
+               aria-activedescendant="@(selectedItemIndex >= 0 ? $"result-opt-{selectedItemIndex}" : null)"
+               aria-label="Buscar predio, lote, manzana, conexión o calle"
+               placeholder="Buscar predio, lote, manzana, conexión o calle..."
+               value="@searchText"
+               @oninput="OnInputChanged"
+               @onfocus="OnFocus"
+               @onblur="OnBlur"
+               @onkeydown="OnKeyDown"
+               autocomplete="off"
+               spellcheck="false" />
+
+        @if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            <button type="button"
+                    class="btn-search-clear"
+                    @onclick="ClearSearch"
+                    title="Limpiar búsqueda"
+                    aria-label="Borrar texto de búsqueda">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        }
+
+        <div class="vr mx-1 opacity-25" aria-hidden="true"></div>
+
+        <div class="dropdown">
+            <button class="btn btn-sm btn-filter-toggle dropdown-toggle"
+                    type="button"
+                    data-bs-toggle="dropdown"
+                    aria-expanded="false"
+                    aria-label="Filtrar por tipo de capa"
+                    title="Filtrar por tipo de elemento">
+                <i class="@GetLayerIcon(selectedLayerFilter)" aria-hidden="true"></i>
+                <span class="d-none d-md-inline ms-1">@GetLayerLabel(selectedLayerFilter)</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end shadow-sm" role="menu">
+                <li role="presentation"><h6 class="dropdown-header">Filtrar búsqueda por:</h6></li>
+                <li role="presentation"><button class="dropdown-item @(selectedLayerFilter == null ? "active" : "")" type="button" @onclick="() => SetLayerFilter(null)"><i class="bi bi-layers me-2"></i>Todas las capas</button></li>
+                <li role="presentation"><button class="dropdown-item @(selectedLayerFilter == "lotes" ? "active" : "")" type="button" @onclick='() => SetLayerFilter("lotes")'><i class="bi bi-house-door me-2 text-primary"></i>Predios / Lotes</button></li>
+                <li role="presentation"><button class="dropdown-item @(selectedLayerFilter == "codigosfijos" ? "active" : "")" type="button" @onclick='() => SetLayerFilter("codigosfijos")'><i class="bi bi-droplet me-2 text-warning"></i>Conexiones de Agua</button></li>
+                <li role="presentation"><button class="dropdown-item @(selectedLayerFilter == "manzanas" ? "active" : "")" type="button" @onclick='() => SetLayerFilter("manzanas")'><i class="bi bi-grid-3x3-gap me-2 text-danger"></i>Manzanas</button></li>
+                <li role="presentation"><button class="dropdown-item @(selectedLayerFilter == "vias" ? "active" : "")" type="button" @onclick='() => SetLayerFilter("vias")'><i class="bi bi-signpost-split me-2 text-secondary"></i>Calles / Vías</button></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Región aria-live para anunciar resultados a lectores de pantalla -->
+    <div class="visually-hidden" aria-live="polite">
+        @searchAnnouncement
+    </div>
+
+    <!-- Desplegable de coincidencias -->
+    @if (isOpenDropdown)
+    {
+        <div class="gmaps-results-dropdown shadow-xl anim-fade-in-down">
+            @if (isLoading)
+            {
+                <div class="p-3 text-center text-muted" role="status">
+                    <span class="spinner-border spinner-border-sm me-2 text-primary" aria-hidden="true"></span>
+                    <span>Buscando coincidencias en el catastro...</span>
+                </div>
+            }
+            else if (results.Count == 0 && !string.IsNullOrWhiteSpace(searchText))
+            {
+                <div class="p-4 text-center text-secondary" role="status">
+                    <i class="bi bi-geo-alt-slash fs-3 d-block mb-2 text-muted" aria-hidden="true"></i>
+                    <div class="fw-semibold">No se encontraron predios ni vías</div>
+                    <small class="text-muted">Prueba con otro número de lote, código o nombre de calle.</small>
+                </div>
+            }
+            else if (results.Count > 0)
+            {
+                <div class="dropdown-header-bar d-flex justify-content-between align-items-center px-3 py-2 border-bottom">
+                    <span class="badge bg-light text-dark border">
+                        <i class="bi bi-check2-circle text-success me-1" aria-hidden="true"></i>@results.Count @(results.Count == 1 ? "coincidencia" : "coincidencias")
+                    </span>
+                    <button class="btn btn-link btn-sm text-secondary p-0 text-decoration-none"
+                            @onclick="CloseDropdown"
+                            aria-label="Cerrar resultados desplegables"
+                            style="font-size:0.75rem;">
+                        <i class="bi bi-chevron-up me-1" aria-hidden="true"></i>Minimizar
+                    </button>
+                </div>
+
+                <div class="results-scroll-container"
+                     role="listbox"
+                     id="gmaps-search-results"
+                     aria-label="Lista de coincidencias">
+                    @foreach (var (item, index) in results.Select((r, i) => (r, i)))
+                    {
+                        <div class="gmaps-result-item @(selectedItemIndex == index ? "active" : "")"
+                             id="@($"result-opt-{index}")"
+                             role="option"
+                             aria-selected="@(selectedItemIndex == index)"
+                             tabindex="0"
+                             @onclick="() => SelectResult(item)"
+                             @onkeydown="(e) => OnItemKeyDown(e, item)">
+                            <div class="result-icon-box @item.CategoryBadgeColor" aria-hidden="true">
+                                <i class="bi @item.CategoryIcon"></i>
+                            </div>
+                            <div class="result-info">
+                                <div class="result-title text-truncate">
+                                    @item.Label
+                                </div>
+                                <div class="result-subtitle text-truncate">
+                                    <span class="badge border @item.CategoryBadgeColor me-1" style="font-size: 0.65rem;">
+                                        @item.CategoryName
+                                    </span>
+                                    @GetSublabelDetails(item)
+                                </div>
+                            </div>
+                            <div class="result-action">
+                                <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                    <i class="bi bi-crosshair me-1" aria-hidden="true"></i>Ver en mapa
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<SearchResultItem> OnResultSelected { get; set; }
+    [Parameter] public EventCallback OnSearchCleared { get; set; }
+
+    private string searchText = string.Empty;
+    private string? selectedLayerFilter = null;
+    private bool isLoading = false;
+    private bool isOpenDropdown = false;
+    private bool IsFocused = false;
+    private bool hasResults => results.Count > 0 && isOpenDropdown;
+    private int selectedItemIndex = -1;
+    private string searchAnnouncement = string.Empty;
+
+    private List<SearchResultItem> results = new();
+    private CancellationTokenSource? debounceCts;
+
+    private void OnFocus()
+    {
+        IsFocused = true;
+        if (results.Count > 0 && !string.IsNullOrWhiteSpace(searchText))
+        {
+            isOpenDropdown = true;
+        }
+    }
+
+    private async Task OnBlur()
+    {
+        // Pequeño retardo para permitir clicks en los ítems
+        await Task.Delay(200);
+        IsFocused = false;
+    }
+
+    private async Task OnInputChanged(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        selectedItemIndex = -1;
+
+        debounceCts?.Cancel();
+        debounceCts = new CancellationTokenSource();
+        var token = debounceCts.Token;
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            results.Clear();
+            isOpenDropdown = false;
+            isLoading = false;
+            searchAnnouncement = "Búsqueda limpiada.";
+            await OnSearchCleared.InvokeAsync();
+            return;
+        }
+
+        isOpenDropdown = true;
+        isLoading = true;
+
+        try
+        {
+            await Task.Delay(250, token);
+
+            var queryUrl = $"api/busqueda?texto={Uri.EscapeDataString(searchText.Trim())}&tamano=30";
+            if (!string.IsNullOrWhiteSpace(selectedLayerFilter))
+            {
+                queryUrl += $"&capa={selectedLayerFilter}";
+            }
+
+            var response = await Http.GetFromJsonAsync<List<SearchResultItem>>(queryUrl, token);
+            results = response ?? new();
+            searchAnnouncement = results.Count > 0
+                ? $"Se encontraron {results.Count} coincidencias."
+                : "No se encontraron coincidencias para la búsqueda.";
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex)
+        {
+            results.Clear();
+            searchAnnouncement = "Hubo un problema al buscar en el servidor.";
+            ErrorService.FromException(ex, "búsqueda catastral", () => TriggerSearchImmediately());
+        }
+        finally
+        {
+            if (!token.IsCancellationRequested)
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+    }
+
+    private async Task SetLayerFilter(string? layer)
+    {
+        selectedLayerFilter = layer;
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            await TriggerSearchImmediately();
+        }
+    }
+
+    private async Task TriggerSearchImmediately()
+    {
+        if (string.IsNullOrWhiteSpace(searchText)) return;
+        isLoading = true;
+        isOpenDropdown = true;
+
+        try
+        {
+            var queryUrl = $"api/busqueda?texto={Uri.EscapeDataString(searchText.Trim())}&tamano=30";
+            if (!string.IsNullOrWhiteSpace(selectedLayerFilter))
+            {
+                queryUrl += $"&capa={selectedLayerFilter}";
+            }
+
+            var response = await Http.GetFromJsonAsync<List<SearchResultItem>>(queryUrl);
+            results = response ?? new();
+            searchAnnouncement = $"Se encontraron {results.Count} coincidencias.";
+        }
+        catch (Exception ex)
+        {
+            results.Clear();
+            ErrorService.FromException(ex, "búsqueda catastral", () => TriggerSearchImmediately());
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SelectResult(SearchResultItem item)
+    {
+        isOpenDropdown = false;
+        searchText = item.Label;
+        searchAnnouncement = $"Seleccionado {item.Label}. Centrando en el mapa.";
+        await OnResultSelected.InvokeAsync(item);
+    }
+
+    private async Task ClearSearch()
+    {
+        searchText = string.Empty;
+        results.Clear();
+        isOpenDropdown = false;
+        isLoading = false;
+        selectedItemIndex = -1;
+        searchAnnouncement = "Búsqueda limpiada.";
+        await OnSearchCleared.InvokeAsync();
+    }
+
+    private void CloseDropdown()
+    {
+        isOpenDropdown = false;
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            isOpenDropdown = false;
+        }
+        else if (e.Key == "ArrowDown" && results.Count > 0)
+        {
+            selectedItemIndex = Math.Min(selectedItemIndex + 1, results.Count - 1);
+        }
+        else if (e.Key == "ArrowUp" && results.Count > 0)
+        {
+            selectedItemIndex = Math.Max(selectedItemIndex - 1, 0);
+        }
+        else if (e.Key == "Enter" && results.Count > 0)
+        {
+            var index = selectedItemIndex >= 0 ? selectedItemIndex : 0;
+            if (index < results.Count)
+            {
+                await SelectResult(results[index]);
+            }
+        }
+    }
+
+    private async Task OnItemKeyDown(KeyboardEventArgs e, SearchResultItem item)
+    {
+        if (e.Key is "Enter" or " ")
+        {
+            await SelectResult(item);
+        }
+    }
+
+    private string GetLayerIcon(string? layer) => layer switch
+    {
+        "lotes" => "bi bi-house-door text-primary",
+        "codigosfijos" => "bi bi-droplet text-warning",
+        "manzanas" => "bi bi-grid-3x3-gap text-danger",
+        "vias" => "bi bi-signpost-split text-secondary",
+        _ => "bi bi-filter"
+    };
+
+    private string GetLayerLabel(string? layer) => layer switch
+    {
+        "lotes" => "Lotes",
+        "codigosfijos" => "Agua",
+        "manzanas" => "Manzanas",
+        "vias" => "Vías",
+        _ => "Todas"
+    };
+
+    private string GetSublabelDetails(SearchResultItem item)
+    {
+        if (item.Properties == null) return string.Empty;
+        
+        if (item.Layer == "lotes")
+        {
+            if (item.Properties.TryGetValue("NroLote", out var lote))
+                return $"Lote N° {lote} · Catastro Municipal";
+        }
+        else if (item.Layer == "manzanas")
+        {
+            item.Properties.TryGetValue("UV", out var uv);
+            item.Properties.TryGetValue("MZA", out var mza);
+            return $"UV {uv ?? "-"} · Manzana {mza ?? "-"}";
+        }
+        else if (item.Layer == "codigosfijos")
+        {
+            item.Properties.TryGetValue("Nombre", out var nom);
+            return $"Titular: {nom ?? "Registrado"}";
+        }
+        else if (item.Layer == "vias")
+        {
+            return "Red vial urbana";
+        }
+        return "Referencia cartográfica";
+    }
+}

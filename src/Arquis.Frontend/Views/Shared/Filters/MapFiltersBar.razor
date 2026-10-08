@@ -1,0 +1,138 @@
+<div class="map-filters-bar shadow-sm" role="toolbar" aria-label="Filtros del mapa">
+    <div class="filters-scroll-track d-flex align-items-center gap-2">
+        <span class="filter-label d-none d-lg-inline text-muted small fw-semibold" aria-hidden="true">
+            <i class="bi bi-funnel me-1"></i>Filtros:
+        </span>
+
+        <!-- Filtros de Disponibilidad de Agua -->
+        <div class="btn-group btn-group-sm filter-pill-group" role="group" aria-label="Filtro de Disponibilidad de Agua">
+            <button type="button"
+                    class="btn filter-chip @(WaterFilter == WaterFilterMode.Todos ? "active" : "")"
+                    aria-pressed="@(WaterFilter == WaterFilterMode.Todos)"
+                    aria-label="Mostrar todos los predios"
+                    @onclick="() => SetWaterFilter(WaterFilterMode.Todos)">
+                <i class="bi bi-layers me-1" aria-hidden="true"></i>Todos
+            </button>
+            <button type="button"
+                    class="btn filter-chip chip-water-yes @(WaterFilter == WaterFilterMode.SoloConAgua ? "active" : "")"
+                    aria-pressed="@(WaterFilter == WaterFilterMode.SoloConAgua)"
+                    aria-label="Mostrar solo predios con agua"
+                    @onclick="() => SetWaterFilter(WaterFilterMode.SoloConAgua)"
+                    title="Mostrar solo predios y conexiones con agua potable activa">
+                <i class="bi bi-droplet-fill me-1 text-info" aria-hidden="true"></i>Con Agua
+            </button>
+            <button type="button"
+                    class="btn filter-chip chip-water-no @(WaterFilter == WaterFilterMode.SoloSinAgua ? "active" : "")"
+                    aria-pressed="@(WaterFilter == WaterFilterMode.SoloSinAgua)"
+                    aria-label="Mostrar solo predios sin agua"
+                    @onclick="() => SetWaterFilter(WaterFilterMode.SoloSinAgua)"
+                    title="Mostrar solo predios sin conexión de agua potable registrada">
+                <i class="bi bi-droplet-slash me-1 text-danger" aria-hidden="true"></i>Sin Agua
+            </button>
+        </div>
+
+        <div class="vr my-1 opacity-25" aria-hidden="true"></div>
+
+        <!-- Capas Activas Rápidas -->
+        <button type="button"
+                class="btn btn-sm layer-chip @(ShowLotes ? "active" : "")"
+                aria-pressed="@ShowLotes"
+                aria-label="Alternar visibilidad de Lotes y Predios"
+                @onclick="ToggleLotes"
+                title="Alternar capa de Lotes y Predios">
+            <i class="bi bi-house-door-fill me-1 text-primary" aria-hidden="true"></i>Lotes
+        </button>
+
+        <button type="button"
+                class="btn btn-sm layer-chip @(ShowCodigos ? "active" : "")"
+                aria-pressed="@ShowCodigos"
+                aria-label="Alternar visibilidad de puntos de acometidas"
+                @onclick="ToggleCodigos"
+                title="Alternar puntos de Códigos Fijos / Medidores">
+            <i class="bi bi-geo-alt-fill me-1 text-warning" aria-hidden="true"></i>Acometidas
+        </button>
+
+        <button type="button"
+                class="btn btn-sm layer-chip @(ShowManzanas ? "active" : "")"
+                aria-pressed="@ShowManzanas"
+                aria-label="Alternar visibilidad de Manzanas"
+                @onclick="ToggleManzanas"
+                title="Alternar polígonos de Manzanas">
+            <i class="bi bi-grid-3x3-gap-fill me-1 text-danger" aria-hidden="true"></i>Manzanas
+        </button>
+
+        <button type="button"
+                class="btn btn-sm layer-chip @(ShowVias ? "active" : "")"
+                aria-pressed="@ShowVias"
+                aria-label="Alternar visibilidad de Vías y Calles"
+                @onclick="ToggleVias"
+                title="Alternar red vial de calles">
+            <i class="bi bi-signpost-split-fill me-1 text-secondary" aria-hidden="true"></i>Vías
+        </button>
+
+        <div class="vr my-1 opacity-25 d-none d-sm-block" aria-hidden="true"></div>
+
+        <!-- Botón para ver Diagnóstico y Métricas Globales -->
+        <button type="button"
+                class="btn btn-sm btn-outline-primary rounded-pill px-3 ms-auto"
+                @onclick="OnToggleMetricsClick"
+                title="Ver diagnóstico urbano y estadísticas del sector">
+            <i class="bi bi-pie-chart-fill me-1"></i>
+            <span class="d-none d-md-inline">Diagnóstico del Sector</span>
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public WaterFilterMode WaterFilter { get; set; } = WaterFilterMode.Todos;
+    [Parameter] public EventCallback<WaterFilterMode> WaterFilterChanged { get; set; }
+
+    [Parameter] public bool ShowLotes { get; set; } = true;
+    [Parameter] public EventCallback<bool> ShowLotesChanged { get; set; }
+
+    [Parameter] public bool ShowCodigos { get; set; } = true;
+    [Parameter] public EventCallback<bool> ShowCodigosChanged { get; set; }
+
+    [Parameter] public bool ShowManzanas { get; set; } = true;
+    [Parameter] public EventCallback<bool> ShowManzanasChanged { get; set; }
+
+    [Parameter] public bool ShowVias { get; set; } = true;
+    [Parameter] public EventCallback<bool> ShowViasChanged { get; set; }
+
+    [Parameter] public EventCallback OnToggleMetrics { get; set; }
+
+    private async Task SetWaterFilter(WaterFilterMode mode)
+    {
+        WaterFilter = mode;
+        await WaterFilterChanged.InvokeAsync(mode);
+    }
+
+    private async Task ToggleLotes()
+    {
+        ShowLotes = !ShowLotes;
+        await ShowLotesChanged.InvokeAsync(ShowLotes);
+    }
+
+    private async Task ToggleCodigos()
+    {
+        ShowCodigos = !ShowCodigos;
+        await ShowCodigosChanged.InvokeAsync(ShowCodigos);
+    }
+
+    private async Task ToggleManzanas()
+    {
+        ShowManzanas = !ShowManzanas;
+        await ShowManzanasChanged.InvokeAsync(ShowManzanas);
+    }
+
+    private async Task ToggleVias()
+    {
+        ShowVias = !ShowVias;
+        await ShowViasChanged.InvokeAsync(ShowVias);
+    }
+
+    private async Task OnToggleMetricsClick()
+    {
+        await OnToggleMetrics.InvokeAsync();
+    }
+}

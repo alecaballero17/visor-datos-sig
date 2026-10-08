@@ -66,7 +66,7 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
                 var lotesData = await qL.OrderBy(l => l.IdLote).Take(take)
                     .Select(l => new {
                         l,
-                        TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote || (c.Geom != null && c.Geom.Intersects(l.Geom!)))
+                        TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote)
                     }).ToListAsync(ct);
                 
                 isTruncated = lotesData.Count >= take;
@@ -121,7 +121,7 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
             
             "lotes" => await context.Lotes.Where(l => l.IdLote == id && l.Geom != null)
                 .Select(l => new {
-                    l, TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote || (c.Geom != null && c.Geom.Intersects(l.Geom!)))
+                    l, TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote)
                 })
                 .Select(x => new {
                     type = "Feature", id, geometry = ToGeoJsonGeometry(x.l.Geom!), 
@@ -177,11 +177,9 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
 
     private async Task<double[]?> GetExtentAsync(string layer, CancellationToken ct)
     {
-        // En SQL Server el tipo geography no soporta geometry::EnvelopeAggregate directamente
-        // Para evitar llenar los logs de excepciones, retornamos null o podríamos calcularlo vía C#.
-        // La vista de todas formas funciona correctamente sin el Extent (hace fallback).
+        // Coordenadas del casco urbano de San Ignacio de Velasco [MinLon, MinLat, MaxLon, MaxLat]
         await Task.CompletedTask;
-        return null;
+        return [-60.985, -16.425, -60.935, -16.365];
     }
 
     private static bool TryParseBbox(string? bbox, out string wkt)

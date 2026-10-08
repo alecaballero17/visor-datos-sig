@@ -1,0 +1,484 @@
+@using System.Text.Json
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject IUserFriendlyErrorService ErrorService
+
+<div class="property-analysis-card anim-scale-in @(isMinimized ? "is-minimized" : "")"
+     role="region"
+     aria-label="Ficha de información del lugar">
+    <!-- Tirador táctil para móvil -->
+    <div class="card-mobile-drag-handle d-lg-none" @onclick="ToggleMinimize" title="Alternar tamaño de la ficha" aria-hidden="true"></div>
+
+    <!-- Barra superior de la tarjeta estilo Google Maps Place Header -->
+    <div class="card-top-bar d-flex justify-content-between align-items-start">
+        <div class="flex-grow-1 me-2">
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="gmaps-type-badge">@GetLayerDisplayName()</span>
+                @if (HasWaterService)
+                {
+                    <span class="gmaps-badge-success">● Conexión Activa</span>
+                }
+                else
+                {
+                    <span class="gmaps-badge-neutral">● Sin Conexión</span>
+                }
+            </div>
+            <h5 class="property-title mb-0">@GetDisplayTitle()</h5>
+            <div class="property-subtitle">@GetDisplaySubtitle()</div>
+        </div>
+
+        <div class="card-window-actions d-flex align-items-center gap-1">
+            <button type="button"
+                    class="btn-win-action"
+                    @onclick="ToggleMinimize"
+                    title="@(isMinimized ? "Expandir ficha" : "Minimizar ficha")"
+                    aria-label="@(isMinimized ? "Expandir ficha" : "Minimizar ficha")">
+                <i class="bi @(isMinimized ? "bi-chevron-up" : "bi-dash-lg")" aria-hidden="true"></i>
+            </button>
+            <button type="button"
+                    class="btn-win-action btn-win-close"
+                    @onclick="CloseCard"
+                    title="Cerrar ficha"
+                    aria-label="Cerrar ficha de información">
+                <i class="bi bi-x-lg" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+
+    @if (!isMinimized)
+    {
+        <!-- Barra de Acciones estilo Google Maps (Centrar, Dictamen PDF, Copiar) -->
+        <div class="gmaps-actions-row px-3 py-2 border-bottom d-flex align-items-center gap-2">
+            <button type="button" class="gmaps-action-pill primary" @onclick="CenterOnMap" title="Centrar este predio en el mapa">
+                <i class="bi bi-geo-alt-fill"></i>
+                <span>Centrar</span>
+            </button>
+            <button type="button" class="gmaps-action-pill" @onclick="RequestFormalReport" title="Generar dictamen técnico oficial en PDF">
+                <i class="bi bi-file-earmark-pdf"></i>
+                <span>Dictamen PDF</span>
+            </button>
+            <button type="button" class="gmaps-action-pill" @onclick="CopyReport" title="Copiar ficha técnica al portapapeles">
+                <i class="bi @(isCopied ? "bi-check2 text-success" : "bi-clipboard")"></i>
+                <span>@(isCopied ? "Copiado" : "Copiar")</span>
+            </button>
+        </div>
+
+        <!-- Pestañas planas estilo Google Material -->
+        <div class="gmaps-tabs px-3 pt-2">
+            <button type="button" class="gmaps-tab-btn @(activeTab == "resumen" ? "active" : "")" @onclick='() => activeTab = "resumen"'>
+                Diagnóstico
+            </button>
+            <button type="button" class="gmaps-tab-btn @(activeTab == "servicios" ? "active" : "")" @onclick='() => activeTab = "servicios"'>
+                Agua Potable
+            </button>
+            <button type="button" class="gmaps-tab-btn @(activeTab == "catastro" ? "active" : "")" @onclick='() => activeTab = "catastro"'>
+                Ficha Predial
+            </button>
+        </div>
+
+        <div class="card-main-content px-3 pb-3">
+            @if (isLoadingFicha)
+            {
+                <div class="py-4 text-center text-muted">
+                    <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                    <div class="small fw-semibold text-secondary">Consultando registro catastral...</div>
+                </div>
+            }
+            else
+            {
+                @if (activeTab == "resumen")
+                {
+                    <!-- TAB 1: DIAGNÓSTICO URBANO Y LISTA DE DETALLES TIPO GOOGLE MAPS -->
+                    <div class="tab-resumen-content anim-fade-in">
+                        <div class="gmaps-info-list mb-3">
+                            @if (!string.IsNullOrWhiteSpace(TitularName))
+                            {
+                                <div class="gmaps-info-item">
+                                    <div class="gmaps-info-icon"><i class="bi bi-person"></i></div>
+                                    <div class="gmaps-info-body">
+                                        <div class="gmaps-info-label">Titular / Abonado Registrado</div>
+                                        <div class="gmaps-info-value">@TitularName</div>
+                                    </div>
+                                </div>
+                            }
+
+                            <div class="gmaps-info-item">
+                                <div class="gmaps-info-icon"><i class="bi bi-geo-alt"></i></div>
+                                <div class="gmaps-info-body">
+                                    <div class="gmaps-info-label">Ubicación Catastral</div>
+                                    <div class="gmaps-info-value">Unidad Vecinal @(GetProp("UV") ?? "Central"), Manzana @(GetProp("MZA") ?? "-"), Lote @(GetProp("NroLote") ?? FeatureId.ToString())</div>
+                                </div>
+                            </div>
+
+                            <div class="gmaps-info-item">
+                                <div class="gmaps-info-icon"><i class="bi bi-droplet"></i></div>
+                                <div class="gmaps-info-body">
+                                    <div class="gmaps-info-label">Infraestructura de Agua Potable</div>
+                                    @if (HasWaterService)
+                                    {
+                                        <div class="gmaps-info-value" style="color:#137333;">Conexión registrada con acometida y código fijo activo</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="gmaps-info-value" style="color:#5f6368;">Sin suministro de agua registrado en el padrón</div>
+                                    }
+                                </div>
+                            </div>
+
+                            @if (CoordinatesAvailable)
+                            {
+                                <div class="gmaps-info-item">
+                                    <div class="gmaps-info-icon"><i class="bi bi-compass"></i></div>
+                                    <div class="gmaps-info-body d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <div class="gmaps-info-label">Coordenadas WGS84</div>
+                                            <div class="gmaps-info-value font-monospace" style="font-size:0.78rem;">@CoordinatesString</div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0" style="color:#1a73e8; font-size:0.75rem;" @onclick="CopyCoords">
+                                            Copiar
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+
+                        <!-- Métricas territoriales complementarias -->
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                    <span class="small d-block text-muted" style="font-size:0.7rem;">CLASIFICACIÓN</span>
+                                    <span class="fw-semibold" style="color:#202124; font-size:0.85rem;">Predio Urbano</span>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                    <span class="small d-block text-muted" style="font-size:0.7rem;">RED MATRIZ</span>
+                                    <span class="fw-semibold" style="color:#1a73e8; font-size:0.85rem;">Disponible en Vía</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else if (activeTab == "servicios")
+                {
+                    <!-- TAB 2: DETALLES DEL AGUA POTABLE -->
+                    <div class="tab-servicios-content anim-fade-in">
+                        @if (fichaAgua?.Registros != null && fichaAgua.Registros.Count > 0)
+                        {
+                            <div class="small text-secondary mb-2">
+                                Se detectaron @fichaAgua.Registros.Count conexión(es) vinculada(s) a este predio.
+                            </div>
+
+                            @foreach (var reg in fichaAgua.Registros)
+                            {
+                                <div class="p-3 rounded border mb-2" style="background:#ffffff; border-color:#dadce0 !important;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <div>
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">CÓDIGO DE SUMINISTRO</span>
+                                            <div class="fw-bold" style="color:#1a73e8; font-size:1rem;">
+                                                #@(reg.CodigoFijo ?? reg.IdCodigo)
+                                            </div>
+                                        </div>
+                                        <span class="px-2 py-0.5 rounded small fw-semibold" style="background:#e6f4ea; color:#137333; font-size:0.75rem;">
+                                            @reg.EstadoServicioTexto
+                                        </span>
+                                    </div>
+
+                                    <div class="small" style="color:#3c4043;">
+                                        <div class="mb-1"><span class="text-secondary">Titular:</span> <strong>@(reg.NombreRegistrado ?? "No especificado")</strong></div>
+                                        <div class="mb-1"><span class="text-secondary">Clave SIG:</span> <span class="font-monospace">@(reg.CodigoSig ?? "—")</span></div>
+                                        <div class="mb-1"><span class="text-secondary">Ubicación:</span> Lote @(reg.NumeroLote ?? "Principal"), Manzana @(reg.Manzana ?? "—")</div>
+                                        @if (reg.Latitud.HasValue && reg.Longitud.HasValue)
+                                        {
+                                            <div class="mb-2"><span class="text-secondary">GPS:</span> <span class="font-monospace" style="font-size:0.75rem;">@reg.Latitud.Value.ToString("F5"), @reg.Longitud.Value.ToString("F5")</span></div>
+                                        }
+                                    </div>
+
+                                    @if (LayerKey == "lotes")
+                                    {
+                                        <button type="button" class="btn btn-sm w-100 d-flex align-items-center justify-content-center gap-1 mt-2"
+                                                style="border: 1px solid #dadce0; background:#f8f9fa; color:#1a73e8; font-weight:500; font-size:0.8rem;"
+                                                @onclick="() => HighlightWaterPoint(reg.IdCodigo)">
+                                            <i class="bi bi-geo-alt"></i>
+                                            <span>Localizar acometida en el mapa</span>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center py-4" style="color:#5f6368;">
+                                <i class="bi bi-droplet-slash fs-2 d-block mb-2 text-muted"></i>
+                                <div class="fw-semibold">Sin registros de agua potable</div>
+                                <small class="text-muted">No se encontraron códigos fijos vinculados a la geometría de este predio.</small>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <!-- TAB 3: FICHA PREDIAL CATASTRAL -->
+                    <div class="tab-catastro-content anim-fade-in">
+                        <div class="border rounded overflow-hidden mb-3" style="border-color:#dadce0 !important;">
+                            <div class="px-3 py-2 border-bottom" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                <span class="small fw-bold text-uppercase" style="color:#5f6368; font-size:0.72rem; letter-spacing:0.3px;">Identificación Cartográfica</span>
+                            </div>
+                            <table class="table table-sm mb-0" style="font-size:0.8rem;">
+                                <tbody>
+                                    <tr style="border-bottom:1px solid #f1f3f4;">
+                                        <td class="text-secondary ps-3" style="width:45%;">Capa Cartográfica</td>
+                                        <td class="fw-semibold text-dark pe-3">@GetLayerDisplayName()</td>
+                                    </tr>
+                                    <tr style="border-bottom:1px solid #f1f3f4;">
+                                        <td class="text-secondary ps-3">Identificador Único</td>
+                                        <td class="font-monospace text-dark pe-3">Ref-@FeatureId</td>
+                                    </tr>
+                                    @foreach (var kvp in FriendlyProperties)
+                                    {
+                                        <tr style="border-bottom:1px solid #f1f3f4;">
+                                            <td class="text-secondary ps-3">@kvp.Key</td>
+                                            <td class="fw-semibold text-dark pe-3">@kvp.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string LayerKey { get; set; } = "lotes";
+    [Parameter] public int FeatureId { get; set; }
+    [Parameter] public Dictionary<string, object?> Properties { get; set; } = new();
+    [Parameter] public double[]? Bbox { get; set; }
+
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnCenterRequest { get; set; }
+    [Parameter] public EventCallback<int> OnLocateWaterCode { get; set; }
+    [Parameter] public EventCallback<int> OnRequestFormalReport { get; set; }
+
+    private bool isMinimized = false;
+    private bool isLoadingFicha = false;
+    private bool isCopied = false;
+    private string activeTab = "resumen";
+    private FichaAguaResponse? fichaAgua;
+
+    private bool HasWaterService =>
+        (fichaAgua != null && fichaAgua.TieneAgua) ||
+        (Properties.TryGetValue("TieneAgua", out var val) && val?.ToString()?.ToLower() == "true");
+
+    private string? TitularName =>
+        fichaAgua?.Registros?.FirstOrDefault()?.NombreRegistrado ??
+        GetProp("Nombre");
+
+    private bool CoordinatesAvailable =>
+        (Properties.ContainsKey("AguaLatitud") && Properties.ContainsKey("AguaLongitud")) ||
+        (Properties.ContainsKey("Latitud") && Properties.ContainsKey("Longitud"));
+
+    private string CoordinatesString
+    {
+        get
+        {
+            var lat = GetProp("AguaLatitud") ?? GetProp("Latitud");
+            var lon = GetProp("AguaLongitud") ?? GetProp("Longitud");
+            if (lat != null && lon != null) return $"Lat: {lat}, Long: {lon}";
+            return "Localizado en el mapa";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadWaterDetails();
+    }
+
+    private async Task LoadWaterDetails()
+    {
+        if (FeatureId <= 0) return;
+        if (LayerKey != "lotes" && LayerKey != "codigosfijos")
+        {
+            fichaAgua = null;
+            return;
+        }
+
+        isLoadingFicha = true;
+        try
+        {
+            var endpoint = LayerKey == "lotes"
+                ? $"api/agua-potable/lotes/{FeatureId}"
+                : $"api/agua-potable/codigos/{FeatureId}";
+
+            fichaAgua = await Http.GetFromJsonAsync<FichaAguaResponse>(endpoint);
+        }
+        catch (Exception ex)
+        {
+            fichaAgua = null;
+            ErrorService.FromException(ex, "ficha técnica del predio", () => LoadWaterDetails());
+        }
+        finally
+        {
+            isLoadingFicha = false;
+            StateHasChanged();
+        }
+    }
+
+    private string? GetProp(string key)
+    {
+        if (Properties == null) return null;
+        foreach (var kvp in Properties)
+        {
+            if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
+                return kvp.Value?.ToString();
+        }
+        return null;
+    }
+
+    private string GetDisplayTitle()
+    {
+        if (LayerKey == "lotes")
+        {
+            var nro = GetProp("NroLote") ?? FeatureId.ToString();
+            return $"Lote Residencial N° {nro}";
+        }
+        if (LayerKey == "codigosfijos")
+        {
+            var cod = GetProp("CodFijo") ?? FeatureId.ToString();
+            return $"Toma de Agua #{cod}";
+        }
+        if (LayerKey == "manzanas")
+        {
+            var mza = GetProp("MZA") ?? FeatureId.ToString();
+            var uv = GetProp("UV") ?? "-";
+            return $"Manzana {mza} · UV {uv}";
+        }
+        if (LayerKey == "vias")
+        {
+            return GetProp("Nombre") ?? "Vía Pública";
+        }
+        return $"Entidad #{FeatureId}";
+    }
+
+    private string GetDisplaySubtitle()
+    {
+        var uv = GetProp("UV") ?? GetProp("Uv");
+        var mza = GetProp("MZA") ?? GetProp("Manzana");
+        if (uv != null || mza != null)
+        {
+            return $"Zona: UV {uv ?? "-"} · MZA {mza ?? "-"}";
+        }
+        if (LayerKey == "vias")
+        {
+            var tipo = GetProp("TipoVia");
+            return $"Clasificación: {tipo ?? "Calle Urbana"}";
+        }
+        return "Registro Catastral Verificado";
+    }
+
+    private string GetLayerDisplayName() => LayerKey switch
+    {
+        "lotes" => "Lotes y Predios",
+        "codigosfijos" => "Conexión de Agua",
+        "manzanas" => "Manzana Urbana",
+        "vias" => "Red Vial",
+        _ => LayerKey
+    };
+
+    private Dictionary<string, string> FriendlyProperties
+    {
+        get
+        {
+            var dict = new Dictionary<string, string>();
+            if (Properties == null) return dict;
+
+            foreach (var (k, v) in Properties)
+            {
+                if (v == null) continue;
+                var strVal = v.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(strVal)) continue;
+
+                switch (k.ToLowerInvariant())
+                {
+                    case "nrolote":
+                        dict["Número de Lote"] = strVal;
+                        break;
+                    case "uv":
+                        dict["Unidad Vecinal (UV)"] = strVal;
+                        break;
+                    case "mza":
+                        dict["Manzana (MZA)"] = strVal;
+                        break;
+                    case "uv_mza":
+                        dict["Sector Urbano"] = strVal;
+                        break;
+                    case "codfijo":
+                        dict["Código de Conexión"] = strVal;
+                        break;
+                    case "codf_sig":
+                        dict["Clave SIG Municipal"] = strVal;
+                        break;
+                    case "nombre":
+                        dict["Titular / Denominación"] = strVal;
+                        break;
+                    case "tipovia":
+                        dict["Tipo de Calzada"] = strVal;
+                        break;
+                    case "tieneagua":
+                        dict["Disponibilidad de Agua"] = strVal.ToLower() == "true" ? "Sí, cuenta con servicio" : "No registra servicio";
+                        break;
+                    case "idmanzana":
+                        dict["ID de Manzana"] = strVal;
+                        break;
+                    case "idlote":
+                    case "idcodigo":
+                    case "idvia":
+                    case "agualatitud":
+                    case "agualongitud":
+                    case "latitud":
+                    case "longitud":
+                    case "idorigen":
+                    case "objectid":
+                    case "osmid":
+                        break;
+                    default:
+                        dict[k] = strVal;
+                        break;
+                }
+            }
+            return dict;
+        }
+    }
+
+    private void ToggleMinimize() => isMinimized = !isMinimized;
+    private async Task CloseCard() => await OnClose.InvokeAsync();
+    private async Task CenterOnMap() => await OnCenterRequest.InvokeAsync();
+    private async Task RequestFormalReport() => await OnRequestFormalReport.InvokeAsync(FeatureId);
+
+    private async Task HighlightWaterPoint(int codigoId)
+    {
+        await OnLocateWaterCode.InvokeAsync(codigoId);
+    }
+
+    private async Task CopyReport()
+    {
+        isCopied = true;
+        var text = $"FICHA PREDIAL - {GetDisplayTitle()}\n" +
+                   $"{GetDisplaySubtitle()}\n" +
+                   $"Servicio de Agua: {(HasWaterService ? "Activo" : "Sin conexión")}\n" +
+                   $"Titular: {TitularName ?? "No registrado"}\n" +
+                   $"Coordenadas: {CoordinatesString}";
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        await Task.Delay(2000);
+        isCopied = false;
+        StateHasChanged();
+    }
+
+    private async Task CopyCoords()
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", CoordinatesString);
+    }
+}

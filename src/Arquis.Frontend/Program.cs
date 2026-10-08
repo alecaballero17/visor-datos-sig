@@ -7,6 +7,7 @@ builder.Services.AddScoped(sp => {
     };
     return new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5080/") };
 });
+builder.Services.AddScoped<Arquis.Frontend.Services.IUserFriendlyErrorService, Arquis.Frontend.Services.UserFriendlyErrorService>();
 var app = builder.Build();
 if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/Error", createScopeForErrors: true);
 app.UseStaticFiles();

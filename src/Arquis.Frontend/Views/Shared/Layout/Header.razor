@@ -1,22 +1,39 @@
-<header class="app-header">
-    <ButtonPrimary CssClass="btn-sm btn-outline-light d-md-none" aria-label="Abrir panel" OnClick="ToggleSidebar">
-        ☰
-    </ButtonPrimary>
-    <div><strong>Arquis</strong><span class="d-none d-sm-inline"> · VisorDatosSIG</span></div>
+<header class="app-header bg-white border-bottom shadow-none d-flex align-items-center justify-content-between px-3" style="border-color:#dadce0 !important; height: 56px;">
+    <div class="d-flex align-items-center gap-2">
+        <div class="brand-mark-gmaps" style="width:32px; height:32px; border-radius:8px; background:#1a73e8; color:#ffffff; display:grid; place-items:center; font-weight:700; font-size:1.1rem;">A</div>
+        <div class="fw-semibold fs-6" style="color:#202124;">Arquis <span class="fw-normal d-none d-sm-inline" style="color:#5f6368;">· Visor SIG</span></div>
+    </div>
     
     <div class="ms-auto d-flex align-items-center gap-2">
-        <span class="small">@UserName</span>
-        <ButtonLink CssClass="btn-sm btn-light text-dark" OnClick="OnLogout">Salir</ButtonLink>
+        <button type="button" class="btn btn-sm d-flex align-items-center gap-1"
+                style="border: 1px solid #dadce0; background:#ffffff; color:#3c4043; border-radius:4px; font-weight:500;"
+                @onclick="OpenReports"
+                title="Generar Dictámenes Técnicos Oficiales en PDF">
+            <i class="bi bi-file-earmark-pdf" style="color:#1a73e8;"></i>
+            <span class="d-none d-sm-inline">Dictamen PDF</span>
+        </button>
+        <a href="/bitacora" class="btn btn-sm d-flex align-items-center gap-1 text-decoration-none"
+           style="border: 1px solid #dadce0; background:#ffffff; color:#3c4043; border-radius:4px; font-weight:500;"
+           title="Apartado de Trazabilidad y Bitácora Oficial">
+            <i class="bi bi-journal-text" style="color:#5f6368;"></i>
+            <span class="d-none d-md-inline">Bitácora</span>
+        </a>
+        <span class="small d-none d-md-inline px-2 py-1 rounded" style="background:#f1f3f4; color:#3c4043; font-weight:500; font-size:0.78rem;">
+            <i class="bi bi-person-circle me-1" style="color:#5f6368;"></i>@UserName
+        </span>
+        <button type="button" class="btn btn-sm" style="border: 1px solid #dadce0; background:#ffffff; color:#c5221f; border-radius:4px; font-weight:500;" @onclick="OnLogout">
+            Salir
+        </button>
     </div>
 </header>
 
 @code {
     [Parameter] public string UserName { get; set; } = "Usuario";
     [Parameter] public EventCallback OnLogout { get; set; }
-    [Parameter] public EventCallback OnToggleSidebar { get; set; }
+    [Parameter] public EventCallback OnOpenReports { get; set; }
 
-    private async Task ToggleSidebar()
+    private async Task OpenReports()
     {
-        await OnToggleSidebar.InvokeAsync();
+        await OnOpenReports.InvokeAsync();
     }
 }

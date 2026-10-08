@@ -1,0 +1,462 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject IUserFriendlyErrorService ErrorService
+
+@if (IsOpen)
+{
+    <div class="report-modal-backdrop anim-fade-in"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="report-modal-title"
+         tabindex="-1"
+         @onkeydown="HandleKeyDown"
+         @onclick="CloseModal">
+        <div class="report-modal-card shadow-lg" style="border-radius: 8px; border: 1px solid #dadce0;" @onclick:stopPropagation="true">
+            <!-- Barra superior del modal estilo Google Docs -->
+            <div class="modal-card-header d-flex justify-content-between align-items-center px-4 py-2 border-bottom bg-white no-print" style="border-color:#dadce0 !important;">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="d-inline-flex align-items-center justify-content-center rounded" style="width:28px; height:28px; background:#e8f0fe; color:#1a73e8;">
+                        <i class="bi bi-file-earmark-text"></i>
+                    </span>
+                    <div>
+                        <div class="fw-bold mb-0" id="report-modal-title" style="color:#202124; font-size: 0.95rem;">Informe Técnico y Dictamen</div>
+                        <div class="small" style="color:#5f6368; font-size: 0.75rem;">Ficha catastral oficial generada desde el sistema SIG</div>
+                    </div>
+                </div>
+
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm d-flex align-items-center gap-1" style="background:#1a73e8; color:#ffffff; border-radius:4px; font-weight:500;"
+                            @onclick="DownloadServerPdf"
+                            title="Descargar documento PDF oficial">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                        <span>Descargar PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" style="border-color:#dadce0; color:#3c4043; border-radius:4px;" @onclick="PrintReport" title="Imprimir">
+                        <i class="bi bi-printer me-1"></i>Imprimir
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" style="border-color:#dadce0; color:#3c4043; border-radius:4px;" @onclick="CopyReportText" title="Copiar texto">
+                        <i class="bi @(isCopied ? "bi-check2 text-success" : "bi-clipboard") me-1"></i>
+                        @(isCopied ? "Copiado" : "Copiar")
+                    </button>
+                    <a href="/bitacora" class="btn btn-sm btn-outline-secondary text-decoration-none" style="border-color:#dadce0; color:#3c4043; border-radius:4px;" title="Ver bitácora de auditoría">
+                        <span>Bitácora</span>
+                    </a>
+                    <button type="button" class="btn-close ms-1" @onclick="CloseModal" aria-label="Cerrar modal"></button>
+                </div>
+            </div>
+
+            <!-- Contenido del modal -->
+            <div class="modal-card-body p-3 p-md-4" style="background:#f8f9fa;">
+                @if (isLoading)
+                {
+                    <div class="py-5 text-center text-muted">
+                        <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                        <div class="small fw-semibold" style="color:#5f6368">Generando informe técnico...</div>
+                    </div>
+                }
+                else
+                {
+                    <!-- HOJA FORMAL DEL REPORTE ESTILO GOOGLE DOCS -->
+                    <div class="formal-report-sheet p-4 bg-white rounded border" style="border-color:#dadce0 !important; max-width:820px; margin:0 auto; color:#202124;">
+                        <!-- Membrete Institucional -->
+                        <div class="pb-3 mb-3 border-bottom d-flex justify-content-between align-items-start" style="border-color:#dadce0 !important;">
+                            <div>
+                                <span class="small text-uppercase fw-semibold d-block mb-1" style="color:#5f6368; font-size:0.75rem; letter-spacing:0.3px;">
+                                    DIRECCIÓN DE CATASTRO Y PLANIFICACIÓN URBANA
+                                </span>
+                                <h5 class="fw-bold mb-0 text-uppercase" style="color:#202124;">
+                                    @(reportePredial?.Titulo ?? reporteSector?.Titulo ?? "INFORME TÉCNICO CATASTRAL")
+                                </h5>
+                                <span class="small" style="color:#1a73e8;">
+                                    @(reportePredial?.Subtitulo ?? "Diagnóstico Técnico de Infraestructura y Cobertura")
+                                </span>
+                            </div>
+                            <div class="text-end">
+                                <span class="px-2 py-0.5 rounded border small font-monospace d-inline-block mb-1" style="background:#f8f9fa; border-color:#dadce0 !important; color:#3c4043; font-size:0.75rem;">
+                                    @(reportePredial?.CodigoReporte ?? reporteSector?.CodigoReporte ?? "RPT-SIG")
+                                </span>
+                                <div class="small text-muted" style="font-size:0.72rem;">
+                                    Emisión: @(DateTime.Now.ToString("dd/MM/yyyy HH:mm"))
+                                </div>
+                                <div class="small text-muted" style="font-size:0.72rem;">
+                                    Operador: @(reportePredial?.UsuarioEmisor ?? reporteSector?.UsuarioEmisor ?? "Usuario SIG")
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (reportePredial != null)
+                        {
+                            <!-- REPORTE DE UN PREDIO / CASA -->
+                            <div class="mb-4">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    1. Identificación y Localización del Inmueble
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem">N° DE LOTE</span>
+                                            <span class="fw-bold fs-6" style="color:#202124">Lote @reportePredial.NumeroLote</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem">MANZANA</span>
+                                            <span class="fw-bold fs-6" style="color:#202124">MZA @reportePredial.Manzana</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem">UNIDAD VECINAL</span>
+                                            <span class="fw-bold fs-6" style="color:#202124">UV @reportePredial.UnidadVecinal</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem">CLASIFICACIÓN</span>
+                                            <span class="fw-bold fs-6" style="color:#1a73e8">@reportePredial.ClasificacionUrbana</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="p-2 border rounded small d-flex justify-content-between" style="background:#f8f9fa; border-color:#dadce0 !important; color:#3c4043;">
+                                    <span><strong>Coordenadas GPS:</strong> @reportePredial.CoordenadasDisplay</span>
+                                    <span><strong>Sector:</strong> @reportePredial.Sector</span>
+                                </div>
+                            </div>
+
+                            <!-- Diagnóstico de Suministro de Agua Potable -->
+                            <div class="mb-4">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    2. Suministro de Agua Potable
+                                </div>
+                                <div class="p-3 rounded border mb-2" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <div class="fw-bold" style="color:#202124; font-size:0.9rem;">
+                                            @reportePredial.EstadoTexto
+                                        </div>
+                                        <span class="px-2 py-0.5 rounded small fw-semibold" style="background:@(reportePredial.TieneAgua ? "#e6f4ea" : "#f1f3f4"); color:@(reportePredial.TieneAgua ? "#137333" : "#5f6368"); font-size:0.75rem;">
+                                            @reportePredial.CondicionOperativa
+                                        </span>
+                                    </div>
+                                    <div class="row g-2 small" style="color:#3c4043;">
+                                        <div class="col-sm-6">
+                                            <span class="text-secondary">Titular:</span> <strong>@(reportePredial.Titular ?? "No asignado")</strong>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <span class="text-secondary">Código Suministro:</span> <strong>#@(reportePredial.CodigoSuministro ?? "—")</strong>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <span class="text-secondary">Clave SIG:</span> <strong>@reportePredial.CodigoSig</strong>
+                                        </div>
+                                        <div class="col-sm-6">
+                                            <span class="text-secondary">Ubicación de Toma:</span> <strong>@reportePredial.UbicacionToma</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Análisis Territorial y Contexto -->
+                            <div class="mb-4">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    3. Contexto Territorial de la Manzana
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-sm-4 text-center">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">Total Lotes en Manzana</span>
+                                            <span class="fs-5 fw-bold" style="color:#202124;">@reportePredial.TotalLotesManzana</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-4 text-center">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">Lotes con Servicio</span>
+                                            <span class="fs-5 fw-bold" style="color:#137333;">@reportePredial.LotesConAguaManzana</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-4 text-center">
+                                        <div class="p-2 border rounded" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">Cobertura de Manzana</span>
+                                            <span class="fs-5 fw-bold" style="color:#1a73e8;">@reportePredial.PorcentajeCoberturaManzana%</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="small" style="color:#5f6368;">
+                                    <strong>Factibilidad Técnica:</strong> @reportePredial.FactibilidadHidraulica
+                                </div>
+                            </div>
+
+                            <!-- Dictamen y Recomendaciones -->
+                            <div class="mb-2">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    4. Dictamen Técnico y Recomendaciones
+                                </div>
+                                <div class="p-3 border rounded small mb-2" style="background:#f8f9fa; border-color:#dadce0 !important; color:#3c4043; line-height: 1.5;">
+                                    @reportePredial.ResumenEjecutivo
+                                </div>
+
+                                <div class="small fw-semibold mb-1" style="color:#202124;">Recomendaciones Operativas:</div>
+                                <ul class="small ps-3 mb-0" style="color:#5f6368;">
+                                    @foreach (var rec in reportePredial.Recomendaciones)
+                                    {
+                                        <li class="mb-1">@rec</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                        else if (reporteSector != null)
+                        {
+                            <!-- REPORTE DE UN SECTOR / MANZANA -->
+                            <div class="mb-4">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    1. Delimitación del Sector
+                                </div>
+                                <div class="row g-2 mb-2">
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded text-center" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">UNIDAD VECINAL</span>
+                                            <span class="fw-bold fs-6" style="color:#202124;">UV @reporteSector.UnidadVecinal</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded text-center" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">COBERTURA</span>
+                                            <span class="fw-bold fs-6" style="color:#1a73e8;">@reporteSector.PorcentajeCobertura%</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-3 col-6">
+                                        <div class="p-2 border rounded text-center" style="background:#f8f9fa; border-color:#dadce0 !important;">
+                                            <span class="small text-muted d-block" style="font-size:0.7rem;">CONSOLIDACIÓN</span>
+                                            <span class="fw-bold fs-6" style="color:#137333;">@reporteSector.IndiceConsolidacion</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="p-3 border rounded small mb-3" style="background:#f8f9fa; border-color:#dadce0 !important; color:#3c4043; line-height:1.5;">
+                                    <strong class="d-block mb-1" style="color:#202124;">Diagnóstico Situacional del Sector:</strong>
+                                    @reporteSector.DiagnosticoSituacional
+                                </div>
+                            </div>
+
+                            <!-- Tabla de Lotes del Sector estilo Google Table -->
+                            <div class="mb-4">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    2. Inventario de Predios (@reporteSector.TotalPredios lotes)
+                                </div>
+                                <div class="table-responsive border rounded" style="max-height: 240px; overflow-y: auto; border-color:#dadce0 !important;">
+                                    <table class="table table-sm table-hover mb-0" style="font-size:0.8rem;">
+                                        <thead class="sticky-top" style="background:#f8f9fa; border-bottom:1px solid #dadce0;">
+                                            <tr style="color:#5f6368; font-size:0.72rem; text-transform:uppercase;">
+                                                <th class="ps-3">N° Lote</th>
+                                                <th>Estado Suministro</th>
+                                                <th>Titular</th>
+                                                <th>Código Cuenta</th>
+                                                <th class="pe-3">Condición</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var predio in reporteSector.Predios)
+                                            {
+                                                <tr style="border-bottom: 1px solid #f1f3f4;">
+                                                    <td class="ps-3 fw-semibold" style="color:#202124;">Lote @predio.NumeroLote</td>
+                                                    <td>
+                                                        <span class="px-2 py-0.5 rounded small fw-semibold" style="background:@(predio.TieneAgua ? "#e6f4ea" : "#f1f3f4"); color:@(predio.TieneAgua ? "#137333" : "#5f6368"); font-size:0.75rem;">
+                                                            @predio.EstadoServicio
+                                                        </span>
+                                                    </td>
+                                                    <td style="color:#3c4043;">@(predio.Titular ?? "—")</td>
+                                                    <td class="font-monospace small" style="color:#5f6368;">#(predio.CodigoSuministro ?? "—")</td>
+                                                    <td class="pe-3" style="color:#5f6368;">@predio.Condicion</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Recomendaciones -->
+                            <div class="mb-3">
+                                <div class="fw-bold mb-2 pb-1 border-bottom small text-uppercase" style="color:#5f6368; border-color:#dadce0 !important; font-size:0.75rem; letter-spacing:0.3px;">
+                                    3. Recomendaciones Técnicas para el Sector
+                                </div>
+                                <ul class="small ps-3 mb-0" style="color:#5f6368;">
+                                    @foreach (var rec in reporteSector.RecomendacionesTecnicas)
+                                    {
+                                        <li class="mb-1">@rec</li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+
+                        <!-- Pie del Reporte con firmas institucionales -->
+                        <div class="pt-3 mt-4 border-top" style="border-color:#dadce0 !important;">
+                            <div class="row text-center text-muted small">
+                                <div class="col-6">
+                                    <div class="signature-line mx-auto mb-1" style="width: 140px; border-bottom: 1px solid #dadce0; height: 30px;"></div>
+                                    <span style="font-size:0.75rem; color:#5f6368;">Responsable de Catastro</span>
+                                </div>
+                                <div class="col-6">
+                                    <div class="signature-line mx-auto mb-1" style="width: 140px; border-bottom: 1px solid #dadce0; height: 30px;"></div>
+                                    <span style="font-size:0.75rem; color:#5f6368;">Dirección de Planificación</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-card-footer px-4 py-2.5 border-top d-flex justify-content-between align-items-center bg-white no-print" style="border-color:#dadce0 !important;">
+                <a href="/bitacora" class="btn btn-sm btn-outline-secondary" style="border-color:#dadce0; color:#3c4043; border-radius:4px;">
+                    Ver Bitácora de Auditoría
+                </a>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm d-flex align-items-center gap-1" style="background:#1a73e8; color:#ffffff; border-radius:4px; font-weight:500;" @onclick="DownloadServerPdf">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                        <span>Descargar PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" style="border-color:#dadce0; color:#3c4043; border-radius:4px;" @onclick="CloseModal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; } = false;
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    [Parameter] public int? SelectedLoteId { get; set; }
+    [Parameter] public string? SelectedUV { get; set; }
+    [Parameter] public string? SelectedMZA { get; set; }
+    [Parameter] public string CurrentUserName { get; set; } = "Usuario SIG";
+
+    private bool isLoading = false;
+    private bool isCopied = false;
+
+    private ReportePredialModel? reportePredial;
+    private ReporteSectorModel? reporteSector;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen)
+        {
+            await GenerateReport();
+        }
+    }
+
+    private async Task GenerateReport()
+    {
+        isLoading = true;
+        reportePredial = null;
+        reporteSector = null;
+
+        try
+        {
+            if (SelectedLoteId.HasValue && SelectedLoteId.Value > 0)
+            {
+                var url = $"api/reportes/predio/{SelectedLoteId.Value}?usuario={Uri.EscapeDataString(CurrentUserName)}";
+                reportePredial = await Http.GetFromJsonAsync<ReportePredialModel>(url);
+            }
+            else
+            {
+                var uvVal = SelectedUV ?? "";
+                var mzaVal = SelectedMZA ?? "";
+                var url = $"api/reportes/sector?uv={Uri.EscapeDataString(uvVal)}&mza={Uri.EscapeDataString(mzaVal)}&usuario={Uri.EscapeDataString(CurrentUserName)}";
+                try
+                {
+                    reporteSector = await Http.GetFromJsonAsync<ReporteSectorModel>(url);
+                }
+                catch
+                {
+                    // Fallback para traer el primer sector disponible
+                    var fallbackUrl = $"api/reportes/sector?usuario={Uri.EscapeDataString(CurrentUserName)}";
+                    reporteSector = await Http.GetFromJsonAsync<ReporteSectorModel>(fallbackUrl);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorService.FromException(ex, "generación de informe técnico oficial", () => GenerateReport());
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadServerPdf()
+    {
+        try
+        {
+            string pdfUrl;
+            if (SelectedLoteId.HasValue && SelectedLoteId.Value > 0)
+            {
+                pdfUrl = $"api/reportes/predio/{SelectedLoteId.Value}/pdf?usuario={Uri.EscapeDataString(CurrentUserName)}";
+            }
+            else
+            {
+                var uvVal = SelectedUV ?? "";
+                var mzaVal = SelectedMZA ?? "";
+                pdfUrl = $"api/reportes/sector/pdf?uv={Uri.EscapeDataString(uvVal)}&mza={Uri.EscapeDataString(mzaVal)}&usuario={Uri.EscapeDataString(CurrentUserName)}";
+            }
+
+            var fullUrl = Http.BaseAddress != null
+                ? new Uri(Http.BaseAddress, pdfUrl).ToString()
+                : pdfUrl;
+
+            await JS.InvokeVoidAsync("open", fullUrl, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ErrorService.FromException(ex, "descarga del dictamen técnico oficial en PDF", () => DownloadServerPdf());
+        }
+    }
+
+    private async Task PrintReport()
+    {
+        await JS.InvokeVoidAsync("window.print");
+    }
+
+    private async Task CopyReportText()
+    {
+        isCopied = true;
+        string text = "";
+
+        if (reportePredial != null)
+        {
+            text = $"INFORME TÉCNICO PREDIAL - {reportePredial.CodigoReporte}\n" +
+                   $"Lote N° {reportePredial.NumeroLote} · MZA {reportePredial.Manzana} · UV {reportePredial.UnidadVecinal}\n" +
+                   $"Servicio de Agua: {reportePredial.EstadoTexto}\n" +
+                   $"Titular: {reportePredial.Titular}\n" +
+                   $"Código Suministro: {reportePredial.CodigoSuministro}\n" +
+                   $"Cobertura en Manzana: {reportePredial.PorcentajeCoberturaManzana}%\n" +
+                   $"Dictamen: {reportePredial.ResumenEjecutivo}";
+        }
+        else if (reporteSector != null)
+        {
+            text = $"DIAGNÓSTICO DEL SECTOR - UV {reporteSector.UnidadVecinal} / MZA {reporteSector.Manzana}\n" +
+                   $"Total Predios: {reporteSector.TotalPredios}\n" +
+                   $"Con Suministro: {reporteSector.PrediosConServicio} ({reporteSector.PorcentajeCobertura}%)\n" +
+                   $"Sin Suministro: {reporteSector.PrediosSinServicio}\n" +
+                   $"Diagnóstico: {reporteSector.DiagnosticoSituacional}";
+        }
+
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        await Task.Delay(2000);
+        isCopied = false;
+        StateHasChanged();
+    }
+
+    private void HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            _ = CloseModal();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}
