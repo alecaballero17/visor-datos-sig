@@ -97,7 +97,23 @@ sequenceDiagram
 
 ## Inicio rápido
 
-### Requisitos
+### Zorin OS / Linux
+
+Con Docker iniciado, el SDK .NET 10 y Python 3:
+
+```bash
+./levantar-proyecto.sh
+```
+
+Para apagar el visor, la API y SQL Server conservando los datos:
+
+```bash
+./detener-proyecto.sh
+```
+
+Consulte [la guía para Linux](COMO_EJECUTAR_LINUX.md). El migrador WPF se utiliza únicamente en Windows; el arranque Linux importa las capas con Python y SQL Server en Docker.
+
+### Requisitos para Windows
 
 - Windows 10/11.
 - [SDK de .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0).
