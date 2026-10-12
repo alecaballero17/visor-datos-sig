@@ -5,7 +5,9 @@ builder.Services.AddScoped(sp => {
         CookieContainer = new System.Net.CookieContainer(),
         UseCookies = true 
     };
-    return new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5080/") };
+    var backendUrl = builder.Configuration["BackendBaseUrl"] ?? "http://localhost:5080";
+    if (!backendUrl.EndsWith("/")) backendUrl += "/";
+    return new HttpClient(handler) { BaseAddress = new Uri(backendUrl) };
 });
 builder.Services.AddScoped<Arquis.Frontend.Services.IUserFriendlyErrorService, Arquis.Frontend.Services.UserFriendlyErrorService>();
 var app = builder.Build();

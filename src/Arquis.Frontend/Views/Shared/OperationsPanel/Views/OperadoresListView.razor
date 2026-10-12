@@ -1,0 +1,292 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div class="drawer-view-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h6 class="fw-bold mb-0 text-dark">Operadores de Campo en Tiempo Real</h6>
+            <small class="text-muted">Personal conectado desde la aplicación móvil</small>
+        </div>
+        <div class="d-flex align-items-center gap-1">
+            <span class="badge @(operariosActivos.Count > 0 ? "bg-success" : "bg-secondary")" style="font-size:0.7rem;">
+                <span class="spinner-grow spinner-grow-sm me-1" style="width:6px; height:6px;" role="status" aria-hidden="true"></span>
+                @operariosActivos.Count en vivo
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" @onclick="CargarOperarios" title="Actualizar ahora">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Buscador Reactivo de Operarios -->
+    <div class="input-group input-group-sm mb-3">
+        <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+        <input type="text" class="form-control border-start-0" placeholder="Buscar por nombre, usuario o rol..." @bind="filtroTexto" @bind:event="oninput" />
+        @if (!string.IsNullOrEmpty(filtroTexto))
+        {
+            <button class="btn btn-outline-secondary" type="button" @onclick="() => filtroTexto = string.Empty">
+                <i class="bi bi-x"></i>
+            </button>
+        }
+    </div>
+
+    <!-- Métricas en Vivo de Cuadrilla -->
+    <div class="row g-2 mb-3">
+        <div class="col-4">
+            <div class="p-2 border rounded bg-white text-center shadow-sm">
+                <span class="small text-muted d-block" style="font-size:0.68rem;">Total Registrados</span>
+                <strong class="fs-6 text-dark">@operarios.Count</strong>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="p-2 border rounded bg-white text-center shadow-sm">
+                <span class="small text-muted d-block" style="font-size:0.68rem;">En Línea Ahora</span>
+                <strong class="fs-6 text-success">@operariosActivos.Count</strong>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="p-2 border rounded bg-white text-center shadow-sm">
+                <span class="small text-muted d-block" style="font-size:0.68rem;">Posiciones Hoy</span>
+                <strong class="fs-6 text-primary">@operarios.Sum(x => x.TotalPuntos)</strong>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading && operarios.Count == 0)
+    {
+        <div class="py-5 text-center text-muted">
+            <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+            <div class="small fw-semibold">Consultando técnicos en campo...</div>
+        </div>
+    }
+    else if (OperariosFiltrados.Count == 0)
+    {
+        <div class="text-center py-5 border rounded bg-white shadow-sm">
+            <i class="bi bi-person-x text-muted fs-1 mb-2 d-block"></i>
+            <div class="fw-semibold text-dark">No se encontraron operadores</div>
+            <small class="text-muted">Ningún técnico coincide con el filtro o aún no se han registrado operarios.</small>
+        </div>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2">
+            @foreach (var op in OperariosFiltrados)
+            {
+                var activo = operariosActivos.FirstOrDefault(x => string.Equals(x.OperarioId, op.OperarioId, StringComparison.OrdinalIgnoreCase));
+                var isOnline = op.EnLinea || activo != null;
+                var lat = activo?.Latitud ?? op.Latitud;
+                var lng = activo?.Longitud ?? op.Longitud;
+                var vel = activo?.Velocidad ?? op.Velocidad;
+                var rumbo = activo?.Rumbo ?? op.Rumbo;
+                var bat = activo?.Bateria ?? op.Bateria;
+
+                <div class="p-3 border rounded bg-white shadow-sm" style="border-color:#dadce0 !important;">
+                    <!-- Cabecera del Operador -->
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="position-relative">
+                                <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
+                                     style="width:38px; height:38px; background:#1a73e8; font-size:0.9rem;">
+                                    @(op.NombreOperario.Length > 0 ? op.NombreOperario.Substring(0, 1).ToUpper() : "O")
+                                </div>
+                                <span class="position-absolute bottom-0 end-0 rounded-circle border border-white"
+                                      style="background:@(isOnline ? "#22c55e" : "#94a3b8"); width:12px; height:12px;"></span>
+                            </div>
+                            <div>
+                                <div class="fw-bold text-dark text-truncate" style="max-width:210px; font-size:0.9rem;">
+                                    @op.NombreOperario
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">@op.Rol</span>
+                                    <span class="text-muted" style="font-size:0.7rem;">Usuario: @op.OperarioId</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Estado En Línea / Batería -->
+                        <div class="text-end">
+                            @if (isOnline)
+                            {
+                                <span class="badge bg-success-subtle text-success mb-1 d-inline-flex align-items-center gap-1" style="font-size:0.7rem;">
+                                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2"></rect><line x1="23" y1="11" x2="23" y2="13"></line></svg>
+                                    @bat% · @vel.ToString("F0") km/h
+                                </span>
+                            }
+                            else if (op.UltimaActividad.HasValue)
+                            {
+                                <span class="badge bg-light text-muted" style="font-size:0.68rem;">
+                                    Últ: @op.UltimaActividad.Value.ToLocalTime().ToString("dd/MM HH:mm")
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted" style="font-size:0.68rem;">Sin conexión</span>
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Datos Telemáticos y Geográficos Completos -->
+                    <div class="p-2 rounded bg-light border mb-2" style="font-size:0.72rem;">
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <span class="text-muted">Velocidad:</span> <strong>@vel.ToString("F1") km/h</strong>
+                            </div>
+                            <div class="col-6">
+                                <span class="text-muted">Rumbo:</span> <strong>@rumbo.ToString("F0")°</strong>
+                            </div>
+                            @if (lat.HasValue && lng.HasValue)
+                            {
+                                <div class="col-12 text-truncate">
+                                    <span class="text-muted">GPS:</span> <code>@lat.Value.ToString("F5"), @lng.Value.ToString("F5")</code>
+                                </div>
+                            }
+                            <div class="col-12">
+                                <span class="text-muted">Posiciones registradas:</span> <strong>@op.TotalPuntos</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Botones de Acción Modular Directa -->
+                    <div class="d-flex flex-wrap gap-1 pt-1 border-top">
+                        <button type="button" class="btn btn-sm btn-outline-danger flex-fill d-flex align-items-center justify-content-center gap-1" style="font-size:0.75rem;"
+                                @onclick="() => OnAsignarCorte.InvokeAsync(op.OperarioId)" title="Crear orden de corte">
+                            <i class="bi bi-slash-circle"></i>
+                            <span>Asignar Corte</span>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary flex-fill d-flex align-items-center justify-content-center gap-1" style="font-size:0.75rem;"
+                                @onclick="() => OnAsignarReconexion.InvokeAsync(op.OperarioId)" title="Crear orden de reconexión">
+                            <i class="bi bi-droplet"></i>
+                            <span>Habilitar Agua</span>
+                        </button>
+                        @if (lat.HasValue && lng.HasValue)
+                        {
+                            <button type="button" class="btn btn-sm btn-success d-flex align-items-center gap-1" style="font-size:0.75rem;"
+                                    @onclick="() => UbicarEnMapa(op, lat.Value, lng.Value, vel, rumbo, bat)" title="Centrar mapa en posición GPS">
+                                <i class="bi bi-crosshair"></i>
+                            </button>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" style="font-size:0.75rem;"
+                                @onclick="() => OnVerHistorial.InvokeAsync(op.OperarioId)" title="Ver recorrido histórico en mapa">
+                            <i class="bi bi-clock-history"></i>
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnAsignarCorte { get; set; }
+    [Parameter] public EventCallback<string> OnAsignarReconexion { get; set; }
+    [Parameter] public EventCallback<string> OnVerHistorial { get; set; }
+
+    private bool isLoading = false;
+    private string filtroTexto = string.Empty;
+    private List<OperarioItemDto> operarios = new();
+    private List<TrackingPosicionItemDto> operariosActivos = new();
+    private System.Threading.Timer? refreshTimer;
+
+    private List<OperarioItemDto> OperariosFiltrados => string.IsNullOrWhiteSpace(filtroTexto)
+        ? operarios
+        : operarios.Where(o => o.NombreOperario.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase) 
+                            || o.Rol.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase)
+                            || o.OperarioId.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarOperarios();
+        // Polling en tiempo real cada 5 segundos para recibir la telemetría del móvil
+        refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(CargarOperariosSilencioso);
+        }, null, 5000, 5000);
+    }
+
+    public async Task CargarOperarios()
+    {
+        isLoading = true;
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<OperarioItemDto>>("/api/tracking/operarios");
+            operarios = res ?? new();
+
+            var activos = await Http.GetFromJsonAsync<List<TrackingPosicionItemDto>>("/api/tracking/activos");
+            operariosActivos = activos ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar operarios: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarOperariosSilencioso()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<OperarioItemDto>>("/api/tracking/operarios");
+            if (res != null) operarios = res;
+
+            var activos = await Http.GetFromJsonAsync<List<TrackingPosicionItemDto>>("/api/tracking/activos");
+            if (activos != null) operariosActivos = activos;
+
+            StateHasChanged();
+        }
+        catch { }
+    }
+
+    private async Task UbicarEnMapa(OperarioItemDto op, double lat, double lng, double vel, double rumbo, int bat)
+    {
+        var obj = new
+        {
+            operarioId = op.OperarioId,
+            nombreOperario = op.NombreOperario,
+            rol = op.Rol,
+            latitud = lat,
+            longitud = lng,
+            velocidad = vel,
+            rumbo = rumbo,
+            bateria = bat
+        };
+        await JS.InvokeVoidAsync("arquis.updateOperarioMarker", obj);
+        await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 18);
+    }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+
+    public class OperarioItemDto
+    {
+        public string OperarioId { get; set; } = "";
+        public string NombreOperario { get; set; } = "";
+        public string Rol { get; set; } = "";
+        public int TotalPuntos { get; set; }
+        public DateTime? UltimaActividad { get; set; }
+        public bool EnLinea { get; set; }
+        public double? Latitud { get; set; }
+        public double? Longitud { get; set; }
+        public double Velocidad { get; set; }
+        public double Rumbo { get; set; }
+        public int Bateria { get; set; }
+    }
+
+    public class TrackingPosicionItemDto
+    {
+        public string OperarioId { get; set; } = "";
+        public string NombreOperario { get; set; } = "";
+        public string Rol { get; set; } = "";
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public double Rumbo { get; set; }
+        public double Velocidad { get; set; }
+        public int Bateria { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+}

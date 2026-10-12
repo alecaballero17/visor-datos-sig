@@ -45,4 +45,25 @@ public class UsuariosController(ArquisDbContext context) : ControllerBase
         if (usuario == null) return NotFound();
         return Ok(usuario);
     }
+
+    [HttpGet("operarios")]
+    public async Task<IActionResult> GetOperarios()
+    {
+        var usuarios = await context.Usuarios
+            .Where(u => u.Activo)
+            .Select(u => new
+            {
+                u.IdUsuario,
+                u.Login,
+                u.Nombre,
+                u.Email,
+                Rol = context.UsuariosRoles
+                    .Where(ur => ur.IdUsuario == u.IdUsuario)
+                    .Select(ur => ur.Rol.NombreRol)
+                    .FirstOrDefault() ?? "Operario",
+                u.Activo
+            })
+            .ToListAsync();
+        return Ok(usuarios);
+    }
 }

@@ -26,8 +26,8 @@
                aria-expanded="@isOpenDropdown"
                aria-controls="gmaps-search-results"
                aria-activedescendant="@(selectedItemIndex >= 0 ? $"result-opt-{selectedItemIndex}" : null)"
-               aria-label="Buscar predio, lote, manzana, conexión o calle"
-               placeholder="Buscar predio, lote, manzana, conexión o calle..."
+               aria-label="Buscar por titular, dueño, código, lote o calle"
+               placeholder="Buscar por titular, dueño, código, lote o calle..."
                value="@searchText"
                @oninput="OnInputChanged"
                @onfocus="OnFocus"
@@ -125,9 +125,18 @@
                                 <i class="bi @item.CategoryIcon"></i>
                             </div>
                             <div class="result-info">
-                                <div class="result-title text-truncate">
+                                <div class="result-title text-truncate fw-semibold">
                                     @item.Label
                                 </div>
+                                @{
+                                    var titularVal = GetTitular(item);
+                                }
+                                @if (!string.IsNullOrWhiteSpace(titularVal) && titularVal != "Sin titular vinculado")
+                                {
+                                    <div class="result-titular text-truncate small" style="color: #1a73e8; font-size: 0.83rem;">
+                                        <i class="bi bi-person-fill me-1" aria-hidden="true"></i><strong>Titular:</strong> @titularVal
+                                    </div>
+                                }
                                 <div class="result-subtitle text-truncate">
                                     <span class="badge border @item.CategoryBadgeColor me-1" style="font-size: 0.65rem;">
                                         @item.CategoryName
@@ -351,25 +360,47 @@
         _ => "Todas"
     };
 
+    private string? GetTitular(SearchResultItem item)
+    {
+        if (item.Properties == null) return null;
+        if (item.Properties.TryGetValue("Titular", out var t) && t != null && !string.IsNullOrWhiteSpace(t.ToString()))
+            return t.ToString();
+        if (item.Properties.TryGetValue("Dueno", out var d) && d != null && !string.IsNullOrWhiteSpace(d.ToString()))
+            return d.ToString();
+        if (item.Properties.TryGetValue("Nombre", out var n) && n != null && !string.IsNullOrWhiteSpace(n.ToString()))
+            return n.ToString();
+        return null;
+    }
+
     private string GetSublabelDetails(SearchResultItem item)
     {
         if (item.Properties == null) return string.Empty;
         
+        var codFijo = item.Properties.TryGetValue("CodFijo", out var cf) ? cf?.ToString() : null;
+
         if (item.Layer == "lotes")
         {
-            if (item.Properties.TryGetValue("NroLote", out var lote))
-                return $"Lote N° {lote} · Catastro Municipal";
+            var lote = item.Properties.TryGetValue("NroLote", out var l) ? l?.ToString() : null;
+            item.Properties.TryGetValue("UV", out var uv);
+            item.Properties.TryGetValue("MZA", out var mza);
+            var loc = (uv != null || mza != null) ? $" · UV {uv ?? "-"} MZA {mza ?? "-"}" : "";
+            var cod = codFijo != null ? $" · Cód. #{codFijo}" : "";
+            return $"Lote N° {lote ?? item.Id.ToString()}{cod}{loc}";
+        }
+        else if (item.Layer == "codigosfijos")
+        {
+            var cod = codFijo ?? item.Id.ToString();
+            item.Properties.TryGetValue("UV", out var uv);
+            item.Properties.TryGetValue("MZA", out var mza);
+            var loc = (uv != null || mza != null) ? $" · UV {uv ?? "-"} MZA {mza ?? "-"}" : "";
+            var lote = item.Properties.TryGetValue("NroLote", out var l) && l != null ? $" · Lote {l}" : "";
+            return $"Suministro Cód. #{cod}{lote}{loc}";
         }
         else if (item.Layer == "manzanas")
         {
             item.Properties.TryGetValue("UV", out var uv);
             item.Properties.TryGetValue("MZA", out var mza);
             return $"UV {uv ?? "-"} · Manzana {mza ?? "-"}";
-        }
-        else if (item.Layer == "codigosfijos")
-        {
-            item.Properties.TryGetValue("Nombre", out var nom);
-            return $"Titular: {nom ?? "Registrado"}";
         }
         else if (item.Layer == "vias")
         {

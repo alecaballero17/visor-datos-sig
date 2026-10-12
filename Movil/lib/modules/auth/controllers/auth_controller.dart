@@ -30,8 +30,7 @@ class AuthController {
     });
 
     try {
-      final respuesta = await _authService.login(email, password);
-      // Aquí normalmente guardarías el token o redirigirías
+      await _authService.login(email, password);
       actualizar(() {
         isCargando = false;
         errorMessage = null;

@@ -1,0 +1,898 @@
+@using Microsoft.JSInterop
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject IConfiguration Config
+
+@if (IsOpen)
+{
+    <div class="field-modal-backdrop" @onclick="Close">
+        <div class="field-modal-card" @onclick:stopPropagation="true">
+            <!-- Modal Header -->
+            <div class="field-modal-header px-4 py-3 border-bottom d-flex align-items-center justify-content-between bg-white">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="field-badge-icon" style="background: #e8f0fe; color: #1a73e8; width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; font-size: 1.1rem;">
+                        <i class="bi bi-broadcast"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-0 fw-bold" style="color: #202124;">Monitoreo en Tiempo Real y Rutas de Campo</h6>
+                        <small class="text-muted" style="font-size: 0.78rem;">GPS en vivo, trazabilidad de recorridos y órdenes de corte/reconexión</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge @(isLiveConnected ? "bg-success-subtle text-success" : "bg-warning-subtle text-warning") border px-2 py-1" style="font-size:0.75rem;">
+                        <i class="bi bi-circle-fill me-1" style="font-size:0.5rem;"></i>@(isLiveConnected ? "GPS En Vivo" : "Sincronizando")
+                    </span>
+                    <button type="button" class="btn-close" aria-label="Cerrar" @onclick="Close"></button>
+                </div>
+            </div>
+
+            <!-- Tabs Nav -->
+            <div class="field-modal-tabs border-bottom px-4 pt-2 bg-light">
+                <ul class="nav nav-tabs border-0" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "live" ? "active fw-semibold" : "")" style="font-size:0.85rem;" @onclick='() => SetTab("live")'>
+                            <i class="bi bi-geo-alt-fill me-1 text-primary"></i>Operarios en Vivo (@operariosActivos.Count)
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "history" ? "active fw-semibold" : "")" style="font-size:0.85rem;" @onclick='() => SetTab("history")'>
+                            <i class="bi bi-clock-history me-1 text-warning"></i>Historial de Rutas (Timeline)
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link @(activeTab == "rutas" ? "active fw-semibold" : "")" style="font-size:0.85rem;" @onclick='() => SetTab("rutas")'>
+                            <i class="bi bi-scissors me-1 text-danger"></i>Rutas de Corte y Reconexión
+                        </button>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Modal Body -->
+            <div class="field-modal-body p-4" style="max-height: 520px; overflow-y: auto;">
+                @if (isLoading)
+                {
+                    <div class="text-center py-5 text-muted">
+                        <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                        <div class="small">Cargando información telemática...</div>
+                    </div>
+                }
+                else if (activeTab == "live")
+                {
+                    <!-- TAB 1: OPERARIOS EN VIVO -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="small text-muted fw-semibold text-uppercase" style="font-size:0.75rem; letter-spacing:0.3px;">
+                            Dispositivos Móviles Conectados Actualmente
+                        </span>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" style="font-size:0.78rem;" @onclick="SimularMovimientoDemo">
+                                <i class="bi bi-play-circle me-1"></i>Simular Movimiento de Prueba
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light border" style="font-size:0.78rem;" @onclick="CargarOperariosActivos">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Refrescar
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (operariosActivos.Count == 0)
+                    {
+                        <div class="text-center py-5 border rounded bg-light" style="border-color:#dadce0 !important;">
+                            <i class="bi bi-phone text-muted fs-1 mb-2 d-block"></i>
+                            <div class="fw-semibold text-dark">No hay dispositivos transmitiendo en este momento</div>
+                            <small class="text-muted d-block mt-1">Abre la app móvil en tu teléfono o presiona "Simular Movimiento de Prueba" para ver la transmisión en vivo.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row g-3">
+                            @foreach (var op in operariosActivos)
+                            {
+                                <div class="col-md-6">
+                                    <div class="border rounded p-3 bg-white shadow-sm position-relative" style="border-color:#dadce0 !important;">
+                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                            <div>
+                                                <div class="fw-bold" style="color:#202124;">@op.NombreOperario</div>
+                                                <span class="badge @(op.Rol.Contains("Corte") || op.Rol.Contains("Cortador") ? "bg-danger-subtle text-danger" : "bg-success-subtle text-success")" style="font-size:0.7rem;">
+                                                    @op.Rol
+                                                </span>
+                                            </div>
+                                            <span class="badge bg-light text-dark border d-inline-flex align-items-center gap-1" style="font-size:0.75rem;">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2"></rect><line x1="23" y1="11" x2="23" y2="13"></line></svg> @op.Bateria%
+                                            </span>
+                                        </div>
+
+                                        <div class="small text-muted mb-3" style="font-size:0.8rem; display:grid; gap:3px;">
+                                            <div><i class="bi bi-geo-alt me-1 text-primary"></i>@op.Latitud.ToString("F5"), @op.Longitud.ToString("F5")</div>
+                                            <div><i class="bi bi-speedometer2 me-1 text-secondary"></i>@op.Velocidad.ToString("F0") km/h · Rumbo @op.Rumbo°</div>
+                                            <div><i class="bi bi-clock me-1 text-secondary"></i>Última señal: @op.Timestamp.ToLocalTime().ToString("HH:mm:ss")</div>
+                                        </div>
+
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-sm btn-primary w-100" style="font-size:0.8rem;" @onclick="() => CentrarEnOperario(op)">
+                                                <i class="bi bi-crosshair me-1"></i>Ubicar en Mapa
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" style="font-size:0.8rem;" @onclick="() => CargarYVerHistorial(op.OperarioId)">
+                                                <i class="bi bi-clock-history"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+                else if (activeTab == "history")
+                {
+                    <!-- TAB 2: HISTORIAL DE RUTAS (TIMELINE) -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-semibold text-muted mb-1">Operario</label>
+                            <select class="form-select form-select-sm" @bind="selectedOperarioHistorial">
+                                @if (listaOperarios.Count == 0)
+                                {
+                                    <option value="">No hay operarios registrados</option>
+                                }
+                                @foreach (var op in listaOperarios)
+                                {
+                                    <option value="@op.OperarioId">@op.NombreOperario (@op.Rol)</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label small fw-semibold text-muted mb-1">Fecha de Consulta</label>
+                            <input type="date" class="form-control form-control-sm" @bind="selectedFechaHistorial" />
+                        </div>
+                        <div class="col-sm-2 d-flex align-items-end">
+                            <button type="button" class="btn btn-sm btn-primary w-100" @onclick="ConsultarHistorial">
+                                Consultar
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (puntosHistorial.Count == 0)
+                    {
+                        <div class="text-center py-5 border rounded bg-light" style="border-color:#dadce0 !important;">
+                            <i class="bi bi-pin-map text-muted fs-1 mb-2 d-block"></i>
+                            <div class="fw-semibold text-dark">No hay registros de trayectoria para la fecha seleccionada</div>
+                            <small class="text-muted">Selecciona otra fecha o realiza un recorrido en la app móvil.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Tarjeta de Resumen del Recorrido -->
+                        <div class="p-3 mb-3 rounded border bg-light d-flex justify-content-between align-items-center" style="border-color:#dadce0 !important;">
+                            <div class="d-flex gap-4">
+                                <div>
+                                    <span class="text-muted small d-block">Puntos Registrados</span>
+                                    <strong class="text-dark">@puntosHistorial.Count posiciones</strong>
+                                </div>
+                                <div>
+                                    <span class="text-muted small d-block">Hora Inicio</span>
+                                    <strong class="text-dark">@puntosHistorial.First().Timestamp.ToLocalTime().ToString("HH:mm:ss")</strong>
+                                </div>
+                                <div>
+                                    <span class="text-muted small d-block">Hora Fin</span>
+                                    <strong class="text-dark">@puntosHistorial.Last().Timestamp.ToLocalTime().ToString("HH:mm:ss")</strong>
+                                </div>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-success d-flex align-items-center gap-1" @onclick="() => ReproducirAnimacionRuta(true)">
+                                    <i class="bi bi-play-fill"></i>
+                                    <span>Reproducir Animación en Mapa</span>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="LimpiarRutaMapa" title="Ocultar del mapa">
+                                    <i class="bi bi-x-circle"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Lista de checkpoints del Timeline estilo Google Maps -->
+                        <div class="border rounded overflow-hidden" style="border-color:#dadce0 !important; max-height:260px; overflow-y:auto;">
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.8rem;">
+                                <thead style="background:#f8f9fa;">
+                                    <tr>
+                                        <th class="ps-3">Hora</th>
+                                        <th>Coordenadas</th>
+                                        <th>Velocidad</th>
+                                        <th>Rumbo</th>
+                                        <th class="pe-3">Batería</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var pt in puntosHistorial)
+                                    {
+                                        <tr>
+                                            <td class="ps-3 fw-semibold">@pt.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                                            <td class="font-monospace text-muted">@pt.Latitud.ToString("F5"), @pt.Longitud.ToString("F5")</td>
+                                            <td>@pt.Velocidad.ToString("F0") km/h</td>
+                                            <td>@pt.Rumbo°</td>
+                                            <td class="pe-3"><span class="d-inline-flex align-items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2"></rect><line x1="23" y1="11" x2="23" y2="13"></line></svg> @pt.Bateria%</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+                else if (activeTab == "rutas")
+                {
+                    <!-- TAB 3: RUTAS DE CORTE Y RECONEXIÓN (GERENTE) -->
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span class="small text-muted fw-semibold text-uppercase" style="font-size:0.75rem; letter-spacing:0.3px;">
+                            Órdenes de Trabajo y Hojas de Ruta
+                        </span>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-primary" style="font-size:0.78rem;" @onclick="AbrirModalAsignacionMasiva">
+                                <i class="bi bi-people-fill me-1"></i>Asignación Masiva a Cuadrilla
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" style="font-size:0.78rem;" @onclick="AbrirModalRutaIndividual">
+                                <i class="bi bi-plus-circle me-1"></i>Ruta Individual
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (showCrearRutaModal)
+                    {
+                        @if (modoCreacion == "masiva")
+                        {
+                            <!-- Formulario de Asignación Masiva a Cuadrilla -->
+                            <div class="border rounded p-3 mb-4 bg-light shadow-sm" style="border-color:#1a73e8 !important;">
+                                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-diagram-3-fill fs-5" style="color:#1a73e8;"></i>
+                                        <div>
+                                            <h6 class="mb-0 fw-bold" style="color:#1a73e8;">Asignación Masiva y Distribución Equitativa de Cuentas</h6>
+                                            <small class="text-muted">Distribuye un lote de cortes o reconexiones automáticamente entre los operarios seleccionados</small>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-close btn-sm" @onclick="() => showCrearRutaModal = false"></button>
+                                </div>
+
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-semibold text-muted mb-1">Título del Operativo</label>
+                                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Operativo Masivo de Corte Distrito 4" @bind="masivaTitulo" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-muted mb-1">Tipo de Servicio</label>
+                                        <select class="form-select form-select-sm" @bind="masivaTipo" @bind:after="ActualizarTituloPorTipo">
+                                            <option value="Corte">Corte de Agua (Morosos)</option>
+                                            <option value="Reconexion">Reconexión / Habilitación (Al día)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-muted mb-1">Cantidad de Cuentas a Intervenir</label>
+                                        <input type="number" min="1" max="5000" class="form-control form-control-sm" @bind="masivaCantidad" />
+                                    </div>
+                                </div>
+
+                                <!-- Selección de Cuadrilla / Operarios Reales de la BD -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <label class="form-label small fw-semibold text-muted mb-0">
+                                            Cuadrilla de Operarios Asignados (@operariosSeleccionadosMasiva.Count de @listaOperarios.Count seleccionados)
+                                        </label>
+                                        <div class="d-flex gap-2">
+                                            <button type="button" class="btn btn-link p-0 text-decoration-none small" style="font-size:0.75rem;" @onclick="SeleccionarTodosOperarios">Seleccionar Todos</button>
+                                            <span class="text-muted small">|</span>
+                                            <button type="button" class="btn btn-link p-0 text-decoration-none small text-danger" style="font-size:0.75rem;" @onclick="LimpiarSeleccionOperarios">Limpiar</button>
+                                        </div>
+                                    </div>
+
+                                    @if (listaOperarios.Count == 0)
+                                    {
+                                        <div class="alert alert-warning py-1 px-2 small mb-0">No se encontraron operarios registrados en la base de datos.</div>
+                                    }
+                                    else
+                                    {
+                                        <div class="border rounded p-2 bg-white" style="max-height:140px; overflow-y:auto;">
+                                            <div class="row g-2">
+                                                @foreach (var op in listaOperarios)
+                                                {
+                                                    var isChecked = operariosSeleccionadosMasiva.Contains(op.OperarioId);
+                                                    <div class="col-md-4 col-sm-6">
+                                                        <div class="form-check form-check-sm">
+                                                            <input class="form-check-input" type="checkbox" id="chk-op-@op.OperarioId" checked="@isChecked" @onchange="() => ToggleOperarioMasiva(op.OperarioId)" />
+                                                            <label class="form-check-label small text-truncate d-block" for="chk-op-@op.OperarioId" title="@op.NombreOperario (@op.Rol)">
+                                                                <span class="fw-semibold">@op.NombreOperario</span>
+                                                                <span class="badge bg-secondary-subtle text-secondary ms-1" style="font-size:0.65rem;">@op.Rol</span>
+                                                            </label>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    }
+
+                                    <!-- Resumen de Balanceo de Carga -->
+                                    @if (operariosSeleccionadosMasiva.Count > 0 && masivaCantidad > 0)
+                                    {
+                                        var porOperario = (int)Math.Ceiling((double)masivaCantidad / operariosSeleccionadosMasiva.Count);
+                                        <div class="mt-2 p-2 rounded bg-primary-subtle text-primary-emphasis small d-flex align-items-center justify-content-between" style="font-size:0.78rem;">
+                                            <span>
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                Balanceo: <strong>@masivaCantidad cuentas</strong> divididas entre <strong>@operariosSeleccionadosMasiva.Count operarios</strong> (~<strong>@porOperario tareas</strong> por técnico).
+                                            </span>
+                                            <span class="badge bg-primary text-white">Equitativo</span>
+                                        </div>
+                                    }
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label small fw-semibold text-muted mb-1">Instrucciones u Observaciones para la Cuadrilla</label>
+                                    <textarea class="form-control form-control-sm" rows="2" placeholder="Instrucciones operativas (ej. verificar precinto, tomar fotografía de evidencia)..." @bind="masivaObservaciones"></textarea>
+                                </div>
+
+                                <div class="d-flex justify-content-end gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => showCrearRutaModal = false">Cancelar</button>
+                                    <button type="button" class="btn btn-sm btn-primary" @onclick="GuardarAsignacionMasiva" disabled="@(operariosSeleccionadosMasiva.Count == 0 || masivaCantidad <= 0)">
+                                        <i class="bi bi-send-check me-1"></i>Distribuir y Despachar a Cuadrilla
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <!-- Formulario para crear ruta Individual -->
+                            <div class="border rounded p-3 mb-4 bg-light shadow-sm" style="border-color:#1a73e8 !important;">
+                                <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                    <h6 class="mb-0 fw-bold" style="color:#1a73e8;"><i class="bi bi-clipboard-plus me-1"></i>Crear Hoja de Ruta Individual</h6>
+                                    <button type="button" class="btn-close btn-sm" @onclick="() => showCrearRutaModal = false"></button>
+                                </div>
+
+                                <div class="row g-2 mb-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-muted mb-1">Título de la Operación</label>
+                                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Corte Programado UV 4 - MZA 12" @bind="nuevaRutaTitulo" />
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-muted mb-1">Tipo de Servicio</label>
+                                        <select class="form-select form-select-sm" @bind="nuevaRutaTipo">
+                                            <option value="Corte">Corte de Agua</option>
+                                            <option value="Reconexion">Reconexión de Agua</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-semibold text-muted mb-1">Operario Asignado</label>
+                                        <select class="form-select form-select-sm" @bind="nuevaRutaOperario">
+                                            @if (listaOperarios.Count == 0)
+                                            {
+                                                <option value="">Cargando operarios...</option>
+                                            }
+                                            @foreach (var op in listaOperarios)
+                                            {
+                                                <option value="@op.OperarioId">@op.NombreOperario (@op.Rol)</option>
+                                            }
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="mb-2">
+                                    <label class="form-label small fw-semibold text-muted mb-1">Instrucciones u Observaciones</label>
+                                    <textarea class="form-control form-control-sm" rows="2" placeholder="Observaciones técnicas para el operario en el móvil..." @bind="nuevaRutaObservaciones"></textarea>
+                                </div>
+
+                                <div class="d-flex justify-content-end gap-2">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => showCrearRutaModal = false">Cancelar</button>
+                                    <button type="button" class="btn btn-sm btn-primary" @onclick="GuardarNuevaRuta">
+                                        <i class="bi bi-send-check me-1"></i>Crear y Notificar a Móvil
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    }
+
+                    @if (rutasTrabajo.Count == 0)
+                    {
+                        <div class="text-center py-5 border rounded bg-light" style="border-color:#dadce0 !important;">
+                            <i class="bi bi-journal-x text-muted fs-1 mb-2 d-block"></i>
+                            <div class="fw-semibold text-dark">No hay rutas de trabajo registradas</div>
+                            <small class="text-muted">Crea una nueva ruta arriba para que aparezca en el móvil del técnico.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column gap-3">
+                            @foreach (var r in rutasTrabajo)
+                            {
+                                <div class="border rounded p-3 bg-white shadow-sm" style="border-color:#dadce0 !important;">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge @(r.Tipo == "Corte" ? "bg-danger" : "bg-primary")" style="font-size:0.72rem;">@r.Codigo · @r.Tipo</span>
+                                                <h6 class="mb-0 fw-bold" style="color:#202124;">@r.Titulo</h6>
+                                            </div>
+                                            <small class="text-muted">Asignado a: <strong>@r.OperarioAsignado</strong> · Prioridad: @r.Prioridad</small>
+                                        </div>
+                                        <span class="badge @(r.Estado == "Completada" ? "bg-success" : (r.Estado == "EnProgreso" ? "bg-warning text-dark" : "bg-secondary"))" style="font-size:0.75rem;">
+                                            @r.Estado
+                                        </span>
+                                    </div>
+
+                                    @if (!string.IsNullOrWhiteSpace(r.Observaciones))
+                                    {
+                                        <p class="small text-secondary mb-2" style="font-size:0.8rem;">@r.Observaciones</p>
+                                    }
+
+                                    <!-- Barra de progreso -->
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between small text-muted mb-1" style="font-size:0.75rem;">
+                                            <span>Progreso de ejecución en campo</span>
+                                            <span>@r.PuntosCompletados / @r.TotalPuntos (@(r.TotalPuntos > 0 ? (r.PuntosCompletados * 100 / r.TotalPuntos) : 0)%)</span>
+                                        </div>
+                                        <div class="progress" style="height: 6px;">
+                                            <div class="progress-bar @(r.Tipo == "Corte" ? "bg-danger" : "bg-primary")" role="progressbar" 
+                                                 style="width: @(r.TotalPuntos > 0 ? (r.PuntosCompletados * 100 / r.TotalPuntos) : 0)%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-end gap-2">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-size:0.8rem;" @onclick="() => VerRutaEnMapa(r)">
+                                            <i class="bi bi-map me-1"></i>Ver Puntos en el Mapa
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="field-modal-footer px-4 py-2.5 border-top d-flex justify-content-between align-items-center bg-white" style="border-color:#dadce0 !important;">
+                <small class="text-muted" style="font-size:0.78rem;">
+                    <i class="bi bi-shield-check me-1 text-success"></i>Trazabilidad auditada y sincronizada vía SignalR
+                </small>
+                <button type="button" class="btn btn-sm btn-outline-secondary" style="border-color:#dadce0; color:#3c4043; border-radius:4px;" @onclick="Close">
+                    Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+.field-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(32, 33, 36, 0.6);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050;
+    padding: 1rem;
+}
+
+.field-modal-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.22);
+    width: 100%;
+    max-width: 820px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modal-pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@@keyframes modal-pop {
+    from { transform: scale(0.96); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+</style>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string activeTab = "live";
+    private bool isLoading = false;
+    private bool isLiveConnected = true;
+
+    // Modelos
+    private List<TrackingPosicionDto> operariosActivos = new();
+    private List<OperarioResumenDto> listaOperarios = new();
+    private List<TrackingPuntoDto> puntosHistorial = new();
+    private List<RutaTrabajoDto> rutasTrabajo = new();
+
+    // Filtros Historial
+    private string selectedOperarioHistorial = "";
+    private DateTime selectedFechaHistorial = DateTime.UtcNow.Date;
+
+    // Crear Ruta (Individual y Masiva)
+    private bool showCrearRutaModal = false;
+    private string modoCreacion = "masiva"; // "masiva" o "individual"
+    private string nuevaRutaTitulo = "";
+    private string nuevaRutaTipo = "Corte";
+    private string nuevaRutaOperario = "";
+    private string nuevaRutaObservaciones = "";
+
+    // Asignación Masiva a Cuadrilla
+    private string masivaTitulo = "Operativo Masivo de Corte de Agua (100 Cuentas)";
+    private string masivaTipo = "Corte";
+    private int masivaCantidad = 100;
+    private string masivaObservaciones = "Corte programado de suministro por mora superior a 90 días.";
+    private HashSet<string> operariosSeleccionadosMasiva = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen)
+        {
+            await CargarDatosIniciales();
+        }
+    }
+
+    private void SetTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private async Task CargarDatosIniciales()
+    {
+        isLoading = true;
+        try
+        {
+            await Task.WhenAll(
+                CargarOperariosActivos(),
+                CargarListaOperarios(),
+                CargarRutasTrabajo()
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar datos telemáticos: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarOperariosActivos()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<TrackingPosicionDto>>("/api/tracking/activos");
+            operariosActivos = res ?? new();
+
+            // Dibujar marcadores en mapa
+            foreach (var op in operariosActivos)
+            {
+                await JS.InvokeVoidAsync("arquis.updateOperarioMarker", op);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error activos: {ex.Message}");
+        }
+    }
+
+    private async Task CargarListaOperarios()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<OperarioResumenDto>>("/api/tracking/operarios");
+            listaOperarios = res ?? new();
+            if (string.IsNullOrEmpty(selectedOperarioHistorial) && listaOperarios.Count > 0)
+            {
+                selectedOperarioHistorial = listaOperarios[0].OperarioId;
+            }
+            if (string.IsNullOrEmpty(nuevaRutaOperario) && listaOperarios.Count > 0)
+            {
+                nuevaRutaOperario = listaOperarios[0].OperarioId;
+            }
+            if (operariosSeleccionadosMasiva.Count == 0)
+            {
+                foreach (var op in listaOperarios)
+                {
+                    operariosSeleccionadosMasiva.Add(op.OperarioId);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error operarios: {ex.Message}");
+        }
+    }
+
+    private void AbrirModalAsignacionMasiva()
+    {
+        modoCreacion = "masiva";
+        showCrearRutaModal = true;
+        ActualizarTituloPorTipo();
+        if (operariosSeleccionadosMasiva.Count == 0 && listaOperarios.Count > 0)
+        {
+            foreach (var op in listaOperarios)
+            {
+                operariosSeleccionadosMasiva.Add(op.OperarioId);
+            }
+        }
+    }
+
+    private void AbrirModalRutaIndividual()
+    {
+        modoCreacion = "individual";
+        showCrearRutaModal = true;
+        if (string.IsNullOrEmpty(nuevaRutaOperario) && listaOperarios.Count > 0)
+        {
+            nuevaRutaOperario = listaOperarios[0].OperarioId;
+        }
+    }
+
+    private void ToggleOperarioMasiva(string operarioId)
+    {
+        if (operariosSeleccionadosMasiva.Contains(operarioId))
+            operariosSeleccionadosMasiva.Remove(operarioId);
+        else
+            operariosSeleccionadosMasiva.Add(operarioId);
+    }
+
+    private void SeleccionarTodosOperarios()
+    {
+        foreach (var op in listaOperarios)
+        {
+            operariosSeleccionadosMasiva.Add(op.OperarioId);
+        }
+    }
+
+    private void LimpiarSeleccionOperarios()
+    {
+        operariosSeleccionadosMasiva.Clear();
+    }
+
+    private void ActualizarTituloPorTipo()
+    {
+        if (masivaTipo == "Corte")
+        {
+            masivaTitulo = $"Operativo Masivo de Corte de Agua ({masivaCantidad} Cuentas)";
+            masivaObservaciones = "Corte programado de suministro por mora. Registrar lectura final y precintar acometida.";
+        }
+        else
+        {
+            masivaTitulo = $"Operativo Masivo de Reconexión / Habilitación ({masivaCantidad} Cuentas)";
+            masivaObservaciones = "Reconexión de servicio tras regularización de cuenta. Habilitar llave y verificar suministro.";
+        }
+    }
+
+    private async Task GuardarAsignacionMasiva()
+    {
+        if (operariosSeleccionadosMasiva.Count == 0 || masivaCantidad <= 0) return;
+
+        isLoading = true;
+        try
+        {
+            var payload = new
+            {
+                TituloGeneral = masivaTitulo,
+                Tipo = masivaTipo,
+                Prioridad = "Alta",
+                OperariosAsignados = operariosSeleccionadosMasiva.ToList(),
+                CantidadCuentas = masivaCantidad,
+                Observaciones = masivaObservaciones
+            };
+
+            var res = await Http.PostAsJsonAsync("/api/rutas-trabajo/asignacion-masiva", payload);
+            if (res.IsSuccessStatusCode)
+            {
+                showCrearRutaModal = false;
+                await CargarRutasTrabajo();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error en asignación masiva: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarRutasTrabajo()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<RutaTrabajoDto>>("/api/rutas-trabajo");
+            rutasTrabajo = res ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error rutas: {ex.Message}");
+        }
+    }
+
+    private async Task ConsultarHistorial()
+    {
+        isLoading = true;
+        try
+        {
+            var fechaStr = selectedFechaHistorial.ToString("yyyy-MM-dd");
+            var res = await Http.GetFromJsonAsync<List<TrackingPuntoDto>>($"/api/tracking/historial/{selectedOperarioHistorial}?fecha={fechaStr}");
+            puntosHistorial = res ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error historial: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarYVerHistorial(string operarioId)
+    {
+        selectedOperarioHistorial = operarioId;
+        activeTab = "history";
+        await ConsultarHistorial();
+        if (puntosHistorial.Count > 0)
+        {
+            await ReproducirAnimacionRuta(false);
+        }
+    }
+
+    private async Task CentrarEnOperario(TrackingPosicionDto op)
+    {
+        await JS.InvokeVoidAsync("arquis.updateOperarioMarker", op);
+        await JS.InvokeVoidAsync("arquis.centerOnCoords", op.Latitud, op.Longitud, 18);
+        await Close();
+    }
+
+    private async Task ReproducirAnimacionRuta(bool conAnimacion)
+    {
+        if (puntosHistorial.Count == 0) return;
+        await JS.InvokeVoidAsync("arquis.showRouteHistory", puntosHistorial, conAnimacion);
+        await Close();
+    }
+
+    private async Task LimpiarRutaMapa()
+    {
+        await JS.InvokeVoidAsync("arquis.clearRouteHistory");
+    }
+
+    private async Task VerRutaEnMapa(RutaTrabajoDto ruta)
+    {
+        await JS.InvokeVoidAsync("arquis.showRutaTrabajo", ruta);
+        await Close();
+    }
+
+    private async Task SimularMovimientoDemo()
+    {
+        try
+        {
+            var opDemo = listaOperarios.FirstOrDefault();
+            var opId = opDemo?.OperarioId ?? "operario_campo";
+            var opNombre = opDemo?.NombreOperario ?? "Operario de Campo";
+            var opRol = opDemo?.Rol ?? "Cortador";
+
+            var rnd = new Random();
+            var latDelta = (rnd.NextDouble() - 0.5) * 0.001;
+            var lngDelta = (rnd.NextDouble() - 0.5) * 0.001;
+            var nuevoPunto = new TrackingPosicionDto
+            {
+                OperarioId = opId,
+                NombreOperario = opNombre,
+                Rol = opRol,
+                Latitud = -17.78180 + latDelta,
+                Longitud = -63.18220 + lngDelta,
+                Rumbo = rnd.Next(0, 360),
+                Velocidad = rnd.Next(10, 35),
+                Bateria = rnd.Next(80, 95),
+                Timestamp = DateTime.UtcNow
+            };
+
+            await Http.PostAsJsonAsync("/api/tracking/posicion", nuevoPunto);
+            await CargarOperariosActivos();
+            await JS.InvokeVoidAsync("arquis.updateOperarioMarker", nuevoPunto);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al simular movimiento: {ex.Message}");
+        }
+    }
+
+    private async Task GuardarNuevaRuta()
+    {
+        if (string.IsNullOrWhiteSpace(nuevaRutaTitulo)) return;
+
+        try
+        {
+            var opTarget = !string.IsNullOrEmpty(nuevaRutaOperario) 
+                ? nuevaRutaOperario 
+                : (listaOperarios.FirstOrDefault()?.OperarioId ?? "operario");
+
+            var nueva = new
+            {
+                Titulo = nuevaRutaTitulo,
+                Tipo = nuevaRutaTipo,
+                Prioridad = "Alta",
+                OperarioAsignado = opTarget,
+                Observaciones = nuevaRutaObservaciones,
+                Puntos = new[]
+                {
+                    new { Lote = "Lote 10", Titular = "Gonzalo Rojas", CodigoSuministro = "CF-90412", Latitud = -17.78190, Longitud = -63.18120, MontoDeuda = 420.00m, Observaciones = "Medidor en muro exterior" },
+                    new { Lote = "Lote 18", Titular = "Silvia Céspedes", CodigoSuministro = "CF-90430", Latitud = -17.78270, Longitud = -63.18260, MontoDeuda = 610.50m, Observaciones = "Verificar si ya canceló" }
+                }
+            };
+
+            var res = await Http.PostAsJsonAsync("/api/rutas-trabajo", nueva);
+            if (res.IsSuccessStatusCode)
+            {
+                showCrearRutaModal = false;
+                nuevaRutaTitulo = "";
+                await CargarRutasTrabajo();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al guardar ruta: {ex.Message}");
+        }
+    }
+
+    private async Task Close()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    public class TrackingPosicionDto
+    {
+        public string OperarioId { get; set; } = "";
+        public string NombreOperario { get; set; } = "";
+        public string Rol { get; set; } = "";
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public double Rumbo { get; set; }
+        public double Velocidad { get; set; }
+        public int Bateria { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class OperarioResumenDto
+    {
+        public string OperarioId { get; set; } = "";
+        public string NombreOperario { get; set; } = "";
+        public string Rol { get; set; } = "";
+        public int TotalPuntos { get; set; }
+        public DateTime UltimaActividad { get; set; }
+    }
+
+    public class TrackingPuntoDto
+    {
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public double Velocidad { get; set; }
+        public double Rumbo { get; set; }
+        public int Bateria { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class RutaTrabajoDto
+    {
+        public int Id { get; set; }
+        public string Codigo { get; set; } = "";
+        public string Titulo { get; set; } = "";
+        public string Tipo { get; set; } = "";
+        public string Estado { get; set; } = "";
+        public string Prioridad { get; set; } = "";
+        public string OperarioAsignado { get; set; } = "";
+        public string? Observaciones { get; set; }
+        public int TotalPuntos { get; set; }
+        public int PuntosCompletados { get; set; }
+        public List<PuntoRutaDto> Puntos { get; set; } = new();
+    }
+
+    public class PuntoRutaDto
+    {
+        public int Id { get; set; }
+        public int Orden { get; set; }
+        public string? Lote { get; set; }
+        public string? Titular { get; set; }
+        public string? CodigoSuministro { get; set; }
+        public string? Direccion { get; set; }
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public decimal? MontoDeuda { get; set; }
+        public string Estado { get; set; } = "";
+    }
+}

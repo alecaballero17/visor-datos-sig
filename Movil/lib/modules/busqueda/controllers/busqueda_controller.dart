@@ -8,12 +8,15 @@ class BusquedaController {
   bool isCargando = false;
   List<dynamic> resultados = [];
   String? errorMessage;
+  String capaFiltro = ''; // '' = todas, 'manzanas', 'lotes', 'codigosfijos', 'vias'
 
   Future<void> buscar(String query, Function(VoidCallback) actualizar) async {
-    if (query.isEmpty) {
+    final q = query.trim();
+    if (q.isEmpty) {
       actualizar(() {
         resultados = [];
         errorMessage = null;
+        isCargando = false;
       });
       return;
     }
@@ -24,16 +27,28 @@ class BusquedaController {
     });
 
     try {
-      final data = await _busquedaService.buscar(query);
+      final data = await _busquedaService.buscar(q, capa: capaFiltro.isEmpty ? null : capaFiltro);
       actualizar(() {
         isCargando = false;
         resultados = data;
+        if (data.isEmpty) {
+          errorMessage = 'No se encontraron resultados para "$q".';
+        }
       });
     } catch (e) {
       actualizar(() {
         isCargando = false;
-        errorMessage = e.toString().replaceAll('Exception: ', '');
+        errorMessage = 'No se pudo conectar con el servicio de búsqueda: ${e.toString().replaceAll('Exception: ', '')}';
       });
+    }
+  }
+
+  void cambiarCapaFiltro(String nuevaCapa, Function(VoidCallback) actualizar) {
+    capaFiltro = nuevaCapa;
+    if (searchCtrl.text.isNotEmpty) {
+      buscar(searchCtrl.text, actualizar);
+    } else {
+      actualizar(() {});
     }
   }
 

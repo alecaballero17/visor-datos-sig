@@ -6,6 +6,13 @@
     
     <div class="ms-auto d-flex align-items-center gap-2">
         <button type="button" class="btn btn-sm d-flex align-items-center gap-1"
+                style="border: 1px solid #1a73e8; background:#e8f0fe; color:#1a73e8; border-radius:4px; font-weight:600;"
+                @onclick="OpenOperationsDrawer"
+                title="Abrir Panel Retráctil de Operaciones, Cuadrillas y Opciones">
+            <i class="bi bi-grid-1x2-fill"></i>
+            <span>Panel de Operaciones</span>
+        </button>
+        <button type="button" class="btn btn-sm d-flex align-items-center gap-1"
                 style="border: 1px solid #dadce0; background:#ffffff; color:#3c4043; border-radius:4px; font-weight:500;"
                 @onclick="OpenReports"
                 title="Generar Dictámenes Técnicos Oficiales en PDF">
@@ -31,6 +38,21 @@
     [Parameter] public string UserName { get; set; } = "Usuario";
     [Parameter] public EventCallback OnLogout { get; set; }
     [Parameter] public EventCallback OnOpenReports { get; set; }
+    [Parameter] public EventCallback OnOpenTracking { get; set; }
+    [Parameter] public EventCallback OnOpenOperationsDrawer { get; set; }
+
+    private async Task OpenOperationsDrawer()
+    {
+        if (OnOpenOperationsDrawer.HasDelegate)
+            await OnOpenOperationsDrawer.InvokeAsync();
+        else
+            await OnOpenTracking.InvokeAsync();
+    }
+
+    private async Task OpenTracking()
+    {
+        await OnOpenTracking.InvokeAsync();
+    }
 
     private async Task OpenReports()
     {

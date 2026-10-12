@@ -387,27 +387,34 @@
     {
         try
         {
+            isLoading = true;
             string pdfUrl;
+            string filename;
             if (SelectedLoteId.HasValue && SelectedLoteId.Value > 0)
             {
                 pdfUrl = $"api/reportes/predio/{SelectedLoteId.Value}/pdf?usuario={Uri.EscapeDataString(CurrentUserName)}";
+                filename = $"Informe_Predial_Lote_{SelectedLoteId.Value}_{DateTime.UtcNow:yyyyMMdd}.pdf";
             }
             else
             {
                 var uvVal = SelectedUV ?? "";
                 var mzaVal = SelectedMZA ?? "";
                 pdfUrl = $"api/reportes/sector/pdf?uv={Uri.EscapeDataString(uvVal)}&mza={Uri.EscapeDataString(mzaVal)}&usuario={Uri.EscapeDataString(CurrentUserName)}";
+                filename = $"Informe_Sector_UV_{uvVal}_MZA_{mzaVal}_{DateTime.UtcNow:yyyyMMdd}.pdf";
             }
 
-            var fullUrl = Http.BaseAddress != null
-                ? new Uri(Http.BaseAddress, pdfUrl).ToString()
-                : pdfUrl;
+            var pdfBytes = await Http.GetByteArrayAsync(pdfUrl);
+            var base64 = Convert.ToBase64String(pdfBytes);
 
-            await JS.InvokeVoidAsync("open", fullUrl, "_blank");
+            await JS.InvokeVoidAsync("arquis.downloadFile", filename, base64, "application/pdf");
         }
         catch (Exception ex)
         {
             ErrorService.FromException(ex, "descarga del dictamen técnico oficial en PDF", () => DownloadServerPdf());
+        }
+        finally
+        {
+            isLoading = false;
         }
     }
 

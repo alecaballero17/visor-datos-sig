@@ -33,8 +33,26 @@ namespace Arquis.Backend.Services
 
             // Conexión asociada de agua potable
             var codigos = await context.CodigosFijos
-                .Where(c => c.IdLote == idLote || (c.Geom != null && lote.Geom != null && c.Geom.Intersects(lote.Geom)))
+                .Where(c => c.IdLote == idLote)
                 .ToListAsync(ct);
+
+            if (codigos.Count == 0 && lote.Geom != null)
+            {
+                try
+                {
+                    codigos = await context.CodigosFijos
+                        .FromSqlRaw(@"
+                            SELECT TOP 3 c.*
+                            FROM dbo.CodigosFijos c
+                            WHERE c.Geom IS NOT NULL AND (
+                                c.Geom.STIntersects((SELECT Geom FROM dbo.Lotes WHERE IdLote = {0})) = 1 OR
+                                c.Geom.STDistance((SELECT Geom FROM dbo.Lotes WHERE IdLote = {0})) <= 25
+                            )
+                            ORDER BY c.Geom.STDistance((SELECT Geom FROM dbo.Lotes WHERE IdLote = {0})) ASC", idLote)
+                        .ToListAsync(ct);
+                }
+                catch { }
+            }
 
             var codigoPrincipal = codigos.FirstOrDefault();
             var tieneAgua = codigos.Count > 0;
@@ -87,7 +105,9 @@ namespace Arquis.Backend.Services
                 Latitud = lat,
                 Longitud = lon,
                 TieneAgua = tieneAgua,
-                Titular = codigoPrincipal?.Nombre ?? (tieneAgua ? "Titular Registrado" : "Sin titular vinculado"),
+                Titular = !string.IsNullOrWhiteSpace(codigoPrincipal?.Nombre) 
+                    ? codigoPrincipal.Nombre 
+                    : (codigoPrincipal != null ? $"Titular Cód. #{codigoPrincipal.CodFijo}" : "Sin titular vinculado"),
                 CodigoSuministro = codigoPrincipal?.CodFijo.ToString() ?? (tieneAgua ? "Asignado" : "Pendiente"),
                 CodigoSig = codigoPrincipal?.CodF_SIG ?? "—",
                 CondicionOperativa = condOperativa,

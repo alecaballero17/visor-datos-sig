@@ -121,15 +121,61 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
             
             "lotes" => await context.Lotes.Where(l => l.IdLote == id && l.Geom != null)
                 .Select(l => new {
-                    l, TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote)
+                    l,
+                    Titular = l.CodigosFijos.Where(c => c.Nombre != null).Select(c => c.Nombre).FirstOrDefault(),
+                    CodFijo = l.CodigosFijos.Where(c => c.CodFijo != null).Select(c => c.CodFijo).FirstOrDefault(),
+                    CodF_SIG = l.CodigosFijos.Where(c => c.CodF_SIG != null).Select(c => c.CodF_SIG).FirstOrDefault(),
+                    UV = l.Manzana != null ? l.Manzana.UV : null,
+                    MZA = l.Manzana != null ? l.Manzana.MZA : null,
+                    TieneAgua = l.CodigosFijos.Any()
                 })
                 .Select(x => new {
                     type = "Feature", id, geometry = ToGeoJsonGeometry(x.l.Geom!), 
-                    properties = new { x.l.IdLote, x.l.IdOrigen, x.l.NroLote, x.l.IdManzana, TieneAgua = x.TieneAgua, AguaLongitud = x.l.Geom!.InteriorPoint.X, AguaLatitud = x.l.Geom!.InteriorPoint.Y }, bbox = GetBbox(x.l.Geom!)
+                    properties = new { 
+                        x.l.IdLote, 
+                        x.l.IdOrigen, 
+                        x.l.NroLote, 
+                        x.l.IdManzana,
+                        x.UV,
+                        x.MZA,
+                        Titular = x.Titular,
+                        Dueno = x.Titular,
+                        Nombre = x.Titular,
+                        CodFijo = x.CodFijo,
+                        CodF_SIG = x.CodF_SIG,
+                        TieneAgua = x.TieneAgua, 
+                        AguaLongitud = x.l.Geom!.InteriorPoint.X, 
+                        AguaLatitud = x.l.Geom!.InteriorPoint.Y 
+                    }, 
+                    bbox = GetBbox(x.l.Geom!)
                 }).FirstOrDefaultAsync(ct),
             
             "codigosfijos" => await context.CodigosFijos.Where(c => c.IdCodigo == id && c.Geom != null)
-                .Select(c => new { type = "Feature", id, geometry = ToGeoJsonGeometry(c.Geom!), properties = new { c.IdCodigo, c.CodF_SQL, c.CodF_SIG, c.CodFijo, c.Nombre, c.Estado, c.EstadoVerificado, c.FechaCambioEstado, c.IdLote, c.Longitud, c.Latitud, TieneAgua = true }, bbox = GetBbox(c.Geom!) }).FirstOrDefaultAsync(ct),
+                .Select(c => new { 
+                    type = "Feature", 
+                    id, 
+                    geometry = ToGeoJsonGeometry(c.Geom!), 
+                    properties = new { 
+                        c.IdCodigo, 
+                        c.CodF_SQL, 
+                        c.CodF_SIG, 
+                        c.CodFijo, 
+                        c.Nombre, 
+                        Titular = c.Nombre,
+                        Dueno = c.Nombre,
+                        NroLote = c.Lote != null ? c.Lote.NroLote : null,
+                        UV = c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.UV : null,
+                        MZA = c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.MZA : null,
+                        c.Estado, 
+                        c.EstadoVerificado, 
+                        c.FechaCambioEstado, 
+                        c.IdLote, 
+                        c.Longitud, 
+                        c.Latitud, 
+                        TieneAgua = true 
+                    }, 
+                    bbox = GetBbox(c.Geom!) 
+                }).FirstOrDefaultAsync(ct),
             
             "vias" => await context.Vias.Where(v => v.IdVia == id && v.Geom != null)
                 .Select(v => new { type = "Feature", id, geometry = ToGeoJsonGeometry(v.Geom!), properties = new { v.IdVia, v.OBJECTID, v.Nombre, v.TipoVia, v.OSMID }, bbox = GetBbox(v.Geom!) }).FirstOrDefaultAsync(ct),
@@ -149,27 +195,147 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
 
         if (checkLayer == null || checkLayer == "codigosfijos")
         {
-            var dataC = await context.CodigosFijos.Where(c => c.Geom != null && (c.CodF_SIG!.Contains(qStr) || c.CodFijo.ToString()!.Contains(qStr) || c.Nombre!.Contains(qStr)))
-                .Take(100).Select(c => new { c.IdCodigo, c.CodFijo, c.Nombre, c.Geom }).ToListAsync(ct);
-            all.AddRange(dataC.Select(c => new SearchResult("codigosfijos", c.IdCodigo, $"{c.CodFijo} - {c.Nombre}", new Dictionary<string, object?> { ["IdCodigo"] = c.IdCodigo, ["CodFijo"] = c.CodFijo, ["Nombre"] = c.Nombre }, GetBbox(c.Geom!))));
+            var dataC = await context.CodigosFijos
+                .Where(c => c.Geom != null && (
+                    (c.CodF_SIG != null && c.CodF_SIG.Contains(qStr)) ||
+                    (c.CodFijo != null && c.CodFijo.ToString()!.Contains(qStr)) ||
+                    (c.CodF_SQL != null && c.CodF_SQL.ToString()!.Contains(qStr)) ||
+                    (c.Nombre != null && c.Nombre.Contains(qStr)) ||
+                    (c.Lote != null && c.Lote.NroLote != null && c.Lote.NroLote.Contains(qStr))
+                ))
+                .Take(100)
+                .Select(c => new {
+                    c.IdCodigo,
+                    c.CodFijo,
+                    c.CodF_SIG,
+                    c.Nombre,
+                    NroLote = c.Lote != null ? c.Lote.NroLote : null,
+                    UV = c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.UV : null,
+                    MZA = c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.MZA : null,
+                    c.Geom
+                })
+                .ToListAsync(ct);
+
+            all.AddRange(dataC.Select(c => new SearchResult(
+                "codigosfijos",
+                c.IdCodigo,
+                !string.IsNullOrWhiteSpace(c.Nombre) ? $"Código {c.CodFijo} - {c.Nombre}" : $"Código {c.CodFijo}",
+                new Dictionary<string, object?> {
+                    ["IdCodigo"] = c.IdCodigo,
+                    ["CodFijo"] = c.CodFijo,
+                    ["CodF_SIG"] = c.CodF_SIG,
+                    ["Nombre"] = c.Nombre,
+                    ["Titular"] = c.Nombre,
+                    ["Dueno"] = c.Nombre,
+                    ["NroLote"] = c.NroLote,
+                    ["UV"] = c.UV,
+                    ["MZA"] = c.MZA,
+                    ["TieneAgua"] = true
+                },
+                GetBbox(c.Geom!)
+            )));
         }
         if (checkLayer == null || checkLayer == "manzanas")
         {
-            var dataM = await context.Manzanas.Where(m => m.Geom != null && (m.UV_MZA!.Contains(qStr) || m.UV!.Contains(qStr) || m.MZA!.Contains(qStr)))
-                .Take(100).Select(m => new { m.IdManzana, m.UV, m.MZA, m.Geom }).ToListAsync(ct);
-            all.AddRange(dataM.Select(m => new SearchResult("manzanas", m.IdManzana, $"UV {m.UV} / MZA {m.MZA}", new Dictionary<string, object?> { ["IdManzana"] = m.IdManzana, ["UV"] = m.UV, ["MZA"] = m.MZA }, GetBbox(m.Geom!))));
+            var dataM = await context.Manzanas
+                .Where(m => m.Geom != null && (
+                    (m.UV_MZA != null && m.UV_MZA.Contains(qStr)) ||
+                    (m.UV != null && m.UV.Contains(qStr)) ||
+                    (m.MZA != null && m.MZA.Contains(qStr))
+                ))
+                .Take(100)
+                .Select(m => new { m.IdManzana, m.UV, m.MZA, m.Geom })
+                .ToListAsync(ct);
+
+            all.AddRange(dataM.Select(m => new SearchResult(
+                "manzanas",
+                m.IdManzana,
+                $"UV {m.UV} / MZA {m.MZA}",
+                new Dictionary<string, object?> {
+                    ["IdManzana"] = m.IdManzana,
+                    ["UV"] = m.UV,
+                    ["MZA"] = m.MZA
+                },
+                GetBbox(m.Geom!)
+            )));
         }
         if (checkLayer == null || checkLayer == "lotes")
         {
-            var dataL = await context.Lotes.Where(l => l.Geom != null && l.NroLote!.Contains(qStr))
-                .Take(100).Select(l => new { l.IdLote, l.NroLote, l.Geom }).ToListAsync(ct);
-            all.AddRange(dataL.Select(l => new SearchResult("lotes", l.IdLote, $"Lote {l.NroLote}", new Dictionary<string, object?> { ["IdLote"] = l.IdLote, ["NroLote"] = l.NroLote }, GetBbox(l.Geom!))));
+            var dataL = await context.Lotes
+                .Where(l => l.Geom != null && (
+                    (l.NroLote != null && l.NroLote.Contains(qStr)) ||
+                    (l.Manzana != null && (
+                        (l.Manzana.UV != null && l.Manzana.UV.Contains(qStr)) ||
+                        (l.Manzana.MZA != null && l.Manzana.MZA.Contains(qStr)) ||
+                        (l.Manzana.UV_MZA != null && l.Manzana.UV_MZA.Contains(qStr))
+                    )) ||
+                    l.CodigosFijos.Any(c =>
+                        (c.Nombre != null && c.Nombre.Contains(qStr)) ||
+                        (c.CodF_SIG != null && c.CodF_SIG.Contains(qStr)) ||
+                        (c.CodFijo != null && c.CodFijo.ToString()!.Contains(qStr))
+                    )
+                ))
+                .Take(100)
+                .Select(l => new {
+                    l.IdLote,
+                    l.NroLote,
+                    UV = l.Manzana != null ? l.Manzana.UV : null,
+                    MZA = l.Manzana != null ? l.Manzana.MZA : null,
+                    Titular = l.CodigosFijos.Where(c => c.Nombre != null).Select(c => c.Nombre).FirstOrDefault(),
+                    CodFijo = l.CodigosFijos.Where(c => c.CodFijo != null).Select(c => c.CodFijo).FirstOrDefault(),
+                    CodF_SIG = l.CodigosFijos.Where(c => c.CodF_SIG != null).Select(c => c.CodF_SIG).FirstOrDefault(),
+                    TieneAgua = l.CodigosFijos.Any(),
+                    l.Geom
+                })
+                .ToListAsync(ct);
+
+            all.AddRange(dataL.Select(l => {
+                var label = !string.IsNullOrWhiteSpace(l.Titular)
+                    ? $"Lote {l.NroLote} - {l.Titular}"
+                    : $"Lote {l.NroLote}";
+                return new SearchResult(
+                    "lotes",
+                    l.IdLote,
+                    label,
+                    new Dictionary<string, object?> {
+                        ["IdLote"] = l.IdLote,
+                        ["NroLote"] = l.NroLote,
+                        ["Titular"] = l.Titular,
+                        ["Dueno"] = l.Titular,
+                        ["Nombre"] = l.Titular,
+                        ["CodFijo"] = l.CodFijo,
+                        ["CodF_SIG"] = l.CodF_SIG,
+                        ["UV"] = l.UV,
+                        ["MZA"] = l.MZA,
+                        ["TieneAgua"] = l.TieneAgua
+                    },
+                    GetBbox(l.Geom!)
+                );
+            }));
         }
         if (checkLayer == null || checkLayer == "vias")
         {
-            var dataV = await context.Vias.Where(v => v.Geom != null && (v.Nombre!.Contains(qStr) || v.TipoVia!.Contains(qStr) || v.OSMID!.Contains(qStr)))
-                .Take(100).Select(v => new { v.IdVia, v.Nombre, v.Geom, v.TipoVia }).ToListAsync(ct);
-            all.AddRange(dataV.Select(v => new SearchResult("vias", v.IdVia, $"{v.Nombre} {v.TipoVia}", new Dictionary<string, object?> { ["IdVia"] = v.IdVia, ["Nombre"] = v.Nombre }, GetBbox(v.Geom!))));
+            var dataV = await context.Vias
+                .Where(v => v.Geom != null && (
+                    (v.Nombre != null && v.Nombre.Contains(qStr)) ||
+                    (v.TipoVia != null && v.TipoVia.Contains(qStr)) ||
+                    (v.OSMID != null && v.OSMID.Contains(qStr))
+                ))
+                .Take(100)
+                .Select(v => new { v.IdVia, v.Nombre, v.Geom, v.TipoVia })
+                .ToListAsync(ct);
+
+            all.AddRange(dataV.Select(v => new SearchResult(
+                "vias",
+                v.IdVia,
+                $"{v.Nombre} {v.TipoVia}".Trim(),
+                new Dictionary<string, object?> {
+                    ["IdVia"] = v.IdVia,
+                    ["Nombre"] = v.Nombre,
+                    ["TipoVia"] = v.TipoVia
+                },
+                GetBbox(v.Geom!)
+            )));
         }
 
         return all.Skip((page - 1) * pageSize).Take(pageSize).ToList();

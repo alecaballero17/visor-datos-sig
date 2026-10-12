@@ -27,7 +27,7 @@ namespace Arquis.Backend.Data.Seeders
             {
                 for (int i = 0; i < r.DbaseHeader.NumFields; i++)
                 {
-                    if (r.DbaseHeader.Fields[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return i;
+                    if (r.DbaseHeader.Fields[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return i + 1;
                 }
                 return -1;
             }

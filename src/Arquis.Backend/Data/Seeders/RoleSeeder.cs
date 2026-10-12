@@ -15,7 +15,8 @@ namespace Arquis.Backend.Data.Seeders
                 new Rol { NombreRol = "Lecturador", Descripcion = "Rol para lecturar medidores", Estado = true },
                 new Rol { NombreRol = "Cortador", Descripcion = "Rol para cortar servicios", Estado = true },
                 new Rol { NombreRol = "Reconexion", Descripcion = "Rol para la reconnexion por corte", Estado = true },
-                new Rol { NombreRol = "Consultor", Descripcion = "Consulta del visor cartográfico", Estado = true }
+                new Rol { NombreRol = "Consultor", Descripcion = "Consulta del visor cartográfico", Estado = true },
+                new Rol { NombreRol = "Operador", Descripcion = "Operador de campo en aplicación móvil", Estado = true }
             };
 
             foreach (var r in rolesToSeed)

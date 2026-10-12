@@ -35,7 +35,7 @@ public sealed class AguaPotableController(SqlConnectionFactory connections) : Co
             LEFT JOIN dbo.Lotes l ON l.IdLote=CASE WHEN @PorLote=1 THEN @Id ELSE c.IdLote END
             LEFT JOIN dbo.Manzanas m ON m.IdManzana=l.IdManzana
             WHERE
-            """ + (porLote ? " (c.IdLote=@Id OR c.Geom.STIntersects(@LoteGeom)=1)" : " c.IdCodigo=@Id") + " ORDER BY c.IdCodigo";
+            """ + (porLote ? " (c.IdLote=@Id OR (c.Geom IS NOT NULL AND @LoteGeom IS NOT NULL AND (c.Geom.STIntersects(@LoteGeom)=1 OR c.Geom.STDistance(@LoteGeom) <= 25)))" : " c.IdCodigo=@Id") + " ORDER BY c.IdCodigo";
         if (porLote) sql = "DECLARE @LoteGeom geography; SELECT @LoteGeom=Geom FROM dbo.Lotes WHERE IdLote=@Id; " + sql;
         await using var cmd = new SqlCommand(sql, cn);
         cmd.Parameters.AddWithValue("@Id", id);
