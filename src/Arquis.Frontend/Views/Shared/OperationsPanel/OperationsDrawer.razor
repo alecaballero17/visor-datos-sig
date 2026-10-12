@@ -1,0 +1,122 @@
+@using Arquis.Frontend.Views.Shared.OperationsPanel.Views
+
+<!-- Backdrop oscuro con desenfoque suave -->
+<div class="operations-drawer-backdrop @(IsOpen ? "open" : "")" @onclick="CloseDrawer"></div>
+
+<!-- Panel Retráctil Lateral (Sliding Drawer) -->
+<aside class="operations-drawer @(IsOpen ? "open" : "")" aria-label="Panel de Operaciones y Opciones">
+    <!-- Encabezado del Panel Retráctil -->
+    <div class="drawer-header">
+        <div class="d-flex align-items-center gap-2">
+            <div class="p-2 rounded bg-primary text-white d-flex align-items-center justify-content-center" style="width:32px; height:32px;">
+                <i class="bi bi-grid-1x2-fill"></i>
+            </div>
+            <div>
+                <h6 class="mb-0 fw-bold text-dark">Panel de Operaciones y Opciones</h6>
+                <small class="text-muted">Servicios de Agua Potable y Cuadrilla</small>
+            </div>
+        </div>
+        <button type="button" class="btn-close" @onclick="CloseDrawer" aria-label="Cerrar panel"></button>
+    </div>
+
+    <!-- Barra de Navegación por Categorías (Modular) -->
+    <nav class="drawer-nav-tabs">
+        <button type="button" class="drawer-tab-btn @(currentTab == "operadores" ? "active" : "")" @onclick='() => SetTab("operadores")'>
+            <i class="bi bi-people-fill"></i>
+            <span>Operadores</span>
+        </button>
+        <button type="button" class="drawer-tab-btn @(currentTab == "cortes" ? "active" : "")" @onclick='() => SetTab("cortes")'>
+            <i class="bi bi-slash-circle"></i>
+            <span>Cortes</span>
+        </button>
+        <button type="button" class="drawer-tab-btn @(currentTab == "reconexiones" ? "active" : "")" @onclick='() => SetTab("reconexiones")'>
+            <i class="bi bi-droplet-fill"></i>
+            <span>Reconexiones</span>
+        </button>
+        <button type="button" class="drawer-tab-btn @(currentTab == "tracking" ? "active" : "")" @onclick='() => SetTab("tracking")'>
+            <i class="bi bi-broadcast"></i>
+            <span>Monitoreo GPS</span>
+        </button>
+        <button type="button" class="drawer-tab-btn @(currentTab == "configuracion" ? "active" : "")" @onclick='() => SetTab("configuracion")'>
+            <i class="bi bi-sliders"></i>
+            <span>Opciones</span>
+        </button>
+    </nav>
+
+    <!-- Cuerpo del Panel: Renderizado de la Vista Individual Modular -->
+    <div class="drawer-body">
+        @if (currentTab == "operadores")
+        {
+            <OperadoresListView OnAsignarCorte="IrACortesParaOperario"
+                                OnAsignarReconexion="IrAReconexionParaOperario"
+                                OnVerHistorial="IrAMonitoreoParaOperario" />
+        }
+        else if (currentTab == "cortes")
+        {
+            <AsignarCortesView PreselectedOperarioId="@selectedOperarioId"
+                               OnVerRutaEnMapa="CerrarParaVerMapa" />
+        }
+        else if (currentTab == "reconexiones")
+        {
+            <AsignarReconexionesView PreselectedOperarioId="@selectedOperarioId"
+                                     OnVerRutaEnMapa="CerrarParaVerMapa" />
+        }
+        else if (currentTab == "tracking")
+        {
+            <MonitoreoGpsView PreselectedOperarioId="@selectedOperarioId" />
+        }
+        else if (currentTab == "configuracion")
+        {
+            <ConfiguracionVisorView />
+        }
+    </div>
+</aside>
+
+@code {
+    [Parameter] public bool IsOpen { get; set; }
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private string currentTab = "operadores";
+    private string selectedOperarioId = "";
+
+    public void OpenInTab(string tab)
+    {
+        currentTab = tab;
+        IsOpen = true;
+        IsOpenChanged.InvokeAsync(true);
+    }
+
+    private void SetTab(string tab)
+    {
+        currentTab = tab;
+    }
+
+    private async Task CloseDrawer()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+
+    private void IrACortesParaOperario(string operarioId)
+    {
+        selectedOperarioId = operarioId;
+        currentTab = "cortes";
+    }
+
+    private void IrAReconexionParaOperario(string operarioId)
+    {
+        selectedOperarioId = operarioId;
+        currentTab = "reconexiones";
+    }
+
+    private void IrAMonitoreoParaOperario(string operarioId)
+    {
+        selectedOperarioId = operarioId;
+        currentTab = "tracking";
+    }
+
+    private async Task CerrarParaVerMapa(object _)
+    {
+        await CloseDrawer();
+    }
+}

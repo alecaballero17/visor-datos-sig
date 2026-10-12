@@ -8,6 +8,7 @@ class AuthService {
       data: {
         'usuario': usuarioEmail,
         'password': password,
+        'origen': 'movil',
       },
     );
     return response;
@@ -20,6 +21,7 @@ class AuthService {
         'nombre': nombre,
         'email': email,
         'password': password,
+        'origen': 'movil',
       },
     );
     return response;

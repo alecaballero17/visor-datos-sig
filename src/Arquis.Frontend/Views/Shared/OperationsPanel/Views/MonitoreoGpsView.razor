@@ -1,0 +1,192 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="drawer-view-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-1">
+                <i class="bi bi-broadcast text-primary"></i>
+                <span>Monitoreo GPS y Trayectorias</span>
+            </h6>
+            <small class="text-muted">Historial de recorridos tipo Google Maps Timeline</small>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="LimpiarRutaMapa" title="Limpiar trayectoria del mapa">
+            <i class="bi bi-x-circle me-1"></i>Limpiar
+        </button>
+    </div>
+
+    <!-- Filtros de Consulta -->
+    <div class="p-3 border rounded bg-white mb-3 shadow-sm" style="border-color:#dadce0 !important;">
+        <div class="row g-2 mb-2">
+            <div class="col-7">
+                <label class="form-label small fw-semibold text-muted mb-1">Técnico de Campo</label>
+                <select class="form-select form-select-sm" @bind="selectedOperario">
+                    @foreach (var op in operarios)
+                    {
+                        <option value="@op.OperarioId">@op.NombreOperario (@op.Rol)</option>
+                    }
+                </select>
+            </div>
+            <div class="col-5">
+                <label class="form-label small fw-semibold text-muted mb-1">Fecha</label>
+                <input type="date" class="form-control form-control-sm" @bind="selectedFecha" />
+            </div>
+        </div>
+
+        <button type="button" class="btn btn-sm btn-primary w-100 d-flex align-items-center justify-content-center gap-1"
+                disabled="@isLoading"
+                @onclick="ConsultarHistorial">
+            <i class="bi bi-search"></i>
+            <span>@(isLoading ? "Cargando..." : "Consultar Recorrido")</span>
+        </button>
+    </div>
+
+    @if (puntosHistorial.Count == 0)
+    {
+        <div class="text-center py-5 border rounded bg-white text-muted">
+            <i class="bi bi-geo-alt fs-2 d-block mb-1"></i>
+            <div class="fw-semibold text-dark">Sin registros de recorrido</div>
+            <small>Selecciona un técnico y presiona Consultar para trazar su ruta.</small>
+        </div>
+    }
+    else
+    {
+        <!-- Resumen de Trayectoria -->
+        <div class="p-3 border rounded bg-white mb-3 shadow-sm">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <span class="badge bg-primary-subtle text-primary mb-1">@puntosHistorial.Count posiciones registradas</span>
+                    <div class="small text-muted">
+                        Horario: @puntosHistorial.First().Timestamp.ToLocalTime().ToString("HH:mm:ss") - @puntosHistorial.Last().Timestamp.ToLocalTime().ToString("HH:mm:ss")
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-success d-flex align-items-center gap-1" @onclick="() => ReproducirAnimacion(true)">
+                    <i class="bi bi-play-fill"></i>
+                    <span>Reproducir</span>
+                </button>
+            </div>
+
+            <!-- Tabla de Checkpoints -->
+            <div class="border rounded overflow-hidden" style="max-height: 240px; overflow-y: auto;">
+                <table class="table table-sm table-hover mb-0" style="font-size: 0.78rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-2">Hora</th>
+                            <th>Coordenadas</th>
+                            <th>Velocidad</th>
+                            <th class="pe-2">Batería</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pt in puntosHistorial)
+                        {
+                            <tr>
+                                <td class="ps-2 fw-semibold">@pt.Timestamp.ToLocalTime().ToString("HH:mm:ss")</td>
+                                <td class="font-monospace text-muted">@pt.Latitud.ToString("F4"), @pt.Longitud.ToString("F4")</td>
+                                <td>@pt.Velocidad.ToString("F0") km/h</td>
+                                <td class="pe-2">
+                                    <span class="d-inline-flex align-items-center gap-1">
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="6" width="18" height="12" rx="2"></rect><line x1="23" y1="11" x2="23" y2="13"></line></svg>
+                                        @pt.Bateria%
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? PreselectedOperarioId { get; set; }
+    [Parameter] public EventCallback OnCloseRequest { get; set; }
+
+    private bool isLoading = false;
+    private string selectedOperario = "";
+    private DateTime selectedFecha = DateTime.UtcNow.Date;
+
+    private List<OperarioItemDto> operarios = new();
+    private List<TrackingPuntoItemDto> puntosHistorial = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarOperarios();
+        if (!string.IsNullOrEmpty(PreselectedOperarioId))
+        {
+            selectedOperario = PreselectedOperarioId;
+            await ConsultarHistorial();
+        }
+    }
+
+    private async Task CargarOperarios()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<OperarioItemDto>>("/api/tracking/operarios");
+            operarios = res ?? new();
+            if (string.IsNullOrEmpty(selectedOperario) && operarios.Count > 0)
+            {
+                selectedOperario = operarios[0].OperarioId;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar operarios en monitoreo: {ex.Message}");
+        }
+    }
+
+    public async Task ConsultarHistorial()
+    {
+        if (string.IsNullOrEmpty(selectedOperario)) return;
+        isLoading = true;
+        try
+        {
+            var fechaStr = selectedFecha.ToString("yyyy-MM-dd");
+            var res = await Http.GetFromJsonAsync<List<TrackingPuntoItemDto>>($"/api/tracking/historial/{selectedOperario}?fecha={fechaStr}");
+            puntosHistorial = res ?? new();
+
+            if (puntosHistorial.Count > 0)
+            {
+                await ReproducirAnimacion(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al consultar historial: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ReproducirAnimacion(bool conAnimacion)
+    {
+        if (puntosHistorial.Count == 0) return;
+        await JS.InvokeVoidAsync("arquis.showRouteHistory", puntosHistorial, conAnimacion);
+    }
+
+    private async Task LimpiarRutaMapa()
+    {
+        await JS.InvokeVoidAsync("arquis.clearRouteHistory");
+    }
+
+    public class OperarioItemDto
+    {
+        public string OperarioId { get; set; } = "";
+        public string NombreOperario { get; set; } = "";
+        public string Rol { get; set; } = "";
+    }
+
+    public class TrackingPuntoItemDto
+    {
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public double Velocidad { get; set; }
+        public double Rumbo { get; set; }
+        public int Bateria { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+}

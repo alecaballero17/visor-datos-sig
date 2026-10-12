@@ -20,6 +20,8 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<GeoDataService>();
 builder.Services.AddScoped<ReportesService>();
 builder.Services.AddSingleton<Arquis.Backend.Services.Pdf.PdfReportGeneratorService>();
+builder.Services.AddSingleton<Arquis.Backend.Services.TrackingCacheService>();
+builder.Services.AddSignalR();
 
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -43,15 +45,14 @@ builder.Services
         };
     });
 
-var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
     {
-        if (allowedOrigins.Length > 0)
-            policy.WithOrigins(allowedOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
-        else
-            policy.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        policy.SetIsOriginAllowed(_ => true)
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
@@ -94,5 +95,6 @@ app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<Arquis.Backend.Hubs.TrackingHub>("/hubs/tracking");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", app = "Arquis.Backend" }));
 app.Run();

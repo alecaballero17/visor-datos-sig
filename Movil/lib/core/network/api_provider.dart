@@ -181,10 +181,13 @@ class ApiProvider {
           return Exception('Tiempo de espera agotado. Verifica tu conexión a internet.');
         
         case DioExceptionType.badResponse:
-          final statusCode = error.response?.statusCode;
-          // Intenta extraer un mensaje de error que venga en el JSON de la API
-          final message = error.response?.data?['message'] ?? error.message;
-          return Exception('Error $statusCode: $message');
+          final data = error.response?.data;
+          String? serverMsg;
+          if (data is Map) {
+            serverMsg = data['mensaje']?.toString() ?? data['message']?.toString();
+          }
+          final message = serverMsg ?? error.message ?? 'Error del servidor';
+          return Exception(message);
           
         case DioExceptionType.cancel:
           return Exception('La petición fue cancelada.');

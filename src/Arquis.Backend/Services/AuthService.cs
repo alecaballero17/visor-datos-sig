@@ -45,12 +45,6 @@ public sealed class AuthService(ArquisDbContext context)
 
     public async Task RegisterAsync(RegisterRequest request, CancellationToken ct)
     {
-        var rolConsultor = await context.Roles
-            .FirstOrDefaultAsync(r => r.NombreRol == "Consultor" && r.Estado, ct);
-
-        if (rolConsultor == null)
-            throw new Exception("El rol de registro no esta disponible.");
-
         var emailTrimmed = request.Email.Trim().ToLowerInvariant();
 
         var exists = await context.Usuarios
@@ -59,13 +53,41 @@ public sealed class AuthService(ArquisDbContext context)
         if (exists)
             throw new Exception("El email ya esta registrado.");
 
+        // Si el registro proviene del móvil, el rol asignado es obligatoriamente "Operador"
+        var esMovil = string.Equals(request.Origen, "movil", StringComparison.OrdinalIgnoreCase);
+        var nombreRolObjetivo = esMovil ? "Operador" : "Consultor";
+
+        var rolObjetivo = await context.Roles
+            .FirstOrDefaultAsync(r => r.NombreRol == nombreRolObjetivo && r.Estado, ct);
+
+        if (rolObjetivo == null)
+        {
+            rolObjetivo = new Rol
+            {
+                NombreRol = nombreRolObjetivo,
+                Descripcion = esMovil ? "Operador de campo en aplicación móvil" : "Consulta del visor cartográfico",
+                Estado = true
+            };
+            context.Roles.Add(rolObjetivo);
+            await context.SaveChangesAsync(ct);
+        }
+
         var salt = RandomNumberGenerator.GetBytes(32);
         const int iterations = 210000;
         var hash = Rfc2898DeriveBytes.Pbkdf2(request.Password, salt, iterations, HashAlgorithmName.SHA256, 32);
 
+        // Si es móvil, generar un identificador de login nemotécnico basado en su email
+        var usernameBase = emailTrimmed.Split('@')[0];
+        var usernameLogin = usernameBase;
+        int sufijo = 1;
+        while (await context.Usuarios.AnyAsync(u => u.Login == usernameLogin, ct))
+        {
+            usernameLogin = $"{usernameBase}{sufijo++}";
+        }
+
         var nuevoUsuario = new Usuario
         {
-            Login = "u" + Guid.NewGuid().ToString("N"),
+            Login = esMovil ? usernameLogin : "u" + Guid.NewGuid().ToString("N"),
             Nombre = request.Nombre.Trim(),
             Email = emailTrimmed,
             PasswordHash = hash,
@@ -81,24 +103,28 @@ public sealed class AuthService(ArquisDbContext context)
         context.UsuariosRoles.Add(new UsuarioRol
         {
             IdUsuario = nuevoUsuario.IdUsuario,
-            IdRol = rolConsultor.IdRol
+            IdRol = rolObjetivo.IdRol
         });
 
-        var menusDefault = await context.MenuOpciones
-            .Where(m => m.Estado && (m.NombreMenu == "Dashboard" || m.NombreMenu == "Visualización General"))
-            .ToListAsync(ct);
-
-        foreach (var menu in menusDefault)
+        // Solo asignar menús web de consulta si NO es operador móvil
+        if (!esMovil)
         {
-            context.UsuarioMenus.Add(new UsuarioMenu
+            var menusDefault = await context.MenuOpciones
+                .Where(m => m.Estado && (m.NombreMenu == "Dashboard" || m.NombreMenu == "Visualización General"))
+                .ToListAsync(ct);
+
+            foreach (var menu in menusDefault)
             {
-                IdUsuario = nuevoUsuario.IdUsuario,
-                IdMenu = menu.IdMenu,
-                PuedeVer = true,
-                PuedeCrear = false,
-                PuedeEditar = false,
-                PuedeEliminar = false
-            });
+                context.UsuarioMenus.Add(new UsuarioMenu
+                {
+                    IdUsuario = nuevoUsuario.IdUsuario,
+                    IdMenu = menu.IdMenu,
+                    PuedeVer = true,
+                    PuedeCrear = false,
+                    PuedeEditar = false,
+                    PuedeEliminar = false
+                });
+            }
         }
 
         await context.SaveChangesAsync(ct);

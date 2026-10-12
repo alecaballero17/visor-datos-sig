@@ -38,6 +38,39 @@ public sealed class AuthController(AuthService authService) : ControllerBase
             await authService.LogAccessAsync(request.Usuario, false, HttpContext.Connection.RemoteIpAddress?.ToString(), "Credenciales inválidas", ct);
             return Unauthorized(new { mensaje="Credenciales inválidas." });
         }
+
+        var esOrigenMovil = string.Equals(request.Origen, "movil", StringComparison.OrdinalIgnoreCase);
+
+        bool tieneRolOperador = session.Roles.Any(r => 
+            r.Equals("Operador", StringComparison.OrdinalIgnoreCase) ||
+            r.Equals("Cortador", StringComparison.OrdinalIgnoreCase) ||
+            r.Equals("Lecturador", StringComparison.OrdinalIgnoreCase) ||
+            r.Equals("Reconexion", StringComparison.OrdinalIgnoreCase));
+
+        bool esAdmin = session.Roles.Any(r => r.Equals("Administrador", StringComparison.OrdinalIgnoreCase));
+
+        // REGLA 1: Acceso a Plataforma WEB (esOrigenMovil == false)
+        // Las cuentas de Operador son exclusivas para móvil y no pueden ingresar a la plataforma web
+        if (!esOrigenMovil && tieneRolOperador && !esAdmin)
+        {
+            await authService.LogAccessAsync(session.Usuario, false, HttpContext.Connection.RemoteIpAddress?.ToString(), "Acceso web denegado: rol Operador exclusivo de móvil", ct);
+            return StatusCode(StatusCodes.Status403Forbidden, new 
+            { 
+                mensaje = "Acceso denegado: Esta cuenta tiene rol de Operador y es exclusiva de la aplicación móvil. No tiene autorización para ingresar a la plataforma web." 
+            });
+        }
+
+        // REGLA 2: Acceso a Aplicación MÓVIL (esOrigenMovil == true)
+        // Todos los que ocupan la app móvil deben ser operador (o administrador)
+        if (esOrigenMovil && !tieneRolOperador && !esAdmin)
+        {
+            await authService.LogAccessAsync(session.Usuario, false, HttpContext.Connection.RemoteIpAddress?.ToString(), "Acceso móvil denegado: cuenta sin rol de operador", ct);
+            return StatusCode(StatusCodes.Status403Forbidden, new 
+            { 
+                mensaje = "Acceso denegado: La aplicación móvil es de uso exclusivo para Operadores de campo. Esta cuenta pertenece a la plataforma web." 
+            });
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, session.Id.ToString()),

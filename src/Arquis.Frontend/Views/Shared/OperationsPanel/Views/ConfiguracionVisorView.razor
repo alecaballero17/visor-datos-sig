@@ -1,0 +1,101 @@
+@inject IJSRuntime JS
+
+<div class="drawer-view-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-1">
+                <i class="bi bi-sliders text-primary"></i>
+                <span>Configuración y Preferencias del Visor</span>
+            </h6>
+            <small class="text-muted">Parámetros de visualización cartográfica y telemetría</small>
+        </div>
+    </div>
+
+    <!-- 1. Capas Cartográficas -->
+    <div class="p-3 border rounded bg-white mb-3 shadow-sm" style="border-color:#dadce0 !important;">
+        <span class="small fw-bold text-muted text-uppercase d-block mb-2" style="font-size:0.75rem;">Capas Territoriales</span>
+        <div class="d-flex flex-column gap-2">
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sw-lotes" @bind="showLotes" @bind:after="ActualizarCapas" />
+                <label class="form-check-label small fw-semibold" for="sw-lotes">Lotes Catastrales</label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sw-codigos" @bind="showCodigos" @bind:after="ActualizarCapas" />
+                <label class="form-check-label small fw-semibold" for="sw-codigos">Códigos Fijos de Agua Potable</label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sw-manzanas" @bind="showManzanas" @bind:after="ActualizarCapas" />
+                <label class="form-check-label small fw-semibold" for="sw-manzanas">Manzanas Urbanas</label>
+            </div>
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="sw-vias" @bind="showVias" @bind:after="ActualizarCapas" />
+                <label class="form-check-label small fw-semibold" for="sw-vias">Red Vial / Ejes de Vías</label>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. Filtro Rápido de Agua -->
+    <div class="p-3 border rounded bg-white mb-3 shadow-sm" style="border-color:#dadce0 !important;">
+        <span class="small fw-bold text-muted text-uppercase d-block mb-2" style="font-size:0.75rem;">Estado de Suministro de Agua</span>
+        <div class="btn-group btn-group-sm w-100" role="group">
+            <input type="radio" class="btn-check" name="btnWaterFilter" id="wf-all" checked="@(filtroAgua == "all")" @onchange='() => SetFiltroAgua("all")' />
+            <label class="btn btn-outline-secondary" for="wf-all">Todos</label>
+
+            <input type="radio" class="btn-check" name="btnWaterFilter" id="wf-with" checked="@(filtroAgua == "with")" @onchange='() => SetFiltroAgua("with")' />
+            <label class="btn btn-outline-success" for="wf-with">Con Agua</label>
+
+            <input type="radio" class="btn-check" name="btnWaterFilter" id="wf-without" checked="@(filtroAgua == "without")" @onchange='() => SetFiltroAgua("without")' />
+            <label class="btn btn-outline-danger" for="wf-without">Sin Agua</label>
+        </div>
+    </div>
+
+    <!-- 3. Acciones de Utilidad Cartográfica -->
+    <div class="p-3 border rounded bg-white shadow-sm" style="border-color:#dadce0 !important;">
+        <span class="small fw-bold text-muted text-uppercase d-block mb-2" style="font-size:0.75rem;">Navegación del Mapa</span>
+        <div class="d-flex flex-column gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center gap-1"
+                    @onclick="RecentrarMapa">
+                <i class="bi bi-compass"></i>
+                <span>Centrar en Casco Urbano Central</span>
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center justify-content-center gap-1"
+                    @onclick="LimpiarCapasTemporales">
+                <i class="bi bi-eraser"></i>
+                <span>Limpiar Trayectorias y Rutas Temporales</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool showLotes = true;
+    private bool showCodigos = true;
+    private bool showManzanas = true;
+    private bool showVias = true;
+    private string filtroAgua = "all";
+
+    private async Task ActualizarCapas()
+    {
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "lotes", showLotes);
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "codigosfijos", showCodigos);
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "manzanas", showManzanas);
+        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "vias", showVias);
+    }
+
+    private async Task SetFiltroAgua(string modo)
+    {
+        filtroAgua = modo;
+        await JS.InvokeVoidAsync("arquis.setWaterFilter", modo);
+    }
+
+    private async Task RecentrarMapa()
+    {
+        await JS.InvokeVoidAsync("arquis.centerOnCoords", -17.78180, -63.18190, 16);
+    }
+
+    private async Task LimpiarCapasTemporales()
+    {
+        await JS.InvokeVoidAsync("arquis.clearRouteHistory");
+        await JS.InvokeVoidAsync("arquis.clearRutaTrabajo");
+    }
+}

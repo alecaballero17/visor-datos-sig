@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../../shared/utils/ui_engine/ui_screen.dart';
 import '../../../../../shared/utils/ui_engine/widget_modifiers.dart';
-import '../../../../../shared/utils/ui_engine/list_modifiers.dart';
 import '../../../../../shared/utils/ui_engine/string_modifiers.dart';
 import '../../../../../shared/utils/ui_engine/icon_modifiers.dart';
 
@@ -43,13 +41,18 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              "Inicia sesión para continuar".texto(
-                size: 16, 
-                color: Colors.black54, 
-                alineacion: TextAlign.center
+              const SizedBox(height: 12),
+              CustomRebuilder(
+                builder: (actualizar) => (controlador.isLogin 
+                  ? "Portal Móvil · Operadores de Campo" 
+                  : "Registro de Nuevo Operador de Campo").texto(
+                  size: 15, 
+                  color: const Color(0xFF1A73E8), 
+                  negrita: true,
+                  alineacion: TextAlign.center
+                ),
               ),
-              const SizedBox(height: 60),
+              const SizedBox(height: 40),
 
               CustomRebuilder(
                 builder: (actualizar) => Column(
@@ -58,28 +61,49 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                     if (!controlador.isLogin) ...[
                       _buildMaterialTextField(
                         controller: controlador.nombreCtrl,
-                        label: "Nombre completo",
+                        label: "Nombre completo del técnico",
                         isPassword: false,
                       ),
                       const SizedBox(height: 20),
                     ],
                     _buildMaterialTextField(
                       controller: controlador.emailCtrl,
-                      label: "Correo electrónico o teléfono",
+                      label: "Correo electrónico institucional",
                       isPassword: false,
                     ),
                     const SizedBox(height: 20),
                     _buildMaterialTextField(
                       controller: controlador.passwordCtrl,
-                      label: "Introduce tu contraseña",
+                      label: "Contraseña",
                       isPassword: true,
                     ),
                     
-                    if (!controlador.isLogin)
+                    if (!controlador.isLogin) ...[
                       Padding(
                         padding: const EdgeInsets.only(top: 8.0, left: 4.0),
                         child: "Mínimo 8 caracteres.".texto(color: Colors.black54, size: 12),
                       ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F0FE),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFBDC1C6)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.badge_outlined, color: Color(0xFF1A73E8), size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: "Esta cuenta se registrará con perfil de Operador de Campo para uso exclusivo en la app móvil."
+                                  .texto(color: const Color(0xFF1F1F1F), size: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     if (controlador.errorMessage != null)
                       Padding(
@@ -115,14 +139,15 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                         ),
                       ),
 
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 32),
                     
                     // Botón estilo Google Primario
                     ElevatedButton(
                       onPressed: controlador.isCargando ? null : () async {
                         if (controlador.isLogin) {
                           final success = await controlador.login(actualizar);
-                          if (success && mounted) {
+                          if (!context.mounted) return;
+                          if (success) {
                             Navigator.pushReplacement(
                               context,
                               MaterialPageRoute(builder: (context) => const MapaPantallaInicio()),
@@ -146,7 +171,7 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                             height: 20, width: 20,
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
-                        : (controlador.isLogin ? "Ingresar" : "Crear cuenta").texto(color: Colors.white, negrita: true, size: 16),
+                        : (controlador.isLogin ? "Ingresar como Operador" : "Registrar como Operador").texto(color: Colors.white, negrita: true, size: 16),
                     ),
                     
                     const SizedBox(height: 24),
@@ -155,7 +180,7 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                     Center(
                       child: TextButton(
                         onPressed: () => controlador.toggleMode(actualizar),
-                        child: (controlador.isLogin ? "¿No tienes cuenta? Registrar usuario" : "¿Ya tienes cuenta? Iniciar sesión").texto(
+                        child: (controlador.isLogin ? "¿Nuevo técnico? Registrar nuevo Operador" : "¿Ya eres Operador? Iniciar sesión").texto(
                           color: const Color(0xFF1A73E8),
                           negrita: true,
                         ),

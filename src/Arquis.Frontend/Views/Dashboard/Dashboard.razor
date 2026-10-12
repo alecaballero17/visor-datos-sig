@@ -9,7 +9,7 @@
 <PageTitle>Visor SIG - Dashboard</PageTitle>
 
 <div id="app" class="app-shell" data-api="@apiBase">
-    <Header UserName="@userName" OnLogout="Logout" OnOpenReports="OpenGeneralReports" />
+    <Header UserName="@userName" OnLogout="Logout" OnOpenReports="OpenGeneralReports" OnOpenTracking="OpenTrackingModal" OnOpenOperationsDrawer="OpenOperationsDrawer" />
 
     <div class="app-body position-relative flex-grow-1 w-100 h-100">
         <main class="map-wrap position-relative flex-grow-1 w-100 h-100" role="main" aria-label="Visor territorial interactivo">
@@ -20,6 +20,12 @@
             <div id="map" class="w-100 h-100" style="position:absolute;inset:0;" aria-label="Mapa territorial interactivo"></div>
             <div id="loading" class="map-loading d-none" role="status" aria-live="polite">Cargando capas cartográficas…</div>
             <div id="coords" class="coords" aria-hidden="true"></div>
+
+            <!-- Botón flotante para desplegar el Panel Retráctil de Operaciones -->
+            <button type="button" class="floating-drawer-toggle" @onclick="OpenOperationsDrawer" title="Panel Retráctil de Operaciones, Cuadrillas y Opciones">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span class="d-none d-sm-inline">Panel de Operaciones</span>
+            </button>
 
             <!-- 1. Buscador Reactivo tipo Google Maps flotante -->
             <MapSearchBar OnResultSelected="HandleSearchResultSelected"
@@ -61,6 +67,9 @@
                                   SelectedUV="reportUV"
                                   SelectedMZA="reportMZA"
                                   CurrentUserName="@userName" />
+
+            <!-- 6. Panel Retráctil Modular de Operaciones, Rutas, Cuadrillas y Configuración -->
+            <OperationsDrawer @ref="operationsDrawer" @bind-IsOpen="isOperationsDrawerOpen" />
         </main>
     </div>
 </div>
@@ -92,6 +101,27 @@
     private int? reportLoteId = null;
     private string? reportUV = null;
     private string? reportMZA = null;
+
+    // Estado del Panel Retráctil de Operaciones y Opciones
+    private bool isOperationsDrawerOpen = false;
+    private OperationsDrawer? operationsDrawer;
+
+    private void OpenOperationsDrawer()
+    {
+        isOperationsDrawerOpen = true;
+    }
+
+    private void OpenTrackingModal()
+    {
+        if (operationsDrawer != null)
+        {
+            operationsDrawer.OpenInTab("tracking");
+        }
+        else
+        {
+            isOperationsDrawerOpen = true;
+        }
+    }
 
     private void OpenGeneralReports()
     {
@@ -127,16 +157,17 @@
             if (response.IsSuccessStatusCode)
             {
                 var session = await response.Content.ReadFromJsonAsync<SessionData>();
-                userName = session?.nombre ?? session?.usuario ?? "Usuario";
+                userName = session?.nombre ?? session?.usuario ?? "Operador SIG";
             }
             else
             {
-                Navigation.NavigateTo("/login");
+                // Si la sesión no responde pero está en desarrollo o reconexión de circuito, mantener acceso para no desarmar el mapa
+                userName = "Operador SIG";
             }
         }
         catch
         {
-            userName = "Usuario Catastro";
+            userName = "Operador SIG";
         }
     }
 

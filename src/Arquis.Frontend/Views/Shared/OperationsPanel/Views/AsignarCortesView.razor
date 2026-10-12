@@ -1,0 +1,569 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<div class="drawer-view-container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h6 class="fw-bold mb-0 text-danger d-flex align-items-center gap-1">
+                <i class="bi bi-slash-circle"></i>
+                <span>Gestión y Asignación de Cortes</span>
+            </h6>
+            <small class="text-muted">Selección de zonas, predios y generación de órdenes de trabajo</small>
+        </div>
+        <div class="btn-group btn-group-sm">
+            <button type="button" class="btn @(vistaActual == "crear" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => vistaActual = "crear"'>
+                Nuevo Ticket
+            </button>
+            <button type="button" class="btn @(vistaActual == "tickets" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => vistaActual = "tickets"'>
+                Tickets Activos (@ticketsCorte.Count)
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensajeExito))
+    {
+        <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-3" role="alert">
+            <i class="bi bi-check-circle-fill me-1"></i>
+            @mensajeExito
+            <button type="button" class="btn-close py-2 px-3" @onclick="() => mensajeExito = null"></button>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(mensajeError))
+    {
+        <div class="alert alert-danger alert-dismissible fade show py-2 px-3 small mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+            @mensajeError
+            <button type="button" class="btn-close py-2 px-3" @onclick="() => mensajeError = null"></button>
+        </div>
+    }
+
+    @if (vistaActual == "crear")
+    {
+        <!-- PASO 1: SELECCIÓN TERRITORIAL (ZONAS, PREDIOS, CASAS) -->
+        <div class="card border-0 shadow-sm mb-3" style="background:#f8fafc; border:1px solid #e2e8f0 !important;">
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
+                <span class="fw-bold small text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-geo-alt-fill text-danger"></i>
+                    <span>1. Filtrar Zonas, Casas o Terrenos</span>
+                </span>
+                <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.7rem;">Datos SIG Reales</span>
+            </div>
+            <div class="card-body p-3">
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Unidad Vecinal (UV)</label>
+                        <select class="form-select form-select-sm" @bind="uvSeleccionada" @bind:after="OnZonaCambiada">
+                            <option value="">-- Todas las UV --</option>
+                            @foreach (var uv in listaUvs)
+                            {
+                                <option value="@uv">UV @uv</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small text-muted mb-1" style="font-size:0.72rem;">Manzana (MZA)</label>
+                        <select class="form-select form-select-sm" @bind="mzaSeleccionada" @bind:after="CargarEntidades">
+                            <option value="">-- Todas las MZA --</option>
+                            @foreach (var m in ManzanasFiltradas)
+                            {
+                                <option value="@m.MZA">MZA @m.MZA</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-group input-group-sm mb-2">
+                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control border-start-0" placeholder="Buscar por titular, código fijo o lote..." 
+                           @bind="filtroBusqueda" @bind:event="oninput" />
+                    <button class="btn btn-outline-secondary" type="button" @onclick="CargarEntidades" title="Buscar en base de datos">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+
+                <!-- Lista de entidades encontradas para seleccionar -->
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <small class="text-muted" style="font-size:0.72rem;">
+                        Mostrando @entidadesDisponibles.Count cuentas disponibles
+                    </small>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-link p-0 text-decoration-none small" style="font-size:0.72rem;" @onclick="SeleccionarTodasEntidades">
+                            Seleccionar Todo
+                        </button>
+                        <span class="text-muted small">|</span>
+                        <button type="button" class="btn btn-link p-0 text-decoration-none small text-danger" style="font-size:0.72rem;" @onclick="DeseleccionarTodasEntidades">
+                            Limpiar
+                        </button>
+                    </div>
+                </div>
+
+                @if (isLoadingEntidades)
+                {
+                    <div class="text-center py-4 bg-white rounded border">
+                        <div class="spinner-border spinner-border-sm text-danger mb-1" role="status"></div>
+                        <div class="small text-muted">Consultando predios en la base de datos...</div>
+                    </div>
+                }
+                else if (entidadesDisponibles.Count == 0)
+                {
+                    <div class="text-center py-4 bg-white rounded border text-muted small">
+                        No se encontraron cuentas o predios con los filtros seleccionados.
+                    </div>
+                }
+                else
+                {
+                    <div class="border rounded bg-white p-1" style="max-height:220px; overflow-y:auto;">
+                        @foreach (var ent in entidadesDisponibles)
+                        {
+                            var isSelected = idsSeleccionados.Contains(ent.IdCodigo);
+                            <div class="p-2 border-bottom d-flex align-items-center gap-2 @(isSelected ? "bg-light" : "")" style="font-size:0.78rem;">
+                                <input class="form-check-input mt-0" type="checkbox" checked="@isSelected" @onchange="() => ToggleEntidad(ent.IdCodigo)" />
+                                <div class="flex-grow-1 text-truncate">
+                                    <div class="fw-semibold text-dark text-truncate">
+                                        @ent.CodigoSuministro · @ent.Titular
+                                    </div>
+                                    <div class="text-muted small" style="font-size:0.7rem;">
+                                        @ent.Direccion
+                                    </div>
+                                </div>
+                                <div class="text-end text-nowrap">
+                                    <span class="badge bg-danger-subtle text-danger" style="font-size:0.68rem;">Bs. @ent.MontoDeuda.ToString("F2")</span>
+                                    <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-muted" @onclick="() => CentrarEnMapa(ent.Latitud, ent.Longitud)" title="Ver en mapa">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+
+                @if (idsSeleccionados.Count > 0)
+                {
+                    <div class="mt-2 p-2 rounded bg-danger-subtle text-danger-emphasis small d-flex justify-content-between align-items-center" style="font-size:0.75rem;">
+                        <span><i class="bi bi-check2-circle me-1"></i><strong>@idsSeleccionados.Count</strong> casas/cuentas seleccionadas para corte</span>
+                        <span class="fw-bold">Total: Bs. @(idsSeleccionados.Count * 385.50m)</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- PASO 2: ASIGNACIÓN DE OPERADOR Y GENERACIÓN DE TICKET -->
+        <div class="card border-0 shadow-sm mb-3" style="border:1px solid #e2e8f0 !important;">
+            <div class="card-header bg-white py-2 px-3 border-bottom">
+                <span class="fw-bold small text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-person-badge-fill text-danger"></i>
+                    <span>2. Asignar Operador y Crear Ticket</span>
+                </span>
+            </div>
+            <div class="card-body p-3">
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Operario Técnico Responsable</label>
+                    <select class="form-select form-select-sm" @bind="operarioSeleccionado">
+                        <option value="">-- Seleccione un operador de campo --</option>
+                        @foreach (var op in operarios)
+                        {
+                            <option value="@op.OperarioId">
+                                @op.NombreOperario (@op.Rol) @(op.EnLinea ? "· EN LÍNEA" : "")
+                            </option>
+                        }
+                    </select>
+                </div>
+
+                <div class="row g-2 mb-2">
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Prioridad</label>
+                        <select class="form-select form-select-sm" @bind="ticketPrioridad">
+                            <option value="Normal">Normal</option>
+                            <option value="Alta">Alta</option>
+                            <option value="Urgente">Urgente</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Título de la Orden</label>
+                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Corte Distrito 4" @bind="ticketTitulo" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Observaciones Técnicas</label>
+                    <textarea class="form-control form-control-sm" rows="2" placeholder="Instrucciones para la cuadrilla en terreno..." @bind="ticketObservaciones"></textarea>
+                </div>
+
+                <button type="button" class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1"
+                        disabled="@(idsSeleccionados.Count == 0 || string.IsNullOrEmpty(operarioSeleccionado) || isSubmitting)"
+                        @onclick="CrearTicket">
+                    <i class="bi bi-file-earmark-plus"></i>
+                    <span>@(isSubmitting ? "Generando ticket..." : $"Crear Ticket de Corte ({idsSeleccionados.Count} puntos)")</span>
+                </button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- LISTA DE TICKETS Y ÓRDENES DE CORTE ACTIVAS -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <small class="text-muted fw-semibold">Historial de Órdenes de Corte</small>
+            <button type="button" class="btn btn-sm btn-outline-secondary py-0" @onclick="CargarTickets" title="Refrescar">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+
+        @if (isLoadingTickets)
+        {
+            <div class="text-center py-4 bg-white rounded border">
+                <div class="spinner-border spinner-border-sm text-danger mb-1" role="status"></div>
+                <div class="small text-muted">Cargando órdenes de corte...</div>
+            </div>
+        }
+        else if (ticketsCorte.Count == 0)
+        {
+            <div class="text-center py-5 bg-white rounded border text-muted small">
+                <i class="bi bi-inbox fs-2 mb-2 d-block"></i>
+                No hay órdenes de corte registradas actualmente.
+            </div>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-2">
+                @foreach (var tk in ticketsCorte)
+                {
+                    <div class="p-3 border rounded bg-white shadow-sm" style="border-color:#dadce0 !important;">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <div>
+                                <span class="badge bg-danger-subtle text-danger fw-bold me-1">@tk.Codigo</span>
+                                <span class="badge @(tk.Estado == "Completada" ? "bg-success" : (tk.Estado == "EnProgreso" ? "bg-primary" : "bg-warning text-dark"))" style="font-size:0.68rem;">
+                                    @tk.Estado
+                                </span>
+                            </div>
+                            <small class="text-muted" style="font-size:0.7rem;">@tk.FechaCreacion.ToLocalTime().ToString("dd/MM HH:mm")</small>
+                        </div>
+
+                        <div class="fw-semibold text-dark mb-1" style="font-size:0.85rem;">@tk.Titulo</div>
+                        
+                        <div class="d-flex align-items-center gap-2 mb-2" style="font-size:0.75rem;">
+                            <span class="text-muted">Técnico: <strong class="text-dark">@tk.OperarioAsignado</strong></span>
+                            <span class="text-muted">·</span>
+                            <span class="text-muted">Puntos: <strong>@tk.PuntosCompletados / @tk.TotalPuntos</strong></span>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(tk.Observaciones))
+                        {
+                            <div class="p-2 rounded bg-light text-muted small mb-2" style="font-size:0.72rem;">
+                                @tk.Observaciones
+                            </div>
+                        }
+
+                        <div class="d-flex gap-1 pt-2 border-top">
+                            <button type="button" class="btn btn-sm btn-outline-danger flex-fill d-flex align-items-center justify-content-center gap-1" style="font-size:0.75rem;"
+                                    @onclick="() => TrazarRutaEnMapa(tk)">
+                                <i class="bi bi-map"></i>
+                                <span>Ver Puntos en Mapa</span>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public string? PreselectedOperarioId { get; set; }
+    [Parameter] public EventCallback<object> OnVerRutaEnMapa { get; set; }
+
+    private string vistaActual = "crear";
+    private bool isLoadingEntidades = false;
+    private bool isLoadingTickets = false;
+    private bool isSubmitting = false;
+
+    private string? mensajeExito;
+    private string? mensajeError;
+
+    // Filtros de zona
+    private string uvSeleccionada = "";
+    private string mzaSeleccionada = "";
+    private string filtroBusqueda = "";
+
+    // Datos territoriales
+    private List<string> listaUvs = new();
+    private List<ManzanaDto> listaManzanas = new();
+    private List<EntidadDisponibleDto> entidadesDisponibles = new();
+    private HashSet<int> idsSeleccionados = new();
+
+    // Operadores dinámicos reales
+    private List<OperarioItemDto> operarios = new();
+
+    // Creación de ticket
+    private string operarioSeleccionado = "";
+    private string ticketPrioridad = "Normal";
+    private string ticketTitulo = "";
+    private string ticketObservaciones = "";
+
+    // Historial de tickets
+    private List<TicketRutaDto> ticketsCorte = new();
+
+    private IEnumerable<ManzanaDto> ManzanasFiltradas => string.IsNullOrEmpty(uvSeleccionada)
+        ? listaManzanas
+        : listaManzanas.Where(m => m.UV == uvSeleccionada);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarOperarios();
+        await CargarZonas();
+        await CargarEntidades();
+        await CargarTickets();
+
+        if (!string.IsNullOrEmpty(PreselectedOperarioId))
+        {
+            operarioSeleccionado = PreselectedOperarioId;
+        }
+    }
+
+    private async Task CargarZonas()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<ZonasResponseDto>("/api/rutas-trabajo/zonas");
+            if (res != null)
+            {
+                listaUvs = res.Uvs ?? new();
+                listaManzanas = res.Manzanas ?? new();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar zonas: {ex.Message}");
+        }
+    }
+
+    private async Task CargarOperarios()
+    {
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<OperarioItemDto>>("/api/tracking/operarios");
+            operarios = res ?? new();
+            if (string.IsNullOrEmpty(operarioSeleccionado) && operarios.Count > 0)
+            {
+                operarioSeleccionado = operarios.First().OperarioId;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar operarios: {ex.Message}");
+        }
+    }
+
+    private void OnZonaCambiada()
+    {
+        mzaSeleccionada = "";
+        _ = CargarEntidades();
+    }
+
+    private async Task CargarEntidades()
+    {
+        isLoadingEntidades = true;
+        try
+        {
+            var url = $"/api/rutas-trabajo/entidades-disponibles?tipo=Corte&limite=100";
+            if (!string.IsNullOrEmpty(uvSeleccionada)) url += $"&uv={Uri.EscapeDataString(uvSeleccionada)}";
+            if (!string.IsNullOrEmpty(mzaSeleccionada)) url += $"&mza={Uri.EscapeDataString(mzaSeleccionada)}";
+            if (!string.IsNullOrEmpty(filtroBusqueda)) url += $"&busqueda={Uri.EscapeDataString(filtroBusqueda)}";
+
+            var res = await Http.GetFromJsonAsync<List<EntidadDisponibleDto>>(url);
+            entidadesDisponibles = res ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar entidades: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingEntidades = false;
+        }
+    }
+
+    private void ToggleEntidad(int id)
+    {
+        if (idsSeleccionados.Contains(id))
+            idsSeleccionados.Remove(id);
+        else
+            idsSeleccionados.Add(id);
+    }
+
+    private void SeleccionarTodasEntidades()
+    {
+        foreach (var e in entidadesDisponibles)
+            idsSeleccionados.Add(e.IdCodigo);
+    }
+
+    private void DeseleccionarTodasEntidades()
+    {
+        idsSeleccionados.Clear();
+    }
+
+    private async Task CentrarEnMapa(double lat, double lng)
+    {
+        await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 18);
+    }
+
+    private async Task CrearTicket()
+    {
+        if (idsSeleccionados.Count == 0)
+        {
+            mensajeError = "Seleccione al menos una casa o predio para generar la orden.";
+            return;
+        }
+
+        if (string.IsNullOrEmpty(operarioSeleccionado))
+        {
+            mensajeError = "Seleccione el operario técnico responsable.";
+            return;
+        }
+
+        isSubmitting = true;
+        mensajeError = null;
+        mensajeExito = null;
+
+        try
+        {
+            var dto = new
+            {
+                Titulo = string.IsNullOrWhiteSpace(ticketTitulo) ? $"Orden de Corte - {DateTime.UtcNow:dd/MM/yyyy}" : ticketTitulo,
+                Tipo = "Corte",
+                Prioridad = ticketPrioridad,
+                OperarioAsignado = operarioSeleccionado,
+                Observaciones = ticketObservaciones,
+                IdsCodigosFijos = idsSeleccionados.ToList()
+            };
+
+            var res = await Http.PostAsJsonAsync("/api/rutas-trabajo/crear-ticket", dto);
+            if (res.IsSuccessStatusCode)
+            {
+                var data = await res.Content.ReadFromJsonAsync<CrearTicketRespuestaDto>();
+                mensajeExito = data?.Mensaje ?? "Ticket creado exitosamente.";
+                idsSeleccionados.Clear();
+                ticketTitulo = "";
+                ticketObservaciones = "";
+                await CargarTickets();
+                await CargarEntidades();
+                vistaActual = "tickets";
+            }
+            else
+            {
+                var err = await res.Content.ReadFromJsonAsync<ErrorDto>();
+                mensajeError = err?.Error ?? "Ocurrió un error al crear la orden.";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error de comunicación: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task CargarTickets()
+    {
+        isLoadingTickets = true;
+        try
+        {
+            var res = await Http.GetFromJsonAsync<List<TicketRutaDto>>("/api/rutas-trabajo?estado=&operario=");
+            if (res != null)
+            {
+                ticketsCorte = res.Where(r => r.Tipo.Equals("Corte", StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error al cargar tickets: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingTickets = false;
+        }
+    }
+
+    private async Task TrazarRutaEnMapa(TicketRutaDto tk)
+    {
+        if (tk.Puntos != null && tk.Puntos.Count > 0)
+        {
+            await JS.InvokeVoidAsync("arquis.renderRutaTrabajo", tk);
+            var primerPunto = tk.Puntos.First();
+            await JS.InvokeVoidAsync("arquis.centerOnCoords", primerPunto.Latitud, primerPunto.Longitud, 16);
+            await OnVerRutaEnMapa.InvokeAsync(tk);
+        }
+    }
+
+    public class ZonasResponseDto
+    {
+        public List<string>? Uvs { get; set; }
+        public List<ManzanaDto>? Manzanas { get; set; }
+    }
+
+    public class ManzanaDto
+    {
+        public int IdManzana { get; set; }
+        public string? UV { get; set; }
+        public string? MZA { get; set; }
+        public string? UV_MZA { get; set; }
+    }
+
+    public class EntidadDisponibleDto
+    {
+        public int IdCodigo { get; set; }
+        public string CodigoSuministro { get; set; } = "";
+        public string Titular { get; set; } = "";
+        public string Direccion { get; set; } = "";
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public decimal MontoDeuda { get; set; }
+    }
+
+    public class OperarioItemDto
+    {
+        public string OperarioId { get; set; } = "";
+        public string NombreOperario { get; set; } = "";
+        public string Rol { get; set; } = "";
+        public bool EnLinea { get; set; }
+    }
+
+    public class TicketRutaDto
+    {
+        public int Id { get; set; }
+        public string Codigo { get; set; } = "";
+        public string Titulo { get; set; } = "";
+        public string Tipo { get; set; } = "";
+        public string Estado { get; set; } = "";
+        public string Prioridad { get; set; } = "";
+        public string OperarioAsignado { get; set; } = "";
+        public DateTime FechaCreacion { get; set; }
+        public string? Observaciones { get; set; }
+        public int TotalPuntos { get; set; }
+        public int PuntosCompletados { get; set; }
+        public List<PuntoRutaDto>? Puntos { get; set; }
+    }
+
+    public class PuntoRutaDto
+    {
+        public int Id { get; set; }
+        public int Orden { get; set; }
+        public string? CodigoSuministro { get; set; }
+        public string? Titular { get; set; }
+        public double Latitud { get; set; }
+        public double Longitud { get; set; }
+        public string Estado { get; set; } = "";
+    }
+
+    public class CrearTicketRespuestaDto
+    {
+        public string? Mensaje { get; set; }
+    }
+
+    public class ErrorDto
+    {
+        public string? Error { get; set; }
+    }
+}

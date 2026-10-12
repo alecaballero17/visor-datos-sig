@@ -272,9 +272,18 @@
         (fichaAgua != null && fichaAgua.TieneAgua) ||
         (Properties.TryGetValue("TieneAgua", out var val) && val?.ToString()?.ToLower() == "true");
 
-    private string? TitularName =>
-        fichaAgua?.Registros?.FirstOrDefault()?.NombreRegistrado ??
-        GetProp("Nombre");
+    private string? TitularName
+    {
+        get
+        {
+            var tit = fichaAgua?.Registros?.FirstOrDefault()?.NombreRegistrado ??
+                      GetProp("Titular") ??
+                      GetProp("Dueno") ??
+                      GetProp("Nombre");
+            if (string.IsNullOrWhiteSpace(tit) || tit == "Sin titular vinculado") return null;
+            return tit;
+        }
+    }
 
     private bool CoordinatesAvailable =>
         (Properties.ContainsKey("AguaLatitud") && Properties.ContainsKey("AguaLongitud")) ||
