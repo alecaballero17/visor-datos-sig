@@ -493,8 +493,9 @@ window.arquis = (() => {
         const vel = op.velocidad != null ? Number(op.velocidad).toFixed(0) : 0;
         const bat = op.bateria != null ? op.bateria : 100;
 
-        const rolClass = rol.includes('corte') || rol.includes('cortador') ? 'cortador' : 'lecturador';
-        const iconSymbol = rolClass === 'cortador' ? 'bi-scissors' : 'bi-speedometer';
+        const isReconector = rol.includes('recon') || rol.includes('agua') || rol.includes('restitu');
+        const rolClass = isReconector ? 'reconector' : 'cortador';
+        const iconSymbol = isReconector ? 'bi-droplet-fill' : 'bi-slash-circle';
 
         const html = `
             <div class="operario-live-marker">

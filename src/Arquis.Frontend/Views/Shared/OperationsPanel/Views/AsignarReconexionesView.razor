@@ -4,15 +4,18 @@
 <div class="drawer-view-container">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h6 class="fw-bold mb-0 text-primary d-flex align-items-center gap-1">
+            <h6 class="fw-bold mb-0 text-primary d-flex align-items-center gap-2">
                 <i class="bi bi-droplet-fill"></i>
-                <span>Gestión de Reconexiones y Habilitación</span>
+                <span>Gestión y Asignación de Reconexiones</span>
             </h6>
-            <small class="text-muted">Restitución de servicio de agua potable con selección territorial</small>
+            <small class="text-muted">Restitución y habilitación del servicio de agua potable para <strong>Reconectores</strong></small>
         </div>
         <div class="btn-group btn-group-sm">
             <button type="button" class="btn @(vistaActual == "crear" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => vistaActual = "crear"'>
                 Nuevo Ticket
+            </button>
+            <button type="button" class="btn @(vistaActual == "masiva" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => vistaActual = "masiva"'>
+                <i class="bi bi-layers-fill me-1"></i>Asignación Masiva
             </button>
             <button type="button" class="btn @(vistaActual == "tickets" ? "btn-primary" : "btn-outline-secondary")" @onclick='() => vistaActual = "tickets"'>
                 Tickets Activos (@ticketsReconexion.Count)
@@ -22,7 +25,7 @@
 
     @if (!string.IsNullOrEmpty(mensajeExito))
     {
-        <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-3" role="alert">
+        <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-3 shadow-sm" role="alert">
             <i class="bi bi-check-circle-fill me-1"></i>
             @mensajeExito
             <button type="button" class="btn-close py-2 px-3" @onclick="() => mensajeExito = null"></button>
@@ -31,7 +34,7 @@
 
     @if (!string.IsNullOrEmpty(mensajeError))
     {
-        <div class="alert alert-danger alert-dismissible fade show py-2 px-3 small mb-3" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show py-2 px-3 small mb-3 shadow-sm" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-1"></i>
             @mensajeError
             <button type="button" class="btn-close py-2 px-3" @onclick="() => mensajeError = null"></button>
@@ -45,7 +48,7 @@
             <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                 <span class="fw-bold small text-dark d-flex align-items-center gap-1">
                     <i class="bi bi-geo-alt-fill text-primary"></i>
-                    <span>1. Filtrar Cuentas Cortadas o en Trámite</span>
+                    <span>1. Filtrar Cuentas Cortadas / Habilitaciones Pendientes</span>
                 </span>
                 <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.7rem;">Datos SIG Reales</span>
             </div>
@@ -82,14 +85,20 @@
                     </button>
                 </div>
 
-                <!-- Lista de entidades encontradas para seleccionar -->
-                <div class="d-flex justify-content-between align-items-center mb-1">
+                <!-- Botones de Selección Rápida -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
                     <small class="text-muted" style="font-size:0.72rem;">
-                        Mostrando @entidadesDisponibles.Count cuentas disponibles
+                        Mostrando @entidadesDisponibles.Count cuentas cortadas
                     </small>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2 small" style="font-size:0.68rem;" @onclick="() => SeleccionarPrimeros(10)">
+                            Primeros 10
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2 small" style="font-size:0.68rem;" @onclick="() => SeleccionarPrimeros(25)">
+                            Primeros 25
+                        </button>
                         <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary" style="font-size:0.72rem;" @onclick="SeleccionarTodasEntidades">
-                            Seleccionar Todo
+                            Todos
                         </button>
                         <span class="text-muted small">|</span>
                         <button type="button" class="btn btn-link p-0 text-decoration-none small text-danger" style="font-size:0.72rem;" @onclick="DeseleccionarTodasEntidades">
@@ -113,7 +122,7 @@
                 }
                 else
                 {
-                    <div class="border rounded bg-white p-1" style="max-height:220px; overflow-y:auto;">
+                    <div class="border rounded bg-white p-1" style="max-height:200px; overflow-y:auto;">
                         @foreach (var ent in entidadesDisponibles)
                         {
                             var isSelected = idsSeleccionados.Contains(ent.IdCodigo);
@@ -128,7 +137,7 @@
                                     </div>
                                 </div>
                                 <div class="text-end text-nowrap">
-                                    <span class="badge bg-warning-subtle text-warning-emphasis" style="font-size:0.68rem;">Servicio Cortado</span>
+                                    <span class="badge bg-success-subtle text-success" style="font-size:0.68rem;">Pago Verificado</span>
                                     <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-muted" @onclick="() => CentrarEnMapa(ent.Latitud, ent.Longitud)" title="Ver en mapa">
                                         <i class="bi bi-eye"></i>
                                     </button>
@@ -141,38 +150,48 @@
                 @if (idsSeleccionados.Count > 0)
                 {
                     <div class="mt-2 p-2 rounded bg-primary-subtle text-primary-emphasis small d-flex justify-content-between align-items-center" style="font-size:0.75rem;">
-                        <span><i class="bi bi-check2-circle me-1"></i><strong>@idsSeleccionados.Count</strong> casas/suministros seleccionadas para reconexión</span>
-                        <span class="badge bg-primary text-white">Listas para despacho</span>
+                        <span><i class="bi bi-check2-circle me-1"></i><strong>@idsSeleccionados.Count</strong> casas listas para reconexión</span>
+                        <span class="fw-bold text-success"><i class="bi bi-patch-check-fill me-1"></i>Sin deudas pendientes</span>
                     </div>
                 }
             </div>
         </div>
 
-        <!-- PASO 2: ASIGNACIÓN DE OPERADOR Y GENERACIÓN DE TICKET -->
+        <!-- PASO 2: ASIGNACIÓN A RECONECTOR -->
         <div class="card border-0 shadow-sm mb-3" style="border:1px solid #e2e8f0 !important;">
-            <div class="card-header bg-white py-2 px-3 border-bottom">
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                 <span class="fw-bold small text-dark d-flex align-items-center gap-1">
                     <i class="bi bi-person-badge-fill text-primary"></i>
-                    <span>2. Asignar Operador y Crear Ticket</span>
+                    <span>2. Asignar Reconector Responsable</span>
                 </span>
+                <span class="role-badge-reconector">Rol: Reconector</span>
             </div>
             <div class="card-body p-3">
                 <div class="mb-2">
-                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Operario Técnico Responsable</label>
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Reconector de Campo Asignado</label>
                     <select class="form-select form-select-sm" @bind="operarioSeleccionado">
-                        <option value="">-- Seleccione un operador de campo --</option>
-                        @foreach (var op in operarios)
+                        <option value="">-- Seleccione un Reconector --</option>
+                        @foreach (var op in SoloReconectores)
                         {
                             <option value="@op.OperarioId">
-                                @op.NombreOperario (@op.Rol) @(op.EnLinea ? "· EN LÍNEA" : "")
+                                @op.NombreOperario @(op.EnLinea ? "· EN LÍNEA" : "· Desconectado")
                             </option>
+                        }
+                        @if (OtrosOperarios.Any())
+                        {
+                            <optgroup label="Otros Trabajadores de Campo">
+                                @foreach (var op in OtrosOperarios)
+                                {
+                                    <option value="@op.OperarioId">@op.NombreOperario (@op.Rol)</option>
+                                }
+                            </optgroup>
                         }
                     </select>
                 </div>
 
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Prioridad</label>
+                        <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Prioridad del Ticket</label>
                         <select class="form-select form-select-sm" @bind="ticketPrioridad">
                             <option value="Normal">Normal</option>
                             <option value="Alta">Alta</option>
@@ -181,20 +200,95 @@
                     </div>
                     <div class="col-6">
                         <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Título de la Orden</label>
-                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Habilitación Pagos al Día" @bind="ticketTitulo" />
+                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Habilitación Servicio UV 4" @bind="ticketTitulo" />
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Observaciones Técnicas</label>
-                    <textarea class="form-control form-control-sm" rows="2" placeholder="Instrucciones para retirar precinto y abrir válvula..." @bind="ticketObservaciones"></textarea>
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Instrucciones Técnicas de Reconexión</label>
+                    <textarea class="form-control form-control-sm" rows="2" placeholder="Retirar precinto de seguridad, aperturar válvula de paso, verificar presión..." @bind="ticketObservaciones"></textarea>
                 </div>
 
-                <button type="button" class="btn btn-sm btn-primary w-100 d-flex align-items-center justify-content-center gap-1"
+                <button type="button" class="btn btn-sm btn-primary w-100 d-flex align-items-center justify-content-center gap-1 shadow-sm"
                         disabled="@(idsSeleccionados.Count == 0 || string.IsNullOrEmpty(operarioSeleccionado) || isSubmitting)"
                         @onclick="CrearTicket">
                     <i class="bi bi-file-earmark-plus"></i>
-                    <span>@(isSubmitting ? "Generando ticket..." : $"Crear Ticket de Reconexión ({idsSeleccionados.Count} puntos)")</span>
+                    <span>@(isSubmitting ? "Generando ticket..." : $"Despachar Orden de Reconexión ({idsSeleccionados.Count} puntos)")</span>
+                </button>
+            </div>
+        </div>
+    }
+    else if (vistaActual == "masiva")
+    {
+        <!-- VISTA DE ASIGNACIÓN MASIVA A CUADRILLA DE RECONECTORES -->
+        <div class="card border-0 shadow-sm mb-3" style="border:1px solid #e2e8f0 !important;">
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+                <span class="fw-bold small text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-layers-fill text-primary"></i>
+                    <span>Despacho Masivo a Cuadrilla de Reconectores</span>
+                </span>
+                <span class="badge bg-primary-subtle text-primary" style="font-size:0.7rem;">Distribución Equitativa</span>
+            </div>
+            <div class="card-body p-3">
+                <p class="small text-muted mb-3" style="font-size:0.75rem;">
+                    Esta herramienta selecciona cuentas cortadas regularizadas y las divide equitativamente entre los <strong>Reconectores</strong> seleccionados.
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Cantidad de Reconexiones a Habilitar</label>
+                    <div class="d-flex gap-2">
+                        @foreach (var cant in new[] { 10, 20, 40, 80 })
+                        {
+                            <button type="button" class="btn btn-sm @(cantidadMasiva == cant ? "btn-primary" : "btn-outline-secondary") flex-fill"
+                                    @onclick="() => cantidadMasiva = cant">
+                                @cant Reconexiones
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Reconectores Participantes</label>
+                    <div class="border rounded bg-white p-2">
+                        @if (SoloReconectores.Count == 0)
+                        {
+                            <div class="text-muted small py-2 text-center">No hay reconectores registrados.</div>
+                        }
+                        else
+                        {
+                            @foreach (var r in SoloReconectores)
+                            {
+                                var sel = reconectoresMasivosSeleccionados.Contains(r.OperarioId);
+                                <div class="form-check form-check-inline me-3 mb-1">
+                                    <input class="form-check-input" type="checkbox" checked="@sel" @onchange="() => ToggleReconectorMasivo(r.OperarioId)" id="chk_rec_@r.OperarioId" />
+                                    <label class="form-check-label small" for="chk_rec_@r.OperarioId">
+                                        @r.NombreOperario @(r.EnLinea ? "· (En línea)" : "")
+                                    </label>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+
+                @if (reconectoresMasivosSeleccionados.Count > 0)
+                {
+                    var cuentasPorReconector = (int)Math.Ceiling((double)cantidadMasiva / reconectoresMasivosSeleccionados.Count);
+                    <div class="p-2 rounded bg-light border mb-3 small d-flex justify-content-between align-items-center">
+                        <span class="text-muted">Cálculo de distribución:</span>
+                        <strong class="text-primary">~@cuentasPorReconector habilitaciones por cada reconector</strong>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Título del Operativo Masivo</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="Ej. Operativo Masivo de Restitución de Agua" @bind="tituloMasivo" />
+                </div>
+
+                <button type="button" class="btn btn-sm btn-primary w-100 d-flex align-items-center justify-content-center gap-1 shadow-sm"
+                        disabled="@(reconectoresMasivosSeleccionados.Count == 0 || isSubmitting)"
+                        @onclick="EjecutarAsignacionMasiva">
+                    <i class="bi bi-send-check"></i>
+                    <span>@(isSubmitting ? "Distribuyendo reconexiones..." : $"Despachar {cantidadMasiva} Reconexiones entre {reconectoresMasivosSeleccionados.Count} Reconectores")</span>
                 </button>
             </div>
         </div>
@@ -228,6 +322,7 @@
             <div class="d-flex flex-column gap-2">
                 @foreach (var tk in ticketsReconexion)
                 {
+                    var pct = tk.TotalPuntos > 0 ? (int)Math.Round((double)tk.PuntosCompletados / tk.TotalPuntos * 100) : 0;
                     <div class="p-3 border rounded bg-white shadow-sm" style="border-color:#dadce0 !important;">
                         <div class="d-flex justify-content-between align-items-start mb-1">
                             <div>
@@ -242,9 +337,14 @@
                         <div class="fw-semibold text-dark mb-1" style="font-size:0.85rem;">@tk.Titulo</div>
                         
                         <div class="d-flex align-items-center gap-2 mb-2" style="font-size:0.75rem;">
-                            <span class="text-muted">Técnico: <strong class="text-dark">@tk.OperarioAsignado</strong></span>
+                            <span class="text-muted">Reconector: <strong class="text-dark">@tk.OperarioAsignado</strong></span>
                             <span class="text-muted">·</span>
-                            <span class="text-muted">Puntos: <strong>@tk.PuntosCompletados / @tk.TotalPuntos</strong></span>
+                            <span class="text-muted">Progreso: <strong>@tk.PuntosCompletados / @tk.TotalPuntos (@pct%)</strong></span>
+                        </div>
+
+                        <!-- Barra de Progreso de Ejecución -->
+                        <div class="assignment-progress-bar mb-2">
+                            <div class="assignment-progress-fill bg-primary" style="width:@pct%;"></div>
                         </div>
 
                         @if (!string.IsNullOrEmpty(tk.Observaciones))
@@ -291,7 +391,7 @@
     private List<EntidadDisponibleDto> entidadesDisponibles = new();
     private HashSet<int> idsSeleccionados = new();
 
-    // Operadores dinámicos reales
+    // Operadores
     private List<OperarioItemDto> operarios = new();
 
     // Creación de ticket
@@ -300,8 +400,16 @@
     private string ticketTitulo = "";
     private string ticketObservaciones = "";
 
+    // Asignación Masiva
+    private int cantidadMasiva = 20;
+    private string tituloMasivo = "Operativo General de Restitución de Servicio";
+    private HashSet<string> reconectoresMasivosSeleccionados = new();
+
     // Historial de tickets
     private List<TicketRutaDto> ticketsReconexion = new();
+
+    private List<OperarioItemDto> SoloReconectores => operarios.Where(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase)).ToList();
+    private List<OperarioItemDto> OtrosOperarios => operarios.Where(o => !string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase)).ToList();
 
     private IEnumerable<ManzanaDto> ManzanasFiltradas => string.IsNullOrEmpty(uvSeleccionada)
         ? listaManzanas
@@ -343,10 +451,18 @@
         {
             var res = await Http.GetFromJsonAsync<List<OperarioItemDto>>("/api/tracking/operarios");
             operarios = res ?? new();
-            if (string.IsNullOrEmpty(operarioSeleccionado) && operarios.Count > 0)
+            
+            var reconectores = SoloReconectores;
+            if (string.IsNullOrEmpty(operarioSeleccionado) && reconectores.Count > 0)
+            {
+                operarioSeleccionado = reconectores.First().OperarioId;
+            }
+            else if (string.IsNullOrEmpty(operarioSeleccionado) && operarios.Count > 0)
             {
                 operarioSeleccionado = operarios.First().OperarioId;
             }
+
+            reconectoresMasivosSeleccionados = reconectores.Select(r => r.OperarioId).ToHashSet();
         }
         catch (Exception ex)
         {
@@ -354,28 +470,18 @@
         }
     }
 
-    private void OnZonaCambiada()
-    {
-        mzaSeleccionada = "";
-        _ = CargarEntidades();
-    }
-
     private async Task CargarEntidades()
     {
         isLoadingEntidades = true;
         try
         {
-            var url = $"/api/rutas-trabajo/entidades-disponibles?tipo=Reconexion&limite=100";
-            if (!string.IsNullOrEmpty(uvSeleccionada)) url += $"&uv={Uri.EscapeDataString(uvSeleccionada)}";
-            if (!string.IsNullOrEmpty(mzaSeleccionada)) url += $"&mza={Uri.EscapeDataString(mzaSeleccionada)}";
-            if (!string.IsNullOrEmpty(filtroBusqueda)) url += $"&busqueda={Uri.EscapeDataString(filtroBusqueda)}";
-
+            var url = $"/api/rutas-trabajo/entidades-disponibles?tipo=Reconexion&uv={Uri.EscapeDataString(uvSeleccionada)}&mza={Uri.EscapeDataString(mzaSeleccionada)}&busqueda={Uri.EscapeDataString(filtroBusqueda)}&limite=150";
             var res = await Http.GetFromJsonAsync<List<EntidadDisponibleDto>>(url);
             entidadesDisponibles = res ?? new();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error al cargar entidades: {ex.Message}");
+            Console.WriteLine($"Error al cargar cuentas de reconexión: {ex.Message}");
         }
         finally
         {
@@ -383,18 +489,34 @@
         }
     }
 
+    private async Task OnZonaCambiada()
+    {
+        mzaSeleccionada = "";
+        await CargarEntidades();
+    }
+
     private void ToggleEntidad(int id)
     {
-        if (idsSeleccionados.Contains(id))
-            idsSeleccionados.Remove(id);
+        if (idsSeleccionados.Contains(id)) idsSeleccionados.Remove(id);
+        else idsSeleccionados.Add(id);
+    }
+
+    private void ToggleReconectorMasivo(string opId)
+    {
+        if (reconectoresMasivosSeleccionados.Contains(opId))
+            reconectoresMasivosSeleccionados.Remove(opId);
         else
-            idsSeleccionados.Add(id);
+            reconectoresMasivosSeleccionados.Add(opId);
     }
 
     private void SeleccionarTodasEntidades()
     {
-        foreach (var e in entidadesDisponibles)
-            idsSeleccionados.Add(e.IdCodigo);
+        idsSeleccionados = entidadesDisponibles.Select(x => x.IdCodigo).ToHashSet();
+    }
+
+    private void SeleccionarPrimeros(int cantidad)
+    {
+        idsSeleccionados = entidadesDisponibles.Take(cantidad).Select(x => x.IdCodigo).ToHashSet();
     }
 
     private void DeseleccionarTodasEntidades()
@@ -411,13 +533,13 @@
     {
         if (idsSeleccionados.Count == 0)
         {
-            mensajeError = "Seleccione al menos una casa o predio para generar la orden.";
+            mensajeError = "Seleccione al menos una casa o predio para reconectar.";
             return;
         }
 
         if (string.IsNullOrEmpty(operarioSeleccionado))
         {
-            mensajeError = "Seleccione el operario técnico responsable.";
+            mensajeError = "Seleccione el reconector técnico responsable.";
             return;
         }
 
@@ -441,7 +563,7 @@
             if (res.IsSuccessStatusCode)
             {
                 var data = await res.Content.ReadFromJsonAsync<CrearTicketRespuestaDto>();
-                mensajeExito = data?.Mensaje ?? "Ticket creado exitosamente.";
+                mensajeExito = data?.Mensaje ?? "Orden de reconexión generada y despachada exitosamente.";
                 idsSeleccionados.Clear();
                 ticketTitulo = "";
                 ticketObservaciones = "";
@@ -452,12 +574,60 @@
             else
             {
                 var err = await res.Content.ReadFromJsonAsync<ErrorDto>();
-                mensajeError = err?.Error ?? "Ocurrió un error al crear la orden.";
+                mensajeError = err?.Error ?? "Ocurrió un error al crear la orden de reconexión.";
             }
         }
         catch (Exception ex)
         {
             mensajeError = $"Error de comunicación: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task EjecutarAsignacionMasiva()
+    {
+        if (reconectoresMasivosSeleccionados.Count == 0)
+        {
+            mensajeError = "Debe seleccionar al menos un reconector para el despacho masivo.";
+            return;
+        }
+
+        isSubmitting = true;
+        mensajeError = null;
+        mensajeExito = null;
+
+        try
+        {
+            var dto = new
+            {
+                TituloGeneral = string.IsNullOrWhiteSpace(tituloMasivo) ? "Operativo Masivo de Restitución de Agua" : tituloMasivo,
+                Tipo = "Reconexion",
+                Prioridad = "Alta",
+                OperariosAsignados = reconectoresMasivosSeleccionados.ToList(),
+                CantidadCuentas = cantidadMasiva,
+                Observaciones = "Habilitación y reconexión inmediata de servicio de agua potable con pago verificado."
+            };
+
+            var res = await Http.PostAsJsonAsync("/api/rutas-trabajo/asignacion-masiva", dto);
+            if (res.IsSuccessStatusCode)
+            {
+                var data = await res.Content.ReadFromJsonAsync<CrearTicketRespuestaDto>();
+                mensajeExito = data?.Mensaje ?? $"Se asignaron {cantidadMasiva} reconexiones distribuidas entre los reconectores seleccionados.";
+                await CargarTickets();
+                vistaActual = "tickets";
+            }
+            else
+            {
+                var err = await res.Content.ReadFromJsonAsync<ErrorDto>();
+                mensajeError = err?.Error ?? "Ocurrió un error al procesar el despacho masivo.";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error: {ex.Message}";
         }
         finally
         {

@@ -247,6 +247,19 @@ namespace Arquis.Backend.Data
                     context.TrackingPosiciones.AddRange(points);
                     await context.SaveChangesAsync();
                 }
+
+                if (!await context.TrackingPosiciones.AnyAsync(x => x.OperarioId == "Juan"))
+                {
+                    var baseTime = DateTime.UtcNow.AddMinutes(-30);
+                    var points = new[]
+                    {
+                        new Models.Entities.TrackingPosicion { OperarioId = "Juan", NombreOperario = "Juan (Reconector)", Rol = "Reconector", Latitud = -17.78200, Longitud = -63.18350, Rumbo = 85, Velocidad = 16.0, Bateria = 92, Timestamp = baseTime, EnLinea = true },
+                        new Models.Entities.TrackingPosicion { OperarioId = "Juan", NombreOperario = "Juan (Reconector)", Rol = "Reconector", Latitud = -17.78245, Longitud = -63.18385, Rumbo = 110, Velocidad = 14.5, Bateria = 91, Timestamp = baseTime.AddMinutes(10), EnLinea = true },
+                        new Models.Entities.TrackingPosicion { OperarioId = "Juan", NombreOperario = "Juan (Reconector)", Rol = "Reconector", Latitud = -17.78280, Longitud = -63.18410, Rumbo = 120, Velocidad = 0.0, Bateria = 90, Timestamp = baseTime.AddMinutes(20), EnLinea = true }
+                    };
+                    context.TrackingPosiciones.AddRange(points);
+                    await context.SaveChangesAsync();
+                }
             }
             catch (System.Exception ex)
             {

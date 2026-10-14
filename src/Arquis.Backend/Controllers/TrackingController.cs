@@ -171,10 +171,24 @@ namespace Arquis.Backend.Controllers
             var activosMemoria = _cache.ObtenerActivos().ToDictionary(a => a.OperarioId, StringComparer.OrdinalIgnoreCase);
             var statsDict = trackingStats.ToDictionary(x => x.OperarioId, StringComparer.OrdinalIgnoreCase);
 
+            string NormalizarRol(string r, string opId)
+            {
+                if (string.Equals(r, "Reconector", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(r, "Reconexion", StringComparison.OrdinalIgnoreCase) ||
+                    opId.Contains("recon", StringComparison.OrdinalIgnoreCase) ||
+                    opId.Equals("Juan", StringComparison.OrdinalIgnoreCase) ||
+                    opId.Equals("Carlos", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Reconector";
+                }
+                return "Cortador";
+            }
+
             var resultado = operariosDict.Select(kv =>
             {
                 var opId = kv.Key;
-                var (nombre, rol) = kv.Value;
+                var (nombre, rolRaw) = kv.Value;
+                var rol = NormalizarRol(rolRaw, opId);
                 var hasStats = statsDict.TryGetValue(opId, out var stats);
                 var isLive = activosMemoria.TryGetValue(opId, out var live);
 
@@ -202,6 +216,91 @@ namespace Arquis.Backend.Controllers
             .ToList();
 
             return Ok(resultado);
+        }
+
+        public class ActualizarRolDto
+        {
+            public string Rol { get; set; } = string.Empty; // "Cortador" o "Reconector"
+        }
+
+        [HttpPut("operarios/{operarioId}/rol")]
+        public async Task<IActionResult> ActualizarRolOperario(string operarioId, [FromBody] ActualizarRolDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto?.Rol))
+            {
+                return BadRequest(new { error = "Debe especificar el nuevo rol del trabajador ('Cortador' o 'Reconector')." });
+            }
+
+            var rolNormalizado = dto.Rol.Trim().Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
+                                 dto.Rol.Trim().Equals("Reconexion", StringComparison.OrdinalIgnoreCase)
+                                 ? "Reconector" : "Cortador";
+
+            // 1. Asegurar que el rol existe en la BD
+            var rolEntity = await _context.Roles.FirstOrDefaultAsync(r => r.NombreRol == rolNormalizado);
+            if (rolEntity == null)
+            {
+                rolEntity = new Rol 
+                { 
+                    NombreRol = rolNormalizado, 
+                    Descripcion = rolNormalizado == "Cortador" ? "Rol para corte de servicios de agua" : "Rol para reconexión de servicios de agua", 
+                    Estado = true 
+                };
+                _context.Roles.Add(rolEntity);
+                await _context.SaveChangesAsync();
+            }
+
+            // 2. Actualizar la asignación en UsuariosRoles si el usuario existe
+            var usuario = await _context.Usuarios.FirstOrDefaultAsync(u => u.Login == operarioId);
+            if (usuario != null)
+            {
+                var rolesPrevios = await _context.UsuariosRoles
+                    .Include(ur => ur.Rol)
+                    .Where(ur => ur.IdUsuario == usuario.IdUsuario)
+                    .ToListAsync();
+
+                // Quitar roles operacionales anteriores
+                var rolesOperacionales = rolesPrevios.Where(ur => 
+                    ur.Rol.NombreRol == "Cortador" || 
+                    ur.Rol.NombreRol == "Reconector" || 
+                    ur.Rol.NombreRol == "Reconexion" || 
+                    ur.Rol.NombreRol == "Operador" || 
+                    ur.Rol.NombreRol == "Lecturador").ToList();
+
+                _context.UsuariosRoles.RemoveRange(rolesOperacionales);
+                _context.UsuariosRoles.Add(new UsuarioRol { IdUsuario = usuario.IdUsuario, IdRol = rolEntity.IdRol });
+                await _context.SaveChangesAsync();
+            }
+
+            // 3. Actualizar en el servicio en memoria de tracking
+            _cache.ActualizarRol(operarioId, rolNormalizado);
+
+            // 4. Actualizar las últimas posiciones en base de datos para consistencia
+            var ultimasPosiciones = await _context.TrackingPosiciones
+                .Where(p => p.OperarioId == operarioId)
+                .OrderByDescending(p => p.Timestamp)
+                .Take(20)
+                .ToListAsync();
+
+            foreach (var pos in ultimasPosiciones)
+            {
+                pos.Rol = rolNormalizado;
+            }
+            await _context.SaveChangesAsync();
+
+            // 5. Emitir evento SignalR para sincronización reactiva en tiempo real en los clientes web
+            await _hubContext.Clients.All.SendAsync("ReceiveOperarioRolActualizado", new
+            {
+                operarioId,
+                nuevoRol = rolNormalizado
+            });
+
+            return Ok(new
+            {
+                success = true,
+                mensaje = $"El trabajador {operarioId} ahora tiene el rol asignado de {rolNormalizado}.",
+                operarioId,
+                nuevoRol = rolNormalizado
+            });
         }
     }
 }
