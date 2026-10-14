@@ -50,7 +50,7 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
                 if (bboxGeom != null) qM = qM.Where(m => m.Geom!.Intersects(bboxGeom));
                 if (!string.IsNullOrWhiteSpace(qStr)) qM = qM.Where(m => m.UV_MZA!.Contains(qStr) || m.UV!.Contains(qStr) || m.MZA!.Contains(qStr));
                 
-                var manzanas = await qM.OrderBy(m => m.IdManzana).Take(take).ToListAsync(ct);
+                var manzanas = await qM.OrderByDescending(m => m.IdManzana).Take(take).ToListAsync(ct);
                 isTruncated = manzanas.Count >= take;
                 features.AddRange(manzanas.Select(m => new {
                     type = "Feature", id = m.IdManzana, geometry = ToGeoJsonGeometry(m.Geom!),
@@ -63,7 +63,7 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
                 if (bboxGeom != null) qL = qL.Where(l => l.Geom!.Intersects(bboxGeom));
                 if (!string.IsNullOrWhiteSpace(qStr)) qL = qL.Where(l => l.NroLote!.Contains(qStr));
                 
-                var lotesData = await qL.OrderBy(l => l.IdLote).Take(take)
+                var lotesData = await qL.OrderByDescending(l => l.IdLote).Take(take)
                     .Select(l => new {
                         l,
                         TieneAgua = context.CodigosFijos.Any(c => c.IdLote == l.IdLote)
@@ -84,7 +84,7 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
                 if (bboxGeom != null) qC = qC.Where(c => c.Geom!.Intersects(bboxGeom));
                 if (!string.IsNullOrWhiteSpace(qStr)) qC = qC.Where(c => c.CodF_SIG!.Contains(qStr) || c.CodFijo.ToString()!.Contains(qStr) || c.Nombre!.Contains(qStr));
                 
-                var codigos = await qC.OrderBy(c => c.IdCodigo).Take(take).ToListAsync(ct);
+                var codigos = await qC.OrderByDescending(c => c.IdCodigo).Take(take).ToListAsync(ct);
                 isTruncated = codigos.Count >= take;
                 features.AddRange(codigos.Select(c => new {
                     type = "Feature", id = c.IdCodigo, geometry = ToGeoJsonGeometry(c.Geom!),
@@ -97,7 +97,7 @@ public sealed class GeoDataService(ArquisDbContext context, IConfiguration confi
                 if (bboxGeom != null) qV = qV.Where(v => v.Geom!.Intersects(bboxGeom));
                 if (!string.IsNullOrWhiteSpace(qStr)) qV = qV.Where(v => v.Nombre!.Contains(qStr) || v.TipoVia!.Contains(qStr) || v.OSMID!.Contains(qStr));
                 
-                var vias = await qV.OrderBy(v => v.IdVia).Take(take).ToListAsync(ct);
+                var vias = await qV.OrderByDescending(v => v.IdVia).Take(take).ToListAsync(ct);
                 isTruncated = vias.Count >= take;
                 features.AddRange(vias.Select(v => new {
                     type = "Feature", id = v.IdVia, geometry = ToGeoJsonGeometry(v.Geom!),

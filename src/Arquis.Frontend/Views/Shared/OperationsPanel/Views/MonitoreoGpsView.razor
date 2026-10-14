@@ -21,10 +21,18 @@
             <div class="col-7">
                 <label class="form-label small fw-semibold text-muted mb-1">Técnico de Campo</label>
                 <select class="form-select form-select-sm" @bind="selectedOperario">
-                    @foreach (var op in operarios)
-                    {
-                        <option value="@op.OperarioId">@op.NombreOperario (@op.Rol)</option>
-                    }
+                    <optgroup label="✂ Cortadores">
+                        @foreach (var op in operarios.Where(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <option value="@op.OperarioId">@op.NombreOperario</option>
+                        }
+                    </optgroup>
+                    <optgroup label="💧 Reconectores">
+                        @foreach (var op in operarios.Where(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            <option value="@op.OperarioId">@op.NombreOperario</option>
+                        }
+                    </optgroup>
                 </select>
             </div>
             <div class="col-5">

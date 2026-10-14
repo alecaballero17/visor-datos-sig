@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIG Vector Studio - Mapa Interactivo</title>
+    <!-- Local Leaflet CSS -->
+    <link rel="stylesheet" href="leaflet.css" />
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            min-height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: #0f172a;
+            position: relative;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            background: #1e293b;
+        }
+
+        /* Floating HUD Control */
+        .hud-top {
+            position: absolute;
+            top: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+            border-radius: 9999px;
+            padding: 6px 16px;
+            color: #f8fafc;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .hud-bottom {
+            position: absolute;
+            bottom: 12px;
+            right: 14px;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.82);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 4px 10px;
+            color: #94a3b8;
+            font-size: 11px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            pointer-events: none;
+        }
+
+        .hud-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 9999px;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: background 0.15s ease;
+        }
+        .hud-btn:hover {
+            background: #2563eb;
+        }
+        .hud-btn-cancel {
+            background: #ef4444;
+        }
+        .hud-btn-cancel:hover {
+            background: #dc2626;
+        }
+
+        .sig-tooltip {
+            background: rgba(15, 23, 42, 0.9) !important;
+            color: #f1f5f9 !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            font-size: 12px !important;
+            font-weight: 500 !important;
+            border-radius: 6px !important;
+            padding: 4px 8px !important;
+        .sig-toast {
+            position: absolute;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 2000;
+            background: rgba(15, 23, 42, 0.95);
+            color: #38bdf8;
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 8px;
+            padding: 8px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <!-- Top floating interaction status HUD -->
+    <div class="hud-top" id="hudBar">
+        <span id="modeIndicator">Modo: Exploración / Selección</span>
+        <button class="hud-btn" id="btnFinish" style="display:none;" onclick="finishDrawing()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            Terminar Dibujo (Enter)
+        </button>
+        <button class="hud-btn hud-btn-cancel" id="btnCancel" style="display:none;" onclick="cancelActiveDrawing(); setInteractionMode('navigate');">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Cancelar
+        </button>
+    </div>
+
+    <!-- Bottom coordinates HUD -->
+    <div class="hud-bottom" id="hudCoords">
+        Lat: -16.39000, Lon: -60.96500 | Zoom: 15
+    </div>
+
+    <!-- Local Leaflet JS -->
+    <script src="leaflet.js"></script>
+    <!-- QWebChannel Bridge -->
+    <script src="qwebchannel.js"></script>
+    <!-- Map Controller -->
+    <script src="map_controller.js"></script>
+
+    <script>
+        // Update Finish / Cancel buttons visibility according to current mode
+        const observer = new MutationObserver(() => {
+            const isDrawing = currentMode === 'draw_polygon' || currentMode === 'draw_line';
+            document.getElementById('btnFinish').style.display = isDrawing ? 'inline-flex' : 'none';
+            document.getElementById('btnCancel').style.display = (isDrawing || currentMode === 'select_roi') ? 'inline-flex' : 'none';
+        });
+        observer.observe(document.getElementById('modeIndicator'), { childList: true, characterData: true, subtree: true });
+
+        // Keyboard shortcuts
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                finishDrawing();
+            } else if (e.key === 'Escape') {
+                cancelActiveDrawing();
+                setInteractionMode('navigate');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -4,15 +4,18 @@
 <div class="drawer-view-container">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h6 class="fw-bold mb-0 text-danger d-flex align-items-center gap-1">
-                <i class="bi bi-slash-circle"></i>
+            <h6 class="fw-bold mb-0 text-danger d-flex align-items-center gap-2">
+                <i class="bi bi-slash-circle-fill"></i>
                 <span>Gestión y Asignación de Cortes</span>
             </h6>
-            <small class="text-muted">Selección de zonas, predios y generación de órdenes de trabajo</small>
+            <small class="text-muted">Órdenes de corte y suspensión por mora para <strong>Cortadores</strong></small>
         </div>
         <div class="btn-group btn-group-sm">
             <button type="button" class="btn @(vistaActual == "crear" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => vistaActual = "crear"'>
                 Nuevo Ticket
+            </button>
+            <button type="button" class="btn @(vistaActual == "masiva" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => vistaActual = "masiva"'>
+                <i class="bi bi-layers-fill me-1"></i>Asignación Masiva
             </button>
             <button type="button" class="btn @(vistaActual == "tickets" ? "btn-danger" : "btn-outline-secondary")" @onclick='() => vistaActual = "tickets"'>
                 Tickets Activos (@ticketsCorte.Count)
@@ -22,7 +25,7 @@
 
     @if (!string.IsNullOrEmpty(mensajeExito))
     {
-        <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-3" role="alert">
+        <div class="alert alert-success alert-dismissible fade show py-2 px-3 small mb-3 shadow-sm" role="alert">
             <i class="bi bi-check-circle-fill me-1"></i>
             @mensajeExito
             <button type="button" class="btn-close py-2 px-3" @onclick="() => mensajeExito = null"></button>
@@ -31,7 +34,7 @@
 
     @if (!string.IsNullOrEmpty(mensajeError))
     {
-        <div class="alert alert-danger alert-dismissible fade show py-2 px-3 small mb-3" role="alert">
+        <div class="alert alert-danger alert-dismissible fade show py-2 px-3 small mb-3 shadow-sm" role="alert">
             <i class="bi bi-exclamation-triangle-fill me-1"></i>
             @mensajeError
             <button type="button" class="btn-close py-2 px-3" @onclick="() => mensajeError = null"></button>
@@ -45,7 +48,7 @@
             <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                 <span class="fw-bold small text-dark d-flex align-items-center gap-1">
                     <i class="bi bi-geo-alt-fill text-danger"></i>
-                    <span>1. Filtrar Zonas, Casas o Terrenos</span>
+                    <span>1. Filtrar Cuentas en Mora (SIG)</span>
                 </span>
                 <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.7rem;">Datos SIG Reales</span>
             </div>
@@ -82,14 +85,20 @@
                     </button>
                 </div>
 
-                <!-- Lista de entidades encontradas para seleccionar -->
-                <div class="d-flex justify-content-between align-items-center mb-1">
+                <!-- Botones de Selección Rápida -->
+                <div class="d-flex justify-content-between align-items-center mb-2">
                     <small class="text-muted" style="font-size:0.72rem;">
                         Mostrando @entidadesDisponibles.Count cuentas disponibles
                     </small>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-link p-0 text-decoration-none small" style="font-size:0.72rem;" @onclick="SeleccionarTodasEntidades">
-                            Seleccionar Todo
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2 small" style="font-size:0.68rem;" @onclick="() => SeleccionarPrimeros(10)">
+                            Primeros 10
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary py-0 px-2 small" style="font-size:0.68rem;" @onclick="() => SeleccionarPrimeros(25)">
+                            Primeros 25
+                        </button>
+                        <button type="button" class="btn btn-link p-0 text-decoration-none small text-primary" style="font-size:0.72rem;" @onclick="SeleccionarTodasEntidades">
+                            Todos
                         </button>
                         <span class="text-muted small">|</span>
                         <button type="button" class="btn btn-link p-0 text-decoration-none small text-danger" style="font-size:0.72rem;" @onclick="DeseleccionarTodasEntidades">
@@ -113,7 +122,7 @@
                 }
                 else
                 {
-                    <div class="border rounded bg-white p-1" style="max-height:220px; overflow-y:auto;">
+                    <div class="border rounded bg-white p-1" style="max-height:200px; overflow-y:auto;">
                         @foreach (var ent in entidadesDisponibles)
                         {
                             var isSelected = idsSeleccionados.Contains(ent.IdCodigo);
@@ -141,38 +150,48 @@
                 @if (idsSeleccionados.Count > 0)
                 {
                     <div class="mt-2 p-2 rounded bg-danger-subtle text-danger-emphasis small d-flex justify-content-between align-items-center" style="font-size:0.75rem;">
-                        <span><i class="bi bi-check2-circle me-1"></i><strong>@idsSeleccionados.Count</strong> casas/cuentas seleccionadas para corte</span>
+                        <span><i class="bi bi-check2-circle me-1"></i><strong>@idsSeleccionados.Count</strong> cuentas seleccionadas para corte</span>
                         <span class="fw-bold">Total: Bs. @(idsSeleccionados.Count * 385.50m)</span>
                     </div>
                 }
             </div>
         </div>
 
-        <!-- PASO 2: ASIGNACIÓN DE OPERADOR Y GENERACIÓN DE TICKET -->
+        <!-- PASO 2: ASIGNACIÓN A CORTADOR -->
         <div class="card border-0 shadow-sm mb-3" style="border:1px solid #e2e8f0 !important;">
-            <div class="card-header bg-white py-2 px-3 border-bottom">
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center">
                 <span class="fw-bold small text-dark d-flex align-items-center gap-1">
                     <i class="bi bi-person-badge-fill text-danger"></i>
-                    <span>2. Asignar Operador y Crear Ticket</span>
+                    <span>2. Asignar Cortador Responsable</span>
                 </span>
+                <span class="role-badge-cortador">Rol: Cortador</span>
             </div>
             <div class="card-body p-3">
                 <div class="mb-2">
-                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Operario Técnico Responsable</label>
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Cortador de Campo Asignado</label>
                     <select class="form-select form-select-sm" @bind="operarioSeleccionado">
-                        <option value="">-- Seleccione un operador de campo --</option>
-                        @foreach (var op in operarios)
+                        <option value="">-- Seleccione un Cortador --</option>
+                        @foreach (var op in SoloCortadores)
                         {
                             <option value="@op.OperarioId">
-                                @op.NombreOperario (@op.Rol) @(op.EnLinea ? "· EN LÍNEA" : "")
+                                @op.NombreOperario @(op.EnLinea ? "· EN LÍNEA" : "· Desconectado")
                             </option>
+                        }
+                        @if (OtrosOperarios.Any())
+                        {
+                            <optgroup label="Otros Trabajadores de Campo">
+                                @foreach (var op in OtrosOperarios)
+                                {
+                                    <option value="@op.OperarioId">@op.NombreOperario (@op.Rol)</option>
+                                }
+                            </optgroup>
                         }
                     </select>
                 </div>
 
                 <div class="row g-2 mb-2">
                     <div class="col-6">
-                        <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Prioridad</label>
+                        <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Prioridad del Ticket</label>
                         <select class="form-select form-select-sm" @bind="ticketPrioridad">
                             <option value="Normal">Normal</option>
                             <option value="Alta">Alta</option>
@@ -181,20 +200,95 @@
                     </div>
                     <div class="col-6">
                         <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Título de la Orden</label>
-                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Corte Distrito 4" @bind="ticketTitulo" />
+                        <input type="text" class="form-control form-control-sm" placeholder="Ej. Operativo Corte Mora" @bind="ticketTitulo" />
                     </div>
                 </div>
 
                 <div class="mb-3">
-                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Observaciones Técnicas</label>
-                    <textarea class="form-control form-control-sm" rows="2" placeholder="Instrucciones para la cuadrilla en terreno..." @bind="ticketObservaciones"></textarea>
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Instrucciones Técnicas de Corte</label>
+                    <textarea class="form-control form-control-sm" rows="2" placeholder="Precintar llave de paso, registrar lectura y fotografiar acometida..." @bind="ticketObservaciones"></textarea>
                 </div>
 
-                <button type="button" class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1"
+                <button type="button" class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1 shadow-sm"
                         disabled="@(idsSeleccionados.Count == 0 || string.IsNullOrEmpty(operarioSeleccionado) || isSubmitting)"
                         @onclick="CrearTicket">
                     <i class="bi bi-file-earmark-plus"></i>
-                    <span>@(isSubmitting ? "Generando ticket..." : $"Crear Ticket de Corte ({idsSeleccionados.Count} puntos)")</span>
+                    <span>@(isSubmitting ? "Generando ticket..." : $"Despachar Orden de Corte ({idsSeleccionados.Count} puntos)")</span>
+                </button>
+            </div>
+        </div>
+    }
+    else if (vistaActual == "masiva")
+    {
+        <!-- VISTA DE ASIGNACIÓN MASIVA A CUADRILLA DE CORTADORES -->
+        <div class="card border-0 shadow-sm mb-3" style="border:1px solid #e2e8f0 !important;">
+            <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+                <span class="fw-bold small text-dark d-flex align-items-center gap-1">
+                    <i class="bi bi-layers-fill text-danger"></i>
+                    <span>Despacho Masivo a Cuadrilla de Cortadores</span>
+                </span>
+                <span class="badge bg-danger-subtle text-danger" style="font-size:0.7rem;">Distribución Equitativa</span>
+            </div>
+            <div class="card-body p-3">
+                <p class="small text-muted mb-3" style="font-size:0.75rem;">
+                    Esta herramienta selecciona automáticamente las cuentas en mora y las divide en partes iguales entre los <strong>Cortadores</strong> seleccionados.
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Cantidad de Cuentas a Cortar</label>
+                    <div class="d-flex gap-2">
+                        @foreach (var cant in new[] { 10, 25, 50, 100 })
+                        {
+                            <button type="button" class="btn btn-sm @(cantidadMasiva == cant ? "btn-danger" : "btn-outline-secondary") flex-fill"
+                                    @onclick="() => cantidadMasiva = cant">
+                                @cant Cortes
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Cortadores Participantes</label>
+                    <div class="border rounded bg-white p-2">
+                        @if (SoloCortadores.Count == 0)
+                        {
+                            <div class="text-muted small py-2 text-center">No hay cortadores registrados.</div>
+                        }
+                        else
+                        {
+                            @foreach (var c in SoloCortadores)
+                            {
+                                var sel = cortadoresMasivosSeleccionados.Contains(c.OperarioId);
+                                <div class="form-check form-check-inline me-3 mb-1">
+                                    <input class="form-check-input" type="checkbox" checked="@sel" @onchange="() => ToggleCortadorMasivo(c.OperarioId)" id="chk_cor_@c.OperarioId" />
+                                    <label class="form-check-label small" for="chk_cor_@c.OperarioId">
+                                        @c.NombreOperario @(c.EnLinea ? "· (En línea)" : "")
+                                    </label>
+                                </div>
+                            }
+                        }
+                    </div>
+                </div>
+
+                @if (cortadoresMasivosSeleccionados.Count > 0)
+                {
+                    var cuentasPorCortador = (int)Math.Ceiling((double)cantidadMasiva / cortadoresMasivosSeleccionados.Count);
+                    <div class="p-2 rounded bg-light border mb-3 small d-flex justify-content-between align-items-center">
+                        <span class="text-muted">Cálculo de distribución:</span>
+                        <strong class="text-danger">~@cuentasPorCortador cortes por cada cortador</strong>
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Título del Operativo Masivo</label>
+                    <input type="text" class="form-control form-control-sm" placeholder="Ej. Operativo Masivo de Corte - Distrito 4" @bind="tituloMasivo" />
+                </div>
+
+                <button type="button" class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1 shadow-sm"
+                        disabled="@(cortadoresMasivosSeleccionados.Count == 0 || isSubmitting)"
+                        @onclick="EjecutarAsignacionMasiva">
+                    <i class="bi bi-send-check"></i>
+                    <span>@(isSubmitting ? "Distribuyendo cortes..." : $"Despachar {cantidadMasiva} Cortes entre {cortadoresMasivosSeleccionados.Count} Cortadores")</span>
                 </button>
             </div>
         </div>
@@ -228,6 +322,7 @@
             <div class="d-flex flex-column gap-2">
                 @foreach (var tk in ticketsCorte)
                 {
+                    var pct = tk.TotalPuntos > 0 ? (int)Math.Round((double)tk.PuntosCompletados / tk.TotalPuntos * 100) : 0;
                     <div class="p-3 border rounded bg-white shadow-sm" style="border-color:#dadce0 !important;">
                         <div class="d-flex justify-content-between align-items-start mb-1">
                             <div>
@@ -242,9 +337,14 @@
                         <div class="fw-semibold text-dark mb-1" style="font-size:0.85rem;">@tk.Titulo</div>
                         
                         <div class="d-flex align-items-center gap-2 mb-2" style="font-size:0.75rem;">
-                            <span class="text-muted">Técnico: <strong class="text-dark">@tk.OperarioAsignado</strong></span>
+                            <span class="text-muted">Cortador: <strong class="text-dark">@tk.OperarioAsignado</strong></span>
                             <span class="text-muted">·</span>
-                            <span class="text-muted">Puntos: <strong>@tk.PuntosCompletados / @tk.TotalPuntos</strong></span>
+                            <span class="text-muted">Progreso: <strong>@tk.PuntosCompletados / @tk.TotalPuntos (@pct%)</strong></span>
+                        </div>
+
+                        <!-- Barra de Progreso de Ejecución -->
+                        <div class="assignment-progress-bar mb-2">
+                            <div class="assignment-progress-fill bg-danger" style="width:@pct%;"></div>
                         </div>
 
                         @if (!string.IsNullOrEmpty(tk.Observaciones))
@@ -291,7 +391,7 @@
     private List<EntidadDisponibleDto> entidadesDisponibles = new();
     private HashSet<int> idsSeleccionados = new();
 
-    // Operadores dinámicos reales
+    // Operadores
     private List<OperarioItemDto> operarios = new();
 
     // Creación de ticket
@@ -300,8 +400,16 @@
     private string ticketTitulo = "";
     private string ticketObservaciones = "";
 
+    // Asignación Masiva
+    private int cantidadMasiva = 25;
+    private string tituloMasivo = "Operativo General de Corte por Mora";
+    private HashSet<string> cortadoresMasivosSeleccionados = new();
+
     // Historial de tickets
     private List<TicketRutaDto> ticketsCorte = new();
+
+    private List<OperarioItemDto> SoloCortadores => operarios.Where(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)).ToList();
+    private List<OperarioItemDto> OtrosOperarios => operarios.Where(o => !string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)).ToList();
 
     private IEnumerable<ManzanaDto> ManzanasFiltradas => string.IsNullOrEmpty(uvSeleccionada)
         ? listaManzanas
@@ -343,10 +451,18 @@
         {
             var res = await Http.GetFromJsonAsync<List<OperarioItemDto>>("/api/tracking/operarios");
             operarios = res ?? new();
-            if (string.IsNullOrEmpty(operarioSeleccionado) && operarios.Count > 0)
+            
+            var cortadores = SoloCortadores;
+            if (string.IsNullOrEmpty(operarioSeleccionado) && cortadores.Count > 0)
+            {
+                operarioSeleccionado = cortadores.First().OperarioId;
+            }
+            else if (string.IsNullOrEmpty(operarioSeleccionado) && operarios.Count > 0)
             {
                 operarioSeleccionado = operarios.First().OperarioId;
             }
+
+            cortadoresMasivosSeleccionados = cortadores.Select(c => c.OperarioId).ToHashSet();
         }
         catch (Exception ex)
         {
@@ -354,28 +470,18 @@
         }
     }
 
-    private void OnZonaCambiada()
-    {
-        mzaSeleccionada = "";
-        _ = CargarEntidades();
-    }
-
     private async Task CargarEntidades()
     {
         isLoadingEntidades = true;
         try
         {
-            var url = $"/api/rutas-trabajo/entidades-disponibles?tipo=Corte&limite=100";
-            if (!string.IsNullOrEmpty(uvSeleccionada)) url += $"&uv={Uri.EscapeDataString(uvSeleccionada)}";
-            if (!string.IsNullOrEmpty(mzaSeleccionada)) url += $"&mza={Uri.EscapeDataString(mzaSeleccionada)}";
-            if (!string.IsNullOrEmpty(filtroBusqueda)) url += $"&busqueda={Uri.EscapeDataString(filtroBusqueda)}";
-
+            var url = $"/api/rutas-trabajo/entidades-disponibles?tipo=Corte&uv={Uri.EscapeDataString(uvSeleccionada)}&mza={Uri.EscapeDataString(mzaSeleccionada)}&busqueda={Uri.EscapeDataString(filtroBusqueda)}&limite=150";
             var res = await Http.GetFromJsonAsync<List<EntidadDisponibleDto>>(url);
             entidadesDisponibles = res ?? new();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error al cargar entidades: {ex.Message}");
+            Console.WriteLine($"Error al cargar cuentas de corte: {ex.Message}");
         }
         finally
         {
@@ -383,18 +489,34 @@
         }
     }
 
+    private async Task OnZonaCambiada()
+    {
+        mzaSeleccionada = "";
+        await CargarEntidades();
+    }
+
     private void ToggleEntidad(int id)
     {
-        if (idsSeleccionados.Contains(id))
-            idsSeleccionados.Remove(id);
+        if (idsSeleccionados.Contains(id)) idsSeleccionados.Remove(id);
+        else idsSeleccionados.Add(id);
+    }
+
+    private void ToggleCortadorMasivo(string opId)
+    {
+        if (cortadoresMasivosSeleccionados.Contains(opId))
+            cortadoresMasivosSeleccionados.Remove(opId);
         else
-            idsSeleccionados.Add(id);
+            cortadoresMasivosSeleccionados.Add(opId);
     }
 
     private void SeleccionarTodasEntidades()
     {
-        foreach (var e in entidadesDisponibles)
-            idsSeleccionados.Add(e.IdCodigo);
+        idsSeleccionados = entidadesDisponibles.Select(x => x.IdCodigo).ToHashSet();
+    }
+
+    private void SeleccionarPrimeros(int cantidad)
+    {
+        idsSeleccionados = entidadesDisponibles.Take(cantidad).Select(x => x.IdCodigo).ToHashSet();
     }
 
     private void DeseleccionarTodasEntidades()
@@ -417,7 +539,7 @@
 
         if (string.IsNullOrEmpty(operarioSeleccionado))
         {
-            mensajeError = "Seleccione el operario técnico responsable.";
+            mensajeError = "Seleccione el cortador técnico responsable.";
             return;
         }
 
@@ -441,7 +563,7 @@
             if (res.IsSuccessStatusCode)
             {
                 var data = await res.Content.ReadFromJsonAsync<CrearTicketRespuestaDto>();
-                mensajeExito = data?.Mensaje ?? "Ticket creado exitosamente.";
+                mensajeExito = data?.Mensaje ?? "Orden de corte creada y despachada exitosamente.";
                 idsSeleccionados.Clear();
                 ticketTitulo = "";
                 ticketObservaciones = "";
@@ -458,6 +580,54 @@
         catch (Exception ex)
         {
             mensajeError = $"Error de comunicación: {ex.Message}";
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task EjecutarAsignacionMasiva()
+    {
+        if (cortadoresMasivosSeleccionados.Count == 0)
+        {
+            mensajeError = "Debe seleccionar al menos un cortador para el despacho masivo.";
+            return;
+        }
+
+        isSubmitting = true;
+        mensajeError = null;
+        mensajeExito = null;
+
+        try
+        {
+            var dto = new
+            {
+                TituloGeneral = string.IsNullOrWhiteSpace(tituloMasivo) ? "Operativo Masivo de Corte por Mora" : tituloMasivo,
+                Tipo = "Corte",
+                Prioridad = "Alta",
+                OperariosAsignados = cortadoresMasivosSeleccionados.ToList(),
+                CantidadCuentas = cantidadMasiva,
+                Observaciones = "Corte inmediato por mora crítica mayor a 3 meses. Despacho masivo."
+            };
+
+            var res = await Http.PostAsJsonAsync("/api/rutas-trabajo/asignacion-masiva", dto);
+            if (res.IsSuccessStatusCode)
+            {
+                var data = await res.Content.ReadFromJsonAsync<CrearTicketRespuestaDto>();
+                mensajeExito = data?.Mensaje ?? $"Se asignaron {cantidadMasiva} cortes distribuidos entre los cortadores seleccionados.";
+                await CargarTickets();
+                vistaActual = "tickets";
+            }
+            else
+            {
+                var err = await res.Content.ReadFromJsonAsync<ErrorDto>();
+                mensajeError = err?.Error ?? "Ocurrió un error al procesar el despacho masivo.";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeError = $"Error: {ex.Message}";
         }
         finally
         {

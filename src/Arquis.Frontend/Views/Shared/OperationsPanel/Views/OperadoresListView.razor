@@ -5,8 +5,11 @@
 <div class="drawer-view-container">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
-            <h6 class="fw-bold mb-0 text-dark">Operadores de Campo en Tiempo Real</h6>
-            <small class="text-muted">Personal conectado desde la aplicación móvil</small>
+            <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
+                <i class="bi bi-people-fill text-primary"></i>
+                <span>Cuadrilla y Roles de Trabajo</span>
+            </h6>
+            <small class="text-muted">Personal técnico clasificado en <strong>Cortadores</strong> y <strong>Reconectores</strong></small>
         </div>
         <div class="d-flex align-items-center gap-1">
             <span class="badge @(operariosActivos.Count > 0 ? "bg-success" : "bg-secondary")" style="font-size:0.7rem;">
@@ -16,6 +19,61 @@
             <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" @onclick="CargarOperarios" title="Actualizar ahora">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(mensajeFeedback))
+    {
+        <div class="alert alert-info alert-dismissible fade show py-2 px-3 small mb-3 shadow-sm d-flex align-items-center gap-2" role="alert">
+            <i class="bi bi-check-circle-fill text-primary"></i>
+            <span class="flex-grow-1">@mensajeFeedback</span>
+            <button type="button" class="btn-close py-2 px-2" @onclick="() => mensajeFeedback = null"></button>
+        </div>
+    }
+
+    <!-- Métricas en Vivo de Cuadrilla divididas por los 2 Roles -->
+    <div class="row g-2 mb-3">
+        <div class="col-4">
+            <div class="p-2 border rounded bg-white text-center shadow-sm h-100">
+                <span class="small text-muted d-block" style="font-size:0.68rem;">Total Cuadrilla</span>
+                <strong class="fs-5 text-dark">@operarios.Count</strong>
+                <small class="d-block text-muted" style="font-size:0.65rem;">@operariosActivos.Count activos</small>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="metric-card-cortador text-center h-100">
+                <span class="small text-danger d-block fw-semibold" style="font-size:0.68rem;">
+                    <i class="bi bi-slash-circle me-1"></i>Cortadores
+                </span>
+                <strong class="fs-5 text-danger">@TotalCortadores</strong>
+                <small class="d-block text-muted" style="font-size:0.65rem;">@CortadoresActivos en línea</small>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="metric-card-reconector text-center h-100">
+                <span class="small text-primary d-block fw-semibold" style="font-size:0.68rem;">
+                    <i class="bi bi-droplet-fill me-1"></i>Reconectores
+                </span>
+                <strong class="fs-5 text-primary">@TotalReconectores</strong>
+                <small class="d-block text-muted" style="font-size:0.65rem;">@ReconectoresActivos en línea</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros de Rol y Búsqueda -->
+    <div class="d-flex flex-wrap gap-1 align-items-center mb-2">
+        <button type="button" class="role-filter-pill @(filtroRol == "todos" ? "active-all" : "")" @onclick='() => filtroRol = "todos"'>
+            Todos (@operarios.Count)
+        </button>
+        <button type="button" class="role-filter-pill @(filtroRol == "Cortador" ? "active-cortador" : "")" @onclick='() => filtroRol = "Cortador"'>
+            <i class="bi bi-slash-circle"></i> Cortadores (@TotalCortadores)
+        </button>
+        <button type="button" class="role-filter-pill @(filtroRol == "Reconector" ? "active-reconector" : "")" @onclick='() => filtroRol = "Reconector"'>
+            <i class="bi bi-droplet-fill"></i> Reconectores (@TotalReconectores)
+        </button>
+        <div class="ms-auto form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="filtroSoloEnLinea" @bind="soloSoloEnLinea" />
+            <label class="form-check-label small text-muted" for="filtroSoloEnLinea" style="font-size:0.72rem;">En línea</label>
         </div>
     </div>
 
@@ -31,41 +89,19 @@
         }
     </div>
 
-    <!-- Métricas en Vivo de Cuadrilla -->
-    <div class="row g-2 mb-3">
-        <div class="col-4">
-            <div class="p-2 border rounded bg-white text-center shadow-sm">
-                <span class="small text-muted d-block" style="font-size:0.68rem;">Total Registrados</span>
-                <strong class="fs-6 text-dark">@operarios.Count</strong>
-            </div>
-        </div>
-        <div class="col-4">
-            <div class="p-2 border rounded bg-white text-center shadow-sm">
-                <span class="small text-muted d-block" style="font-size:0.68rem;">En Línea Ahora</span>
-                <strong class="fs-6 text-success">@operariosActivos.Count</strong>
-            </div>
-        </div>
-        <div class="col-4">
-            <div class="p-2 border rounded bg-white text-center shadow-sm">
-                <span class="small text-muted d-block" style="font-size:0.68rem;">Posiciones Hoy</span>
-                <strong class="fs-6 text-primary">@operarios.Sum(x => x.TotalPuntos)</strong>
-            </div>
-        </div>
-    </div>
-
     @if (isLoading && operarios.Count == 0)
     {
         <div class="py-5 text-center text-muted">
             <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
-            <div class="small fw-semibold">Consultando técnicos en campo...</div>
+            <div class="small fw-semibold">Consultando cuadrillas en campo...</div>
         </div>
     }
     else if (OperariosFiltrados.Count == 0)
     {
         <div class="text-center py-5 border rounded bg-white shadow-sm">
             <i class="bi bi-person-x text-muted fs-1 mb-2 d-block"></i>
-            <div class="fw-semibold text-dark">No se encontraron operadores</div>
-            <small class="text-muted">Ningún técnico coincide con el filtro o aún no se han registrado operarios.</small>
+            <div class="fw-semibold text-dark">No se encontraron trabajadores</div>
+            <small class="text-muted">Ningún técnico coincide con los filtros de rol o búsqueda aplicados.</small>
         </div>
     }
     else
@@ -80,26 +116,53 @@
                 var vel = activo?.Velocidad ?? op.Velocidad;
                 var rumbo = activo?.Rumbo ?? op.Rumbo;
                 var bat = activo?.Bateria ?? op.Bateria;
+                var isCortador = string.Equals(op.Rol, "Cortador", StringComparison.OrdinalIgnoreCase);
 
                 <div class="p-3 border rounded bg-white shadow-sm" style="border-color:#dadce0 !important;">
-                    <!-- Cabecera del Operador -->
+                    <!-- Cabecera del Operador y Avatar según Rol -->
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div class="d-flex align-items-center gap-2">
                             <div class="position-relative">
                                 <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold shadow-sm"
-                                     style="width:38px; height:38px; background:#1a73e8; font-size:0.9rem;">
-                                    @(op.NombreOperario.Length > 0 ? op.NombreOperario.Substring(0, 1).ToUpper() : "O")
+                                     style="width:40px; height:40px; background:@(isCortador ? "#dc2626" : "#2563eb"); font-size:0.95rem;">
+                                    @(op.NombreOperario.Length > 0 ? op.NombreOperario.Substring(0, 1).ToUpper() : "T")
                                 </div>
-                                <span class="position-absolute bottom-0 end-0 rounded-circle border border-white"
+                                <span class="position-absolute bottom-0 end-0 rounded-circle border border-white @(isOnline ? "pulse-online-halo" : "")"
                                       style="background:@(isOnline ? "#22c55e" : "#94a3b8"); width:12px; height:12px;"></span>
                             </div>
                             <div>
-                                <div class="fw-bold text-dark text-truncate" style="max-width:210px; font-size:0.9rem;">
+                                <div class="fw-bold text-dark text-truncate" style="max-width:190px; font-size:0.92rem;">
                                     @op.NombreOperario
                                 </div>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.68rem;">@op.Rol</span>
-                                    <span class="text-muted" style="font-size:0.7rem;">Usuario: @op.OperarioId</span>
+                                <div class="d-flex align-items-center gap-1 mt-1">
+                                    @if (isCortador)
+                                    {
+                                        <span class="role-badge-cortador">
+                                            <i class="bi bi-slash-circle"></i> Cortador
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="role-badge-reconector">
+                                            <i class="bi bi-droplet-fill"></i> Reconector
+                                        </span>
+                                    }
+
+                                    <!-- Botón para alternar rol en 1 clic -->
+                                    <button type="button" class="worker-role-switch-btn ms-1" 
+                                            disabled="@cambiandoRolId == op.OperarioId"
+                                            @onclick='() => CambiarRolAsync(op, isCortador ? "Reconector" : "Cortador")'
+                                            title="Cambiar rol entre Cortador y Reconector">
+                                        @if (cambiandoRolId == op.OperarioId)
+                                        {
+                                            <span class="spinner-border spinner-border-sm" style="width:8px; height:8px;" role="status"></span>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-arrow-left-right me-1"></i>
+                                            <span>@(isCortador ? "Pasar a Reconector" : "Pasar a Cortador")</span>
+                                        }
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -123,6 +186,7 @@
                             {
                                 <span class="badge bg-light text-muted" style="font-size:0.68rem;">Sin conexión</span>
                             }
+                            <div class="text-muted" style="font-size:0.68rem;">ID: @op.OperarioId</div>
                         </div>
                     </div>
 
@@ -142,26 +206,33 @@
                                 </div>
                             }
                             <div class="col-12">
-                                <span class="text-muted">Posiciones registradas:</span> <strong>@op.TotalPuntos</strong>
+                                <span class="text-muted">Posiciones registradas hoy:</span> <strong>@op.TotalPuntos</strong>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Botones de Acción Modular Directa -->
+                    <!-- Botones de Acción Modular Directa según el Rol -->
                     <div class="d-flex flex-wrap gap-1 pt-1 border-top">
-                        <button type="button" class="btn btn-sm btn-outline-danger flex-fill d-flex align-items-center justify-content-center gap-1" style="font-size:0.75rem;"
-                                @onclick="() => OnAsignarCorte.InvokeAsync(op.OperarioId)" title="Crear orden de corte">
-                            <i class="bi bi-slash-circle"></i>
-                            <span>Asignar Corte</span>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary flex-fill d-flex align-items-center justify-content-center gap-1" style="font-size:0.75rem;"
-                                @onclick="() => OnAsignarReconexion.InvokeAsync(op.OperarioId)" title="Crear orden de reconexión">
-                            <i class="bi bi-droplet"></i>
-                            <span>Habilitar Agua</span>
-                        </button>
+                        @if (isCortador)
+                        {
+                            <button type="button" class="btn btn-sm btn-danger flex-fill d-flex align-items-center justify-content-center gap-1 shadow-sm" style="font-size:0.75rem;"
+                                    @onclick="() => OnAsignarCorte.InvokeAsync(op.OperarioId)" title="Asignar cortes a este trabajador">
+                                <i class="bi bi-slash-circle"></i>
+                                <span>Asignar Cortes</span>
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-sm btn-primary flex-fill d-flex align-items-center justify-content-center gap-1 shadow-sm" style="font-size:0.75rem;"
+                                    @onclick="() => OnAsignarReconexion.InvokeAsync(op.OperarioId)" title="Asignar reconexiones a este trabajador">
+                                <i class="bi bi-droplet-fill"></i>
+                                <span>Asignar Reconexión</span>
+                            </button>
+                        }
+
                         @if (lat.HasValue && lng.HasValue)
                         {
-                            <button type="button" class="btn btn-sm btn-success d-flex align-items-center gap-1" style="font-size:0.75rem;"
+                            <button type="button" class="btn btn-sm btn-outline-success d-flex align-items-center gap-1" style="font-size:0.75rem;"
                                     @onclick="() => UbicarEnMapa(op, lat.Value, lng.Value, vel, rumbo, bat)" title="Centrar mapa en posición GPS">
                                 <i class="bi bi-crosshair"></i>
                             </button>
@@ -184,20 +255,53 @@
 
     private bool isLoading = false;
     private string filtroTexto = string.Empty;
+    private string filtroRol = "todos"; // "todos", "Cortador", "Reconector"
+    private bool soloSoloEnLinea = false;
+    private string? mensajeFeedback;
+    private string? cambiandoRolId;
+
     private List<OperarioItemDto> operarios = new();
     private List<TrackingPosicionItemDto> operariosActivos = new();
     private System.Threading.Timer? refreshTimer;
 
-    private List<OperarioItemDto> OperariosFiltrados => string.IsNullOrWhiteSpace(filtroTexto)
-        ? operarios
-        : operarios.Where(o => o.NombreOperario.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase) 
-                            || o.Rol.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase)
-                            || o.OperarioId.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase)).ToList();
+    private int TotalCortadores => operarios.Count(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase));
+    private int TotalReconectores => operarios.Count(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase));
+
+    private int CortadoresActivos => operariosActivos.Count(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase) ||
+                                                                 operarios.Any(x => x.OperarioId == o.OperarioId && string.Equals(x.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)));
+    private int ReconectoresActivos => operariosActivos.Count(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase) ||
+                                                                   operarios.Any(x => x.OperarioId == o.OperarioId && string.Equals(x.Rol, "Reconector", StringComparison.OrdinalIgnoreCase)));
+
+    private List<OperarioItemDto> OperariosFiltrados
+    {
+        get
+        {
+            var list = operarios.AsEnumerable();
+
+            if (filtroRol == "Cortador")
+                list = list.Where(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase));
+            else if (filtroRol == "Reconector")
+                list = list.Where(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase));
+
+            if (soloSoloEnLinea)
+            {
+                list = list.Where(o => o.EnLinea || operariosActivos.Any(a => string.Equals(a.OperarioId, o.OperarioId, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtroTexto))
+            {
+                list = list.Where(o => o.NombreOperario.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase)
+                                    || o.Rol.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase)
+                                    || o.OperarioId.Contains(filtroTexto, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return list.ToList();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await CargarOperarios();
-        // Polling en tiempo real cada 5 segundos para recibir la telemetría del móvil
         refreshTimer = new System.Threading.Timer(async _ =>
         {
             await InvokeAsync(CargarOperariosSilencioso);
@@ -238,6 +342,35 @@
             StateHasChanged();
         }
         catch { }
+    }
+
+    private async Task CambiarRolAsync(OperarioItemDto op, string nuevoRol)
+    {
+        cambiandoRolId = op.OperarioId;
+        StateHasChanged();
+        try
+        {
+            var resp = await Http.PutAsJsonAsync($"/api/tracking/operarios/{op.OperarioId}/rol", new { Rol = nuevoRol });
+            if (resp.IsSuccessStatusCode)
+            {
+                op.Rol = nuevoRol;
+                mensajeFeedback = $"El trabajador {op.NombreOperario} ahora tiene rol de {nuevoRol}.";
+                await CargarOperarios();
+            }
+            else
+            {
+                mensajeFeedback = "No se pudo actualizar el rol. Intente nuevamente.";
+            }
+        }
+        catch (Exception ex)
+        {
+            mensajeFeedback = $"Error al cambiar rol: {ex.Message}";
+        }
+        finally
+        {
+            cambiandoRolId = null;
+            StateHasChanged();
+        }
     }
 
     private async Task UbicarEnMapa(OperarioItemDto op, double lat, double lng, double vel, double rumbo, int bat)

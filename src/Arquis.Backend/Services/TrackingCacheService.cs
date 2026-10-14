@@ -40,5 +40,13 @@ namespace Arquis.Backend.Services
                 pos.EnLinea = false;
             }
         }
+
+        public void ActualizarRol(string operarioId, string nuevoRol)
+        {
+            if (_posicionesActivas.TryGetValue(operarioId, out var pos))
+            {
+                pos.Rol = nuevoRol;
+            }
+        }
     }
 }
