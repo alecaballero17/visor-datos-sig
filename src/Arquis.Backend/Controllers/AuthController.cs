@@ -13,7 +13,7 @@ namespace Arquis.Backend.Controllers;
 [Route("api/autenticacion")]
 public sealed class AuthController(AuthService authService) : ControllerBase
 {
-    [AllowAnonymous]
+    [Authorize(Roles="Administrador")]
     [HttpPost("registrar")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {

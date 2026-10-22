@@ -11,7 +11,7 @@
 
 Siga [COMO_EJECUTAR.md](../COMO_EJECUTAR.md): instale pyshp y ejecute `LEVANTAR_ARQUIS.cmd`. El lanzador inicia SQL Server en Docker, crea el esquema, importa las capas disponibles y aplica los scripts 10 a 13. Acepta las capas directamente en `03_DatosPrueba` o en `03_DatosPrueba/DatosSIG_Reproj`.
 
-Para actualizar una base ya existente al registro por email, aplique `13_Registro_Email.sql` antes de ejecutar la nueva versión. Los usuarios existentes conservan sus contraseñas y pueden seguir entrando con su usuario.
+El lanzador aplica automáticamente las migraciones `13_Registro_Email.sql` y `14_Asignacion_Empleados.sql`. La última crea el rol `Conector` y la tabla de asignaciones. Los usuarios existentes conservan sus contraseñas y roles.
 
 ## Backend
 

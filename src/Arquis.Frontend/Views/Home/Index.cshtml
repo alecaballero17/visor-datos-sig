@@ -24,6 +24,46 @@
       <div class="p-3 border-bottom">
         <div class="fw-semibold mb-2">Leyenda</div><div id="legend"></div>
       </div>
+      <section id="assignmentPanel" class="p-3 border-bottom" aria-labelledby="assignmentHeading">
+        <h2 id="assignmentHeading" class="h6 fw-semibold">Asignar trabajo</h2>
+        <label for="assignmentType" class="form-label small mb-1">Tipo de trabajo</label>
+        <select id="assignmentType" class="form-select form-select-sm mb-2">
+          <option value="Corte">Corte</option>
+          <option value="Reconexion">Reconexión</option>
+        </select>
+        <label for="assignmentEmployee" class="form-label small mb-1">Empleado</label>
+        <select id="assignmentEmployee" class="form-select form-select-sm mb-2" disabled>
+          <option value="">Cargando empleados…</option>
+        </select>
+        <div id="assignmentTarget" class="small text-secondary border rounded p-2 mb-2">Seleccione un código fijo en el mapa o en los resultados de búsqueda.</div>
+        <button id="createAssignmentBtn" type="button" class="btn btn-sm btn-primary w-100" disabled>Asignar el punto seleccionado</button>
+        <div id="assignmentMessage" class="small mt-2" role="status" aria-live="polite"></div>
+
+        <details class="mt-3">
+          <summary class="small fw-semibold">Crear usuario operativo</summary>
+          <form id="employeeForm" class="pt-2">
+            <label for="employeeName" class="form-label small mb-1">Nombre</label>
+            <input id="employeeName" class="form-control form-control-sm mb-2" maxlength="120" required>
+            <label for="employeeLogin" class="form-label small mb-1">Usuario de acceso</label>
+            <input id="employeeLogin" class="form-control form-control-sm mb-2" maxlength="50" autocomplete="off" required>
+            <label for="employeePassword" class="form-label small mb-1">Contraseña inicial</label>
+            <input id="employeePassword" type="password" class="form-control form-control-sm mb-2" minlength="8" maxlength="128" autocomplete="new-password" required>
+            <label for="employeeRole" class="form-label small mb-1">Rol</label>
+            <select id="employeeRole" class="form-select form-select-sm mb-2">
+              <option value="Cortador">Cortador</option>
+              <option value="Conector">Conector</option>
+            </select>
+            <button class="btn btn-sm btn-outline-primary w-100" type="submit">Crear empleado</button>
+            <div id="employeeMessage" class="small mt-2" role="status" aria-live="polite"></div>
+          </form>
+        </details>
+
+        <div class="d-flex justify-content-between align-items-center mt-3 mb-2">
+          <span class="small fw-semibold">Asignaciones recientes</span>
+          <button id="refreshAssignmentsBtn" class="btn btn-sm btn-outline-secondary" type="button">Actualizar</button>
+        </div>
+        <div id="assignmentList" class="small text-secondary" aria-live="polite">Cargando…</div>
+      </section>
       <div class="p-3 results-panel">
         <div class="d-flex justify-content-between align-items-center"><span class="fw-semibold">Resultados</span><span id="resultCount" class="badge text-bg-secondary">0</span></div>
         <div id="resultStatus" class="small text-secondary py-2">Sin consulta activa.</div>

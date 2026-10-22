@@ -42,7 +42,7 @@ if [[ "$new_db" == 1 ]]; then
     done
     PREPARE=true
 fi
-schema_pending="$(sql_value "USE VisorDatosSIG; SELECT CASE WHEN COL_LENGTH('dbo.Usuarios','Email') IS NULL OR COL_LENGTH('dbo.CodigosFijos','EstadoVerificado') IS NULL OR OBJECT_ID('dbo.sp_ActualizarLoteCodigosFijos','P') IS NULL THEN 1 ELSE 0 END")"
+schema_pending="$(sql_value "USE VisorDatosSIG; SELECT CASE WHEN COL_LENGTH('dbo.Usuarios','Email') IS NULL OR COL_LENGTH('dbo.CodigosFijos','EstadoVerificado') IS NULL OR OBJECT_ID('dbo.sp_ActualizarLoteCodigosFijos','P') IS NULL OR OBJECT_ID('dbo.OrdenesTrabajo','U') IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.Roles WHERE NombreRol='Conector') THEN 1 ELSE 0 END")"
 [[ "$schema_pending" != 1 ]] || PREPARE=true
 empty_layers="$(sql_value 'USE VisorDatosSIG; SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM dbo.Manzanas) OR NOT EXISTS(SELECT 1 FROM dbo.Lotes) OR NOT EXISTS(SELECT 1 FROM dbo.CodigosFijos) OR NOT EXISTS(SELECT 1 FROM dbo.Vias) THEN 1 ELSE 0 END')"
 shopt -s nullglob
@@ -75,7 +75,7 @@ if $PREPARE; then
     for table in Manzanas Lotes CodigosFijos Vias; do
         sql -Q "USE VisorDatosSIG; IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.$table') AND name='SIX_${table}_Geom') CREATE SPATIAL INDEX SIX_${table}_Geom ON dbo.$table(Geom) USING GEOMETRY_GRID WITH (BOUNDING_BOX=(-180,-90,180,90));"
     done
-    for file in 04_Actualizar_CodigosFijos_Estado.sql 05_Optimizar_Relacion_CodigoFijo_Lote.sql 06_Agregar_Nombre_Vias.sql 07_Roles_Usuarios_Menu.sql 08_MenuOpciones_UsuarioMenu.sql 09_Arquis_Alfa.sql 10_Asociacion_Indices_Espaciales.sql 11_Estado_Servicio_Verificado.sql 12_Indice_Codigos_Agua.sql 13_Registro_Email.sql; do
+    for file in 04_Actualizar_CodigosFijos_Estado.sql 05_Optimizar_Relacion_CodigoFijo_Lote.sql 06_Agregar_Nombre_Vias.sql 07_Roles_Usuarios_Menu.sql 08_MenuOpciones_UsuarioMenu.sql 09_Arquis_Alfa.sql 10_Asociacion_Indices_Espaciales.sql 11_Estado_Servicio_Verificado.sql 12_Indice_Codigos_Agua.sql 13_Registro_Email.sql 14_Asignacion_Empleados.sql; do
         echo "Ejecutando $file"
         sql_file "$ROOT/02_BaseDatos/$file"
     done

@@ -44,6 +44,12 @@ try {
         $cmd.CommandText = $batch
         [void]$cmd.ExecuteNonQuery()
     }
+    $sql = Get-Content '02_BaseDatos/14_Asignacion_Empleados.sql' -Raw -Encoding UTF8
+    foreach ($batch in [regex]::Split($sql, '(?im)^\s*GO\s*\r?$')) {
+        if (-not $batch.Trim()) { continue }
+        $cmd.CommandText = $batch
+        [void]$cmd.ExecuteNonQuery()
+    }
     $cmd.CommandText = 'USE VisorDatosSIG; EXEC dbo.sp_ActualizarLoteCodigosFijos;'
     [void]$cmd.ExecuteNonQuery()
     Write-Host 'Base local preparada.'

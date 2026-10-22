@@ -4,7 +4,7 @@
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
   L.control.scale({imperial:false}).addTo(map);
 
-  const layerState=new Map(); let selectedLayer=null; let selectedId=null; let selectedFeature=null; let selectedGraphic=null; let refreshTimer=null; let detailVersion=0; let refreshVersion=0;
+  const layerState=new Map(); let selectedLayer=null; let selectedId=null; let selectedFeature=null; let selectedGraphic=null; let refreshTimer=null; let detailVersion=0; let refreshVersion=0; let assignmentCode=null;
   const withWater=document.getElementById('showWithWater'), withoutWater=document.getElementById('showWithoutWater');
   withWater.closest('fieldset').insertAdjacentHTML('beforeend','<p class="small text-secondary mb-0 mt-2">Acércate al mapa para distinguir los símbolos de cada lote.</p>');
   function waterVisible(key,feature){
@@ -41,7 +41,28 @@
   const pointFor=(meta,feature,latlng)=> L.circleMarker(latlng,{radius:3,color:meta.style?.color||'#f59e0b',weight:1,fillOpacity:.8}).bindTooltip(escapeHtml(`Código fijo ${feature.properties.CodFijo??feature.id}`));
   const title=(k)=>({manzanas:'Manzanas',lotes:'Lotes',codigosfijos:'Códigos fijos',vias:'Vías'}[k]||k);
 
-  async function ensureSession(){ const r=await fetch(`${api}/api/autenticacion/sesion`,{credentials:'include'}); if(r.status===401){location.href='/';return null;} if(!r.ok) throw new Error('No se pudo verificar la sesión.'); const s=await r.json(); document.getElementById('userName').textContent=s.nombre||s.usuario; return s; }
+  async function ensureSession(){ const r=await fetch(`${api}/api/autenticacion/sesion`,{credentials:'include'}); if(r.status===401){location.href='/';return null;} if(!r.ok) throw new Error('No se pudo verificar la sesión.'); const s=await r.json(); if(!(s.roles||[]).includes('Administrador')){await fetch(`${api}/api/autenticacion/cerrar`,{method:'POST',credentials:'include'});location.href='/';return null;} document.getElementById('userName').textContent=s.nombre||s.usuario; return s; }
+  function setAssignmentTarget(key,feature){
+    const box=document.getElementById('assignmentTarget'),button=document.getElementById('createAssignmentBtn');
+    assignmentCode=key==='codigosfijos'?(Number(feature.properties?.IdCodigo??feature.properties?.idCodigo??feature.id)||null):null;
+    if(assignmentCode){box.textContent=`Punto seleccionado · Código fijo ${feature.properties?.CodFijo??assignmentCode}`;button.disabled=false;}
+    else{box.textContent='Seleccione un código fijo en el mapa o en los resultados de búsqueda.';button.disabled=true;}
+  }
+  async function loadEmployees(){
+    const select=document.getElementById('assignmentEmployee'),type=document.getElementById('assignmentType').value;
+    select.disabled=true;select.innerHTML='<option value="">Cargando empleados…</option>';
+    try{const role=type==='Corte'?'Cortador':'Conector',r=await fetch(`${api}/api/administracion/empleados?rol=${role}`,{credentials:'include'});if(!r.ok)throw new Error('No se pudieron cargar empleados.');const rows=await r.json();select.innerHTML='<option value="">Seleccione empleado…</option>';rows.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=`${x.nombre} (${x.login})`;select.appendChild(o);});if(!rows.length)select.innerHTML='<option value="">No hay empleados con este rol</option>';select.disabled=!rows.length;}catch(e){select.innerHTML='<option value="">Error al cargar empleados</option>';showMessage('assignmentMessage',e.message,true);}
+  }
+  function showMessage(id,message,error=false){const el=document.getElementById(id);el.textContent=message;el.className=`small mt-2 ${error?'text-danger':'text-success'}`;}
+  async function loadAssignments(){
+    const box=document.getElementById('assignmentList');box.textContent='Cargando…';
+    try{const r=await fetch(`${api}/api/administracion/asignaciones`,{credentials:'include'});if(!r.ok)throw new Error('No se pudieron cargar asignaciones.');const rows=await r.json();box.innerHTML='';if(!rows.length){box.textContent='Todavía no hay asignaciones.';return;}
+      rows.forEach(x=>{const card=document.createElement('div');card.className='border rounded p-2 mb-2';const code=x.codigoFijo??x.idCodigo,service=x.nombreServicio?` · ${escapeHtml(x.nombreServicio)}`:'',serviceState=x.estadoVerificado?(serviceStates[x.estadoServicio]||'Sin verificar'):`Sin verificar (valor interno: ${serviceStates[x.estadoServicio]||'desconocido'})`;card.innerHTML=`<div class="fw-semibold">${escapeHtml(x.tipoTrabajo)} · Código ${escapeHtml(code)}${service}</div><div>${escapeHtml(x.empleadoNombre)} (${escapeHtml(x.empleadoLogin)})</div><div class="text-secondary">${escapeHtml(x.estado)} · Servicio: ${escapeHtml(serviceState)}</div>`;if(x.estado==='Pendiente'){const b=document.createElement('button');b.type='button';b.className='btn btn-sm btn-outline-danger mt-2';b.textContent='Cancelar';b.addEventListener('click',()=>cancelAssignment(x.idOrden));card.appendChild(b);}box.appendChild(card);});
+    }catch(e){box.textContent=e.message;}
+  }
+  async function cancelAssignment(id){try{const r=await fetch(`${api}/api/administracion/asignaciones/${id}/cancelar`,{method:'POST',credentials:'include'});const data=await r.json();if(!r.ok)throw new Error(data.mensaje||'No se pudo cancelar.');showMessage('assignmentMessage',data.mensaje);await loadAssignments();}catch(e){showMessage('assignmentMessage',e.message,true);}}
+  async function createAssignment(){const idEmpleado=Number(document.getElementById('assignmentEmployee').value);if(!assignmentCode||!idEmpleado){showMessage('assignmentMessage','Seleccione un código fijo y un empleado.',true);return;}const body={idCodigo:assignmentCode,idEmpleado,tipoTrabajo:document.getElementById('assignmentType').value};try{const r=await fetch(`${api}/api/administracion/asignaciones`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.mensaje||'No se pudo crear la asignación.');showMessage('assignmentMessage',`Asignación #${data.idOrden} creada.`);await loadAssignments();}catch(e){showMessage('assignmentMessage',e.message,true);}}
+  async function createEmployee(event){event.preventDefault();const body={nombre:document.getElementById('employeeName').value,login:document.getElementById('employeeLogin').value,password:document.getElementById('employeePassword').value,rol:document.getElementById('employeeRole').value};try{const r=await fetch(`${api}/api/administracion/empleados`,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();if(!r.ok)throw new Error(data.mensaje||'No se pudo crear el empleado.');showMessage('employeeMessage',`Usuario ${data.login} creado con rol ${data.rol}.`);event.target.reset();await loadEmployees();}catch(e){showMessage('employeeMessage',e.message,true);}}
   async function loadMetadata(){
     const r=await fetch(`${api}/api/capas`,{credentials:'include'}); if(r.status===401){location.href='/';return;} if(!r.ok) throw new Error('No se pudo cargar el catálogo de capas.');
     const metas=await r.json(); const ctl=document.getElementById('layerControl'); const legend=document.getElementById('legend'); ctl.innerHTML=''; legend.innerHTML='';
@@ -126,7 +147,7 @@
       section.querySelectorAll('[data-water-code]').forEach(button=>button.addEventListener('click',()=>openSearchResult({layer:'codigosfijos',id:Number(button.dataset.waterCode)})));
     }catch(error){if(current())document.getElementById('waterDetail').innerHTML=`<h3 class="h6">Agua potable</h3><p class="small text-danger">${escapeHtml(error.message)}</p>`;}
   }
-  function selectFeature(key,feature,layer){ if(!waterVisible(key,feature)){resultStatus.textContent='La entidad está oculta por el filtro de agua. Active su casilla para mostrarla.';return;} selectedFeature=feature;selectedLayer=key;selectedId=feature.id; if(selectedGraphic)map.removeLayer(selectedGraphic); try{selectedGraphic=L.geoJSON(feature,{style:{color:'#f59e0b',weight:5,fillOpacity:.18},pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:10,color:'#f59e0b',weight:4,fillOpacity:.25})}).addTo(map);}catch{} showDetail(key,feature); highlightResult(key,feature.id); }
+  function selectFeature(key,feature,layer){ if(!waterVisible(key,feature)){resultStatus.textContent='La entidad está oculta por el filtro de agua. Active su casilla para mostrarla.';return;} selectedFeature=feature;selectedLayer=key;selectedId=feature.id;setAssignmentTarget(key,feature); if(selectedGraphic)map.removeLayer(selectedGraphic); try{selectedGraphic=L.geoJSON(feature,{style:{color:'#f59e0b',weight:5,fillOpacity:.18},pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:10,color:'#f59e0b',weight:4,fillOpacity:.25})}).addTo(map);}catch{} showDetail(key,feature); highlightResult(key,feature.id); }
   function highlightResult(key,id){document.querySelectorAll('.result-item').forEach(x=>x.classList.toggle('active',x.dataset.layer===key&&String(x.dataset.id)===String(id)));}
 
   async function doSearch(){
@@ -138,10 +159,11 @@
   async function openSearchResult(row){
     const r=await fetch(`${api}/api/capas/${row.layer}/${row.id}`,{credentials:'include'});if(!r.ok)return;const feature=await r.json();if(Array.isArray(feature.bbox)){const b=feature.bbox;if(b[0]===b[2]&&b[1]===b[3])map.setView([b[1],b[0]],18);else map.fitBounds([[b[1],b[0]],[b[3],b[2]]],{padding:[40,40],maxZoom:19});}selectFeature(row.layer,feature,null);
   }
-  function clearResults(){results.innerHTML='';resultCount.textContent='0';resultStatus.textContent='Sin consulta activa.';document.getElementById('searchText').value='';if(selectedGraphic){map.removeLayer(selectedGraphic);selectedGraphic=null;}document.getElementById('detailPanel').classList.add('d-none');}
+  function clearResults(){results.innerHTML='';resultCount.textContent='0';resultStatus.textContent='Sin consulta activa.';document.getElementById('searchText').value='';if(selectedGraphic){map.removeLayer(selectedGraphic);selectedGraphic=null;}selectedFeature=null;selectedLayer=null;selectedId=null;setAssignmentTarget(null,null);document.getElementById('detailPanel').classList.add('d-none');}
   function escapeHtml(v){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 
   document.getElementById('searchBtn').addEventListener('click',doSearch);document.getElementById('searchText').addEventListener('keydown',e=>{if(e.key==='Enter')doSearch();});document.getElementById('clearBtn').addEventListener('click',clearResults);document.getElementById('detailClose').addEventListener('click',()=>document.getElementById('detailPanel').classList.add('d-none'));
+  document.getElementById('assignmentType').addEventListener('change',loadEmployees);document.getElementById('createAssignmentBtn').addEventListener('click',createAssignment);document.getElementById('employeeForm').addEventListener('submit',createEmployee);document.getElementById('refreshAssignmentsBtn').addEventListener('click',loadAssignments);
   document.getElementById('logoutBtn').addEventListener('click',async()=>{await fetch(`${api}/api/autenticacion/cerrar`,{method:'POST',credentials:'include'});location.href='/';});document.getElementById('toggleSidebar').addEventListener('click',()=>document.getElementById('sidebar').classList.toggle('open'));
-  (async()=>{try{await ensureSession();await loadMetadata();}catch(e){resultStatus.textContent=e.message;}})();
+  (async()=>{try{const session=await ensureSession();if(!session)return;await loadEmployees();await loadAssignments();await loadMetadata();}catch(e){resultStatus.textContent=e.message;}})();
 })();

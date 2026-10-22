@@ -6,7 +6,7 @@ using Microsoft.Data.SqlClient;
 namespace Arquis.Backend.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles="Administrador")]
 [Route("api/agua-potable")]
 public sealed class AguaPotableController(SqlConnectionFactory connections) : ControllerBase
 {

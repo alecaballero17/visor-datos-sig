@@ -123,6 +123,7 @@ INSERT dbo.Roles(NombreRol,Descripcion) VALUES
 ('Catastro','Rol para crear, modificar y eliminar Manzanas, Lotes, Codigo Fijo y Vias'),
 ('Lecturador','Rol para lecturar medidores'),
 ('Cortador','Rol para cortar servicios'),
+('Conector','Rol para reconectar servicios cortados'),
 ('Reconexion','Rol para la reconnexion por corte');
 
 INSERT dbo.Usuarios(Login,Nombre,PasswordHash,PasswordSalt,Iteraciones)
