@@ -19,6 +19,7 @@ builder.Services.AddDbContext<ArquisDbContext>(options =>
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<GeoDataService>();
 builder.Services.AddScoped<ReportesService>();
+builder.Services.AddScoped<Arquis.Backend.Services.DijkstraRoutingService>();
 builder.Services.AddSingleton<Arquis.Backend.Services.Pdf.PdfReportGeneratorService>();
 builder.Services.AddSingleton<Arquis.Backend.Services.TrackingCacheService>();
 builder.Services.AddSignalR();
@@ -31,7 +32,7 @@ builder.Services
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Lax;
         options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(15);
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = ctx =>
         {

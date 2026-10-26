@@ -19,6 +19,14 @@ namespace Arquis.Backend.Models.Entities
         public DateTime? FechaCompletado { get; set; }
         public string? Observaciones { get; set; }
 
+        // Datos del Punto de Partida y Optimización Topológica de Ruta (Dijkstra sobre dbo.Vias)
+        public double? PartidaLatitud { get; set; }
+        public double? PartidaLongitud { get; set; }
+        public string? PartidaNombre { get; set; }
+        public double? DistanciaTotalMetros { get; set; }
+        public int? TiempoEstimadoMinutos { get; set; }
+        public string? GeometriaRutaGeoJson { get; set; }
+
         public List<PuntoRutaTrabajo> Puntos { get; set; } = new();
     }
 }

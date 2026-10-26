@@ -6,6 +6,13 @@
     
     <div class="ms-auto d-flex align-items-center gap-2">
         <button type="button" class="btn btn-sm d-flex align-items-center gap-1"
+                style="border: 1px solid #1a73e8; background:#ffffff; color:#1a73e8; border-radius:4px; font-weight:600;"
+                @onclick="OpenDashboardKpis"
+                title="Panel de Indicadores y Métricas Operativas (RF-WEB-02)">
+            <i class="bi bi-speedometer2"></i>
+            <span>Dashboard KPIs</span>
+        </button>
+        <button type="button" class="btn btn-sm d-flex align-items-center gap-1"
                 style="border: 1px solid #1a73e8; background:#e8f0fe; color:#1a73e8; border-radius:4px; font-weight:600;"
                 @onclick="OpenOperationsDrawer"
                 title="Abrir Panel Retráctil de Operaciones, Cuadrillas y Opciones">
@@ -40,6 +47,12 @@
     [Parameter] public EventCallback OnOpenReports { get; set; }
     [Parameter] public EventCallback OnOpenTracking { get; set; }
     [Parameter] public EventCallback OnOpenOperationsDrawer { get; set; }
+    [Parameter] public EventCallback OnOpenDashboardKpis { get; set; }
+
+    private async Task OpenDashboardKpis()
+    {
+        await OnOpenDashboardKpis.InvokeAsync();
+    }
 
     private async Task OpenOperationsDrawer()
     {

@@ -1,0 +1,341 @@
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+@if (IsOpen)
+{
+    <div class="kpi-modal-backdrop anim-fade-in" role="dialog" aria-modal="true" @onclick="CloseModal">
+        <div class="kpi-modal-card anim-scale-in shadow-2xl" @onclick:stopPropagation="true">
+            <!-- Encabezado del Dashboard -->
+            <div class="modal-card-header d-flex justify-content-between align-items-center p-3 border-bottom bg-white">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="metric-icon-bubble bg-primary text-white" style="width:38px; height:38px; border-radius:10px; display:grid; place-items:center;">
+                        <i class="bi bi-speedometer2 fs-5"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold text-dark">Dashboard General y Métricas Operativas (RF-WEB-02)</h5>
+                        <small class="text-muted">Indicadores territoriales de conexiones y desempeño de cuadrillas</small>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1" @onclick="CargarMetricas" title="Refrescar métricas">
+                        <i class="bi bi-arrow-clockwise @(isLoading ? "spin" : "")"></i>
+                        <span>Actualizar</span>
+                    </button>
+                    <button type="button" class="btn-close" @onclick="CloseModal" aria-label="Cerrar"></button>
+                </div>
+            </div>
+
+            <!-- Cuerpo del Dashboard -->
+            <div class="modal-card-body p-3 p-md-4 overflow-auto" style="max-height: calc(85vh - 120px);">
+                @if (isLoading)
+                {
+                    <div class="py-5 text-center text-muted">
+                        <div class="spinner-border text-primary mb-2" role="status"></div>
+                        <div class="fw-semibold">Consultando indicadores territoriales y métricas en tiempo real...</div>
+                    </div>
+                }
+                else
+                {
+                    <!-- 1. Tarjetas de Resumen (6 KPIs Oficiales según RF-WEB-02) -->
+                    <div class="row g-2 mb-4">
+                        <!-- Total Catastradas -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="kpi-card-mini p-3 rounded-3 border bg-white shadow-sm h-100 border-start border-4 border-primary">
+                                <span class="d-block text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Total Catastradas</span>
+                                <div class="fs-4 fw-bold text-dark my-1">@TotalConexiones</div>
+                                <span class="badge bg-light text-muted" style="font-size:0.65rem;">Conexiones SIG</span>
+                            </div>
+                        </div>
+
+                        <!-- Conexiones Normal -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="kpi-card-mini p-3 rounded-3 border bg-white shadow-sm h-100 border-start border-4 border-success">
+                                <span class="d-block text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Normal</span>
+                                <div class="fs-4 fw-bold text-success my-1">@Normal</div>
+                                <span class="badge bg-success-subtle text-success" style="font-size:0.65rem;">@PctNormal% · Al día</span>
+                            </div>
+                        </div>
+
+                        <!-- Para Corte -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="kpi-card-mini p-3 rounded-3 border bg-white shadow-sm h-100 border-start border-4 border-warning">
+                                <span class="d-block text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Para Corte</span>
+                                <div class="fs-4 fw-bold text-warning my-1">@ParaCorte</div>
+                                <span class="badge bg-warning-subtle text-warning-emphasis" style="font-size:0.65rem;">@PctParaCorte% · Por Mora</span>
+                            </div>
+                        </div>
+
+                        <!-- Cortado -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="kpi-card-mini p-3 rounded-3 border bg-white shadow-sm h-100 border-start border-4 border-danger">
+                                <span class="d-block text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Cortado</span>
+                                <div class="fs-4 fw-bold text-danger my-1">@Cortado</div>
+                                <span class="badge bg-danger-subtle text-danger" style="font-size:0.65rem;">@PctCortado% · Suspendido</span>
+                            </div>
+                        </div>
+
+                        <!-- Baja Parcial -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="kpi-card-mini p-3 rounded-3 border bg-white shadow-sm h-100 border-start border-4" style="border-left-color: #9333ea !important;">
+                                <span class="d-block text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Baja Parcial</span>
+                                <div class="fs-4 fw-bold my-1" style="color: #9333ea;">@BajaParcial</div>
+                                <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.65rem;">@PctBajaParcial% · Temporal</span>
+                            </div>
+                        </div>
+
+                        <!-- Baja Total -->
+                        <div class="col-6 col-md-4 col-lg-2">
+                            <div class="kpi-card-mini p-3 rounded-3 border bg-white shadow-sm h-100 border-start border-4 border-secondary">
+                                <span class="d-block text-muted small fw-semibold text-uppercase" style="font-size:0.7rem;">Baja Total</span>
+                                <div class="fs-4 fw-bold text-secondary my-1">@BajaTotal</div>
+                                <span class="badge bg-secondary-subtle text-secondary" style="font-size:0.65rem;">@PctBajaTotal% · Retirado</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Gráficos RF-WEB-02: Dona y Barras -->
+                    <div class="row g-3 mb-4">
+                        <!-- Gráfico de Dona: Distribución Porcentual del Estado de Conexiones -->
+                        <div class="col-lg-5">
+                            <div class="p-3 rounded-3 border bg-white shadow-sm h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-1">
+                                        <i class="bi bi-pie-chart-fill text-primary"></i>
+                                        <span>Distribución de Estados de Conexión</span>
+                                    </h6>
+                                    <small class="text-muted">Municipio San Ignacio</small>
+                                </div>
+
+                                <!-- SVG Donut Chart interactivo -->
+                                <div class="d-flex flex-column align-items-center justify-content-center py-2">
+                                    <div class="position-relative" style="width: 190px; height: 190px;">
+                                        <svg viewBox="0 0 42 42" class="donut-chart-svg" style="width: 100%; height: 100%; transform: rotate(-90deg);">
+                                            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#e2e8f0" stroke-width="6.5"></circle>
+                                            
+                                            <!-- Segmento Normal (Verde) -->
+                                            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#16a34a" stroke-width="6.5"
+                                                    stroke-dasharray="@PctNormal @(100 - PctNormal)" stroke-dashoffset="0"></circle>
+                                            
+                                            <!-- Segmento Para Corte (Naranja) -->
+                                            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#f59e0b" stroke-width="6.5"
+                                                    stroke-dasharray="@PctParaCorte @(100 - PctParaCorte)" stroke-dashoffset="@(-(PctNormal))"></circle>
+
+                                            <!-- Segmento Cortado (Rojo) -->
+                                            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#dc2626" stroke-width="6.5"
+                                                    stroke-dasharray="@PctCortado @(100 - PctCortado)" stroke-dashoffset="@(-(PctNormal + PctParaCorte))"></circle>
+
+                                            <!-- Segmento Baja Parcial (Púrpura) -->
+                                            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#9333ea" stroke-width="6.5"
+                                                    stroke-dasharray="@PctBajaParcial @(100 - PctBajaParcial)" stroke-dashoffset="@(-(PctNormal + PctParaCorte + PctCortado))"></circle>
+
+                                            <!-- Segmento Baja Total (Gris) -->
+                                            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke="#64748b" stroke-width="6.5"
+                                                    stroke-dasharray="@PctBajaTotal @(100 - PctBajaTotal)" stroke-dashoffset="@(-(PctNormal + PctParaCorte + PctCortado + PctBajaParcial))"></circle>
+                                        </svg>
+                                        
+                                        <!-- Centro de la dona -->
+                                        <div class="position-absolute top-50 start-50 translate-middle text-center">
+                                            <span class="fs-4 fw-bold text-dark d-block" style="line-height:1.1;">@TotalConexiones</span>
+                                            <small class="text-muted" style="font-size:0.65rem;">Conexiones</small>
+                                        </div>
+                                    </div>
+
+                                    <!-- Leyenda del Gráfico de Dona -->
+                                    <div class="d-flex flex-wrap gap-2 justify-content-center mt-3" style="font-size: 0.72rem;">
+                                        <span class="badge bg-light text-dark border d-flex align-items-center gap-1">
+                                            <span class="rounded-circle" style="width:8px; height:8px; background:#16a34a;"></span>
+                                            Normal: <strong>@PctNormal%</strong> (@Normal)
+                                        </span>
+                                        <span class="badge bg-light text-dark border d-flex align-items-center gap-1">
+                                            <span class="rounded-circle" style="width:8px; height:8px; background:#f59e0b;"></span>
+                                            Para Corte: <strong>@PctParaCorte%</strong> (@ParaCorte)
+                                        </span>
+                                        <span class="badge bg-light text-dark border d-flex align-items-center gap-1">
+                                            <span class="rounded-circle" style="width:8px; height:8px; background:#dc2626;"></span>
+                                            Cortado: <strong>@PctCortado%</strong> (@Cortado)
+                                        </span>
+                                        <span class="badge bg-light text-dark border d-flex align-items-center gap-1">
+                                            <span class="rounded-circle" style="width:8px; height:8px; background:#9333ea;"></span>
+                                            Baja Parcial: <strong>@PctBajaParcial%</strong> (@BajaParcial)
+                                        </span>
+                                        <span class="badge bg-light text-dark border d-flex align-items-center gap-1">
+                                            <span class="rounded-circle" style="width:8px; height:8px; background:#64748b;"></span>
+                                            Baja Total: <strong>@PctBajaTotal%</strong> (@BajaTotal)
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Gráfico de Barras: Intervenciones Ejecutadas vs. Pendientes por Cuadrilla -->
+                        <div class="col-lg-7">
+                            <div class="p-3 rounded-3 border bg-white shadow-sm h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="fw-bold mb-0 text-dark d-flex align-items-center gap-1">
+                                            <i class="bi bi-bar-chart-line-fill text-success"></i>
+                                            <span>Intervenciones Ejecutadas vs. Pendientes</span>
+                                        </h6>
+                                        <small class="text-muted">Desempeño y avance por cuadrilla y operario responsable</small>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 small" style="font-size:0.72rem;">
+                                        <span class="d-flex align-items-center gap-1"><span class="badge bg-success" style="width:10px; height:10px; padding:0;"></span> Ejecutadas</span>
+                                        <span class="d-flex align-items-center gap-1"><span class="badge bg-secondary-subtle border" style="width:10px; height:10px; padding:0;"></span> Pendientes</span>
+                                    </div>
+                                </div>
+
+                                <!-- Lista de Barras de Progreso por Cuadrilla -->
+                                <div class="d-flex flex-column gap-3 py-1">
+                                    @foreach (var c in Cuadrillas)
+                                    {
+                                        <div>
+                                            <div class="d-flex justify-content-between align-items-center mb-1 small">
+                                                <div class="fw-semibold text-dark d-flex align-items-center gap-1">
+                                                    <i class="bi @(c.Rol == "Cortador" ? "bi-slash-circle text-danger" : "bi-droplet-fill text-primary")"></i>
+                                                    <span>@c.Operario</span>
+                                                    <span class="badge bg-light text-muted border py-0 px-1" style="font-size:0.65rem;">@c.Rol</span>
+                                                </div>
+                                                <div>
+                                                    <strong class="text-success">@c.Ejecutadas</strong> <span class="text-muted">/ @c.TotalAsignadas</span>
+                                                    <span class="badge bg-success-subtle text-success ms-1">@c.PorcentajeCumplimiento%</span>
+                                                </div>
+                                            </div>
+                                            <div class="progress" style="height: 14px; border-radius: 6px; background:#e2e8f0;">
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: @c.PorcentajeCumplimiento%;"
+                                                     aria-valuenow="@c.PorcentajeCumplimiento" aria-valuemin="0" aria-valuemax="100">
+                                                    @if (c.PorcentajeCumplimiento >= 15)
+                                                    {
+                                                        <span style="font-size:0.65rem;">@c.Ejecutadas</span>
+                                                    }
+                                                </div>
+                                                <div class="progress-bar bg-light text-muted" role="progressbar" style="width: @(100 - c.PorcentajeCumplimiento)%;">
+                                                    @if ((100 - c.PorcentajeCumplimiento) >= 15)
+                                                    {
+                                                        <span style="font-size:0.65rem;">@c.Pendientes</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3. Resumen Territorial de Soporte -->
+                    <div class="p-3 rounded-3 border bg-light text-muted small d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <span><i class="bi bi-geo-alt-fill text-primary me-1"></i>Catastro San Ignacio: <strong>@TotalLotes lotes</strong> · <strong>@TotalManzanas manzanas</strong> · <strong>@TotalVias ejes viales</strong></span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                            <i class="bi bi-shield-check me-1"></i>Topología Vial y Ruteo Activo
+                        </span>
+                    </div>
+                }
+            </div>
+
+            <div class="modal-card-footer p-3 border-top bg-white d-flex justify-content-between align-items-center">
+                <span class="text-muted small">Corte de datos: <strong>@DateTime.Now.ToString("dd/MM/yyyy HH:mm")</strong></span>
+                <button type="button" class="btn btn-secondary btn-sm px-3" @onclick="CloseModal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsOpen { get; set; } = false;
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private bool isLoading = true;
+
+    // Métricas
+    private int TotalConexiones = 0;
+    private int Normal = 0;
+    private int ParaCorte = 0;
+    private int Cortado = 0;
+    private int BajaParcial = 0;
+    private int BajaTotal = 0;
+
+    private double PctNormal = 0;
+    private double PctParaCorte = 0;
+    private double PctCortado = 0;
+    private double PctBajaParcial = 0;
+    private double PctBajaTotal = 0;
+
+    private int TotalLotes = 0;
+    private int TotalVias = 0;
+    private int TotalManzanas = 0;
+
+    private class CuadrillaMetric
+    {
+        public string Operario { get; set; } = "";
+        public string Rol { get; set; } = "";
+        public int TotalAsignadas { get; set; }
+        public int Ejecutadas { get; set; }
+        public int Pendientes { get; set; }
+        public double PorcentajeCumplimiento { get; set; }
+    }
+
+    private List<CuadrillaMetric> Cuadrillas = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsOpen)
+        {
+            await CargarMetricas();
+        }
+    }
+
+    private async Task CargarMetricas()
+    {
+        isLoading = true;
+        try
+        {
+            var res = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("api/dashboard/kpis");
+            
+            if (res.TryGetProperty("tarjetasResumen", out var t))
+            {
+                TotalConexiones = t.GetProperty("totalConexionesCatastradas").GetInt32();
+                Normal = t.GetProperty("conexionesNormal").GetInt32();
+                ParaCorte = t.GetProperty("conexionesParaCorte").GetInt32();
+                Cortado = t.GetProperty("conexionesCortado").GetInt32();
+                BajaParcial = t.GetProperty("conexionesBajaParcial").GetInt32();
+                BajaTotal = t.GetProperty("conexionesBajaTotal").GetInt32();
+            }
+
+            if (res.TryGetProperty("graficoDona", out var g) && g.TryGetProperty("porcentajes", out var p))
+            {
+                PctNormal = p.GetProperty("normal").GetDouble();
+                PctParaCorte = p.GetProperty("paraCorte").GetDouble();
+                PctCortado = p.GetProperty("cortado").GetDouble();
+                PctBajaParcial = p.GetProperty("bajaParcial").GetDouble();
+                PctBajaTotal = p.GetProperty("bajaTotal").GetDouble();
+            }
+
+            if (res.TryGetProperty("graficoBarrasCuadrillas", out var b))
+            {
+                Cuadrillas = System.Text.Json.JsonSerializer.Deserialize<List<CuadrillaMetric>>(b.GetRawText(), new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new();
+            }
+
+            if (res.TryGetProperty("infraestructuraTerritorial", out var inf))
+            {
+                TotalLotes = inf.GetProperty("lotes").GetInt32();
+                TotalVias = inf.GetProperty("vias").GetInt32();
+                TotalManzanas = inf.GetProperty("manzanas").GetInt32();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error cargando KPIs del dashboard: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseModal()
+    {
+        IsOpen = false;
+        await IsOpenChanged.InvokeAsync(false);
+    }
+}

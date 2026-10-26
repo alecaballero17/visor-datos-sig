@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -7,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Arquis.Backend.Data;
 using Arquis.Backend.Hubs;
 using Arquis.Backend.Models.Entities;
+using Arquis.Backend.Services;
 
 namespace Arquis.Backend.Controllers
 {
@@ -16,11 +18,16 @@ namespace Arquis.Backend.Controllers
     {
         private readonly ArquisDbContext _context;
         private readonly IHubContext<TrackingHub> _hubContext;
+        private readonly DijkstraRoutingService _routingService;
 
-        public RutasTrabajoController(ArquisDbContext context, IHubContext<TrackingHub> hubContext)
+        public RutasTrabajoController(
+            ArquisDbContext context,
+            IHubContext<TrackingHub> hubContext,
+            DijkstraRoutingService routingService)
         {
             _context = context;
             _hubContext = hubContext;
+            _routingService = routingService;
         }
 
         [HttpGet]
@@ -51,6 +58,12 @@ namespace Arquis.Backend.Controllers
                     r.FechaAsignacion,
                     r.FechaCompletado,
                     r.Observaciones,
+                    r.PartidaLatitud,
+                    r.PartidaLongitud,
+                    r.PartidaNombre,
+                    r.DistanciaTotalMetros,
+                    r.TiempoEstimadoMinutos,
+                    r.GeometriaRutaGeoJson,
                     TotalPuntos = r.Puntos.Count,
                     PuntosCompletados = r.Puntos.Count(p => p.Estado == "Completado" || p.Estado == "Ejecutado"),
                     Puntos = r.Puntos.OrderBy(p => p.Orden).ToList()
@@ -96,7 +109,33 @@ namespace Arquis.Backend.Controllers
             public List<string> OperariosAsignados { get; set; } = new();
             public string? Observaciones { get; set; }
             public int? CantidadCuentas { get; set; } // Por ejemplo 100 cortes o 200 reconexiones
+            public double? PartidaLatitud { get; set; }
+            public double? PartidaLongitud { get; set; }
+            public string? PartidaNombre { get; set; }
             public List<CrearPuntoDto> Puntos { get; set; } = new();
+        }
+
+        [HttpPost("optimizar-preview")]
+        public async Task<IActionResult> OptimizarPreview([FromBody] OptimizarRutaRequestDto dto)
+        {
+            if (dto.Puntos == null || dto.Puntos.Count == 0)
+                return BadRequest(new { error = "Debe proporcionar al menos un punto para optimizar la ruta con Dijkstra." });
+
+            if (Math.Abs(dto.Partida.Latitud) < 0.0001 && Math.Abs(dto.Partida.Longitud) < 0.0001)
+            {
+                dto.Partida.Latitud = -17.78180;
+                dto.Partida.Longitud = -63.18190;
+                dto.Partida.Nombre = "Base Operativa San Ignacio (GeoIT)";
+            }
+
+            var resultado = await _routingService.OptimizarRutaAsync(dto.Partida, dto.Puntos);
+            return Ok(resultado);
+        }
+
+        public class OptimizarRutaRequestDto
+        {
+            public DijkstraRoutingService.PuntoPartidaDto Partida { get; set; } = new();
+            public List<DijkstraRoutingService.PuntoIntervencionDto> Puntos { get; set; } = new();
         }
 
         [HttpPost("asignacion-masiva")]
@@ -165,6 +204,13 @@ namespace Arquis.Backend.Controllers
             var baseCount = await _context.RutasTrabajo.CountAsync();
             var prefijo = dto.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ? "RR" : "RC";
 
+            var partidaBase = new DijkstraRoutingService.PuntoPartidaDto
+            {
+                Latitud = dto.PartidaLatitud ?? -17.78180,
+                Longitud = dto.PartidaLongitud ?? -63.18190,
+                Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Base de Despacho Operativo"
+            };
+
             for (int i = 0; i < totalOperarios; i++)
             {
                 var operario = dto.OperariosAsignados[i];
@@ -173,6 +219,23 @@ namespace Arquis.Backend.Controllers
                     .ToList();
 
                 if (puntosParaEsteOperario.Count == 0) continue;
+
+                // Optimizar recorrido con Dijkstra sobre la red vial dbo.Vias
+                var puntosDijkstra = puntosParaEsteOperario.Select(p => new DijkstraRoutingService.PuntoIntervencionDto
+                {
+                    IdCodigoFijo = p.IdCodigoFijo,
+                    IdLote = p.IdLote,
+                    CodigoSuministro = p.CodigoSuministro,
+                    Lote = p.Lote,
+                    Titular = p.Titular,
+                    Direccion = p.Direccion,
+                    Latitud = p.Latitud,
+                    Longitud = p.Longitud,
+                    MontoDeuda = p.MontoDeuda,
+                    Observaciones = p.Observaciones
+                }).ToList();
+
+                var optRes = await _routingService.OptimizarRutaAsync(partidaBase, puntosDijkstra);
 
                 var codigo = $"{prefijo}-{DateTime.UtcNow.Year}-{(baseCount + i + 1):D3}";
                 var nuevaRuta = new RutaTrabajo
@@ -187,15 +250,20 @@ namespace Arquis.Backend.Controllers
                     CreadoPor = User.Identity?.Name ?? "Gerente de Operaciones",
                     FechaCreacion = DateTime.UtcNow,
                     FechaAsignacion = DateTime.UtcNow,
-                    Observaciones = dto.Observaciones
+                    Observaciones = dto.Observaciones,
+                    PartidaLatitud = partidaBase.Latitud,
+                    PartidaLongitud = partidaBase.Longitud,
+                    PartidaNombre = partidaBase.Nombre,
+                    DistanciaTotalMetros = optRes.DistanciaTotalMetros,
+                    TiempoEstimadoMinutos = optRes.TiempoEstimadoMinutos,
+                    GeometriaRutaGeoJson = optRes.GeometriaGeoJson
                 };
 
-                int orden = 1;
-                foreach (var p in puntosParaEsteOperario)
+                foreach (var p in optRes.PuntosOrdenados)
                 {
                     nuevaRuta.Puntos.Add(new PuntoRutaTrabajo
                     {
-                        Orden = orden++,
+                        Orden = p.Orden,
                         IdCodigoFijo = p.IdCodigoFijo,
                         IdLote = p.IdLote,
                         CodigoSuministro = p.CodigoSuministro,
@@ -223,7 +291,7 @@ namespace Arquis.Backend.Controllers
 
             return Ok(new
             {
-                mensaje = $"Se crearon {rutasCreadas.Count} hojas de ruta distribuidas entre {totalOperarios} operarios.",
+                mensaje = $"Se crearon y optimizaron con Dijkstra {rutasCreadas.Count} hojas de ruta distribuidas entre {totalOperarios} operarios.",
                 totalRutas = rutasCreadas.Count
             });
         }
@@ -325,6 +393,12 @@ namespace Arquis.Backend.Controllers
         {
             public string? Observaciones { get; set; }
             public string? EvidenciaFotoUrl { get; set; }
+            public double? LatitudMovil { get; set; }
+            public double? LongitudMovil { get; set; }
+            public decimal? LecturaMedidor { get; set; }
+            public string? EstadoFinal { get; set; } // "Cortado", "Reconectado", "Observado"
+            public string? MotivoObservacion { get; set; }
+            public List<string>? Fotos { get; set; }
         }
 
         [HttpPut("{rutaId:int}/puntos/{puntoId:int}/ejecutar")]
@@ -339,29 +413,68 @@ namespace Arquis.Backend.Controllers
             var punto = ruta.Puntos.FirstOrDefault(p => p.Id == puntoId);
             if (punto == null) return NotFound(new { error = "Punto de ruta no encontrado." });
 
-            punto.Estado = "Completado";
+            // RN-01: Obligatoriedad de Validación Geográfica Antifraude (Radio de 30 metros)
+            if (body?.LatitudMovil.HasValue == true && body.LongitudMovil.HasValue == true)
+            {
+                double dist = DijkstraRoutingService.CalcularHaversine(body.LatitudMovil.Value, body.LongitudMovil.Value, punto.Latitud, punto.Longitud);
+                if (dist > 30.0)
+                {
+                    return BadRequest(new
+                    {
+                        error = $"RN-01 Antifraude: La distancia actual del dispositivo ({Math.Round(dist, 1)} m) excede la tolerancia máxima de 30 metros respecto al punto catastrado ({punto.CodigoSuministro}). Debe encontrarse físicamente en el predio para registrar la orden.",
+                        distanciaActualMetros = Math.Round(dist, 1),
+                        toleranciaMetros = 30.0,
+                        antifraudeRechazado = true
+                    });
+                }
+
+                punto.LatitudEjecucion = body.LatitudMovil.Value;
+                punto.LongitudEjecucion = body.LongitudMovil.Value;
+                punto.DistanciaAntifraudeMetros = Math.Round(dist, 1);
+            }
+
+            if (body?.LecturaMedidor.HasValue == true)
+                punto.LecturaMedidor = body.LecturaMedidor.Value;
+
+            if (!string.IsNullOrWhiteSpace(body?.MotivoObservacion))
+                punto.MotivoObservacion = body.MotivoObservacion;
+
+            if (body?.Fotos != null && body.Fotos.Count > 0)
+                punto.FotosEvidenciasJson = System.Text.Json.JsonSerializer.Serialize(body.Fotos);
+
+            var estadoFinal = body?.EstadoFinal ?? (ruta.Tipo.Equals("Corte", StringComparison.OrdinalIgnoreCase) ? "Cortado" : "Reconectado");
+            punto.EstadoFinal = estadoFinal;
             punto.FechaEjecucion = DateTime.UtcNow;
+
             if (!string.IsNullOrWhiteSpace(body?.Observaciones))
                 punto.Observaciones = body.Observaciones;
+
+            if (estadoFinal.Equals("Observado", StringComparison.OrdinalIgnoreCase))
+            {
+                punto.Estado = "Observado";
+            }
+            else
+            {
+                punto.Estado = "Completado";
+
+                // If linked to a CodigoFijo, update its Estado in DB (3=Cortado, 1=Normal)
+                if (punto.IdCodigoFijo.HasValue)
+                {
+                    var codigoFijo = await _context.CodigosFijos.FindAsync(punto.IdCodigoFijo.Value);
+                    if (codigoFijo != null)
+                    {
+                        codigoFijo.Estado = (byte)(ruta.Tipo.Equals("Corte", StringComparison.OrdinalIgnoreCase) ? 3 : 1);
+                        codigoFijo.FechaCambioEstado = DateTime.UtcNow;
+                    }
+                }
+            }
 
             // If the route was still "Pendiente", change to "EnProgreso"
             if (ruta.Estado == "Pendiente")
                 ruta.Estado = "EnProgreso";
 
-            // If linked to a CodigoFijo, update its Estado in DB
-            if (punto.IdCodigoFijo.HasValue)
-            {
-                var codigoFijo = await _context.CodigosFijos.FindAsync(punto.IdCodigoFijo.Value);
-                if (codigoFijo != null)
-                {
-                    // If route is Corte -> state 0 (cortado). If Reconexion -> state 1 (activo)
-                    codigoFijo.Estado = (byte)(ruta.Tipo.Equals("Corte", StringComparison.OrdinalIgnoreCase) ? 0 : 1);
-                    codigoFijo.FechaCambioEstado = DateTime.UtcNow;
-                }
-            }
-
             // Check if all points are now done
-            bool todosCompletados = ruta.Puntos.All(p => p.Estado == "Completado" || p.Estado == "Omitido");
+            bool todosCompletados = ruta.Puntos.All(p => p.Estado == "Completado" || p.Estado == "Ejecutado" || p.Estado == "Observado" || p.Estado == "Omitido");
             if (todosCompletados)
             {
                 ruta.Estado = "Completada";
@@ -376,6 +489,7 @@ namespace Arquis.Backend.Controllers
                 rutaId,
                 puntoId,
                 estado = punto.Estado,
+                estadoFinal = punto.EstadoFinal,
                 rutaEstado = ruta.Estado,
                 todosCompletados
             });
@@ -384,9 +498,42 @@ namespace Arquis.Backend.Controllers
             {
                 success = true,
                 puntoEstado = punto.Estado,
+                estadoFinal = punto.EstadoFinal,
+                distanciaAntifraudeMetros = punto.DistanciaAntifraudeMetros,
                 rutaEstado = ruta.Estado,
                 todosCompletados
             });
+        }
+
+        public class RegistrarCorteMovilDto
+        {
+            public int RutaId { get; set; }
+            public int PuntoId { get; set; }
+            public double LatitudEnvio { get; set; }
+            public double LongitudEnvio { get; set; }
+            public DateTime? FechaHoraUtc { get; set; }
+            public decimal? AvanceMedidor { get; set; }
+            public string EstadoIntervencion { get; set; } = "Cortado";
+            public string? MotivoObservacion { get; set; }
+            public string? Observaciones { get; set; }
+            public List<string>? FotosEvidencia { get; set; }
+        }
+
+        [HttpPost("/api/cortes/registrar")]
+        public async Task<IActionResult> RegistrarCorteMovil([FromBody] RegistrarCorteMovilDto dto)
+        {
+            var body = new EjecutarPuntoDto
+            {
+                LatitudMovil = dto.LatitudEnvio,
+                LongitudMovil = dto.LongitudEnvio,
+                LecturaMedidor = dto.AvanceMedidor,
+                EstadoFinal = dto.EstadoIntervencion,
+                MotivoObservacion = dto.MotivoObservacion,
+                Observaciones = dto.Observaciones,
+                Fotos = dto.FotosEvidencia
+            };
+
+            return await EjecutarPunto(dto.RutaId, dto.PuntoId, body);
         }
 
         [HttpGet("zonas")]
@@ -486,6 +633,9 @@ namespace Arquis.Backend.Controllers
             public string Prioridad { get; set; } = "Normal";
             public string OperarioAsignado { get; set; } = string.Empty;
             public string? Observaciones { get; set; }
+            public double? PartidaLatitud { get; set; }
+            public double? PartidaLongitud { get; set; }
+            public string? PartidaNombre { get; set; }
             public List<int> IdsCodigosFijos { get; set; } = new();
             public List<CrearPuntoDto> PuntosPersonalizados { get; set; } = new();
         }
@@ -532,6 +682,30 @@ namespace Arquis.Backend.Controllers
                 puntos.AddRange(dto.PuntosPersonalizados);
             }
 
+            // Optimizar ruta con Dijkstra sobre dbo.Vias partiendo desde el punto seleccionado
+            var partida = new DijkstraRoutingService.PuntoPartidaDto
+            {
+                Latitud = dto.PartidaLatitud ?? -17.78180,
+                Longitud = dto.PartidaLongitud ?? -63.18190,
+                Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Base de Operaciones"
+            };
+
+            var puntosDijkstra = puntos.Select(p => new DijkstraRoutingService.PuntoIntervencionDto
+            {
+                IdCodigoFijo = p.IdCodigoFijo,
+                IdLote = p.IdLote,
+                CodigoSuministro = p.CodigoSuministro,
+                Lote = p.Lote,
+                Titular = p.Titular,
+                Direccion = p.Direccion,
+                Latitud = p.Latitud,
+                Longitud = p.Longitud,
+                MontoDeuda = p.MontoDeuda,
+                Observaciones = p.Observaciones
+            }).ToList();
+
+            var optRes = await _routingService.OptimizarRutaAsync(partida, puntosDijkstra);
+
             var baseCount = await _context.RutasTrabajo.CountAsync() + 1;
             var prefijo = string.Equals(dto.Tipo, "Reconexion", StringComparison.OrdinalIgnoreCase) ? "TK-REC" : "TK-COR";
             var codigo = $"{prefijo}-{DateTime.UtcNow.Year}-{baseCount:D4}";
@@ -548,15 +722,20 @@ namespace Arquis.Backend.Controllers
                 CreadoPor = User.Identity?.Name ?? "Administrador SIG",
                 FechaCreacion = DateTime.UtcNow,
                 FechaAsignacion = DateTime.UtcNow,
-                Observaciones = dto.Observaciones
+                Observaciones = dto.Observaciones,
+                PartidaLatitud = partida.Latitud,
+                PartidaLongitud = partida.Longitud,
+                PartidaNombre = partida.Nombre,
+                DistanciaTotalMetros = optRes.DistanciaTotalMetros,
+                TiempoEstimadoMinutos = optRes.TiempoEstimadoMinutos,
+                GeometriaRutaGeoJson = optRes.GeometriaGeoJson
             };
 
-            int orden = 1;
-            foreach (var p in puntos)
+            foreach (var p in optRes.PuntosOrdenados)
             {
                 nuevaRuta.Puntos.Add(new PuntoRutaTrabajo
                 {
-                    Orden = orden++,
+                    Orden = p.Orden,
                     IdCodigoFijo = p.IdCodigoFijo,
                     IdLote = p.IdLote,
                     CodigoSuministro = p.CodigoSuministro,
@@ -578,7 +757,7 @@ namespace Arquis.Backend.Controllers
 
             return Ok(new
             {
-                mensaje = $"Ticket {nuevaRuta.Codigo} creado exitosamente con {nuevaRuta.Puntos.Count} puntos asignados a {nuevaRuta.OperarioAsignado}.",
+                mensaje = $"Ticket {nuevaRuta.Codigo} optimizado exitosamente con Dijkstra sobre ejes viales ({nuevaRuta.DistanciaTotalMetros} m, ~{nuevaRuta.TiempoEstimadoMinutos} min) para {nuevaRuta.OperarioAsignado}.",
                 ruta = nuevaRuta
             });
         }

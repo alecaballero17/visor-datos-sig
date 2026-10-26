@@ -9,6 +9,35 @@ window.arquis = (() => {
     let refreshTimer = null, detailVersion = 0, refreshVersion = 0;
     let currentWaterFilter = 'all'; // 'all', 'with', 'without'
 
+    // RF-WEB-03: Mapas Base (OSM y Google Maps Satélite / Híbrido)
+    let currentBasemap = 'osm';
+    let osmTileLayer = null;
+    let googleHybridLayer = null;
+
+    // RF-WEB-04 & RF-WEB-05: Punto de Partida y Ruteo Dijkstra
+    let isSelectingDeparturePoint = false;
+    let departureMarker = null;
+    let departureDotNetCallback = null;
+    let currentDijkstraLayer = null;
+    let routeStopMarkers = [];
+    let is3DTiltActive = false;
+
+    // RF-WEB-01: Temporizador de Inactividad de 15 Minutos
+    let inactivityTimer = null;
+    const INACTIVITY_LIMIT_MS = 15 * 60 * 1000;
+
+    function resetInactivityTimer() {
+        clearTimeout(inactivityTimer);
+        inactivityTimer = setTimeout(() => {
+            alert('Aviso de Seguridad (RF-WEB-01): Su sesión se cerró automáticamente tras 15 minutos de inactividad.');
+            fetch(`${api}/api/autenticacion/cerrar`, { method: 'POST', credentials: 'include' })
+                .finally(() => { window.location.href = '/'; });
+        }, INACTIVITY_LIMIT_MS);
+    }
+    ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'].forEach(evt => {
+        window.addEventListener(evt, resetInactivityTimer, { passive: true });
+    });
+
     /* helpers */
     const esc = v => String(v ?? '').replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
     const titleOf = k => ({ manzanas: 'Manzanas', lotes: 'Lotes', codigosfijos: 'Códigos fijos', vias: 'Vías' }[k] || k);
@@ -417,19 +446,39 @@ window.arquis = (() => {
             map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([-16.400, -60.960], 15);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             map.createPane('selectionPane').style.zIndex = 650;
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+            
+            osmTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
                 maxZoom: 22, 
                 maxNativeZoom: 19, 
                 attribution: '&copy; OpenStreetMap contributors' 
-            }).addTo(map);
+            });
+            googleHybridLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 22,
+                maxNativeZoom: 20,
+                attribution: '&copy; Google Maps Satélite/Híbrido'
+            });
+            osmTileLayer.addTo(map);
+
             L.control.scale({ imperial: false, position: 'bottomright' }).addTo(map);
 
             map.on('mousemove', e => { const el = $('coords'); if (el) el.textContent = `Lon: ${e.latlng.lng.toFixed(6)} · Lat: ${e.latlng.lat.toFixed(6)}`; });
             map.on('moveend', scheduleRefresh);
             map.on('zoomend', () => { for (const st of layerState.values()) syncSymbols(st); });
 
-            // Click en fondo del mapa limpia selección
-            map.on('click', () => {
+            // Click en mapa: selección o captura de punto de partida
+            map.on('click', (e) => {
+                if (isSelectingDeparturePoint) {
+                    isSelectingDeparturePoint = false;
+                    const mapEl = $('map');
+                    if (mapEl) mapEl.style.cursor = '';
+                    setDeparturePoint(e.latlng.lat, e.latlng.lng, 'Punto de Partida Fijado');
+                    if (departureDotNetCallback) {
+                        try {
+                            departureDotNetCallback.invokeMethodAsync('OnDeparturePointPicked', e.latlng.lat, e.latlng.lng);
+                        } catch (_) {}
+                    }
+                    return;
+                }
                 clearSelectionGraphics();
                 if (dotNetRef) {
                     try { dotNetRef.invokeMethodAsync('OnClearSelectionFromMap'); } catch (_) {}
@@ -724,6 +773,113 @@ window.arquis = (() => {
         }
     }
 
+    // RF-WEB-03: Alternancia de Mapa Base (OpenStreetMap vs Google Maps Satélite / Híbrido)
+    function setBasemap(mode) {
+        if (!map) return;
+        currentBasemap = mode;
+        if (mode === 'satellite' || mode === 'google' || mode === 'hibrido') {
+            if (map.hasLayer(osmTileLayer)) map.removeLayer(osmTileLayer);
+            if (!map.hasLayer(googleHybridLayer)) googleHybridLayer.addTo(map);
+        } else {
+            if (map.hasLayer(googleHybridLayer)) map.removeLayer(googleHybridLayer);
+            if (!map.hasLayer(osmTileLayer)) osmTileLayer.addTo(map);
+        }
+    }
+
+    // RF-WEB-04: Selección interactiva del punto de partida inicial de la cuadrilla mediante clic directo
+    function enableDeparturePointSelection(callbackRef) {
+        isSelectingDeparturePoint = true;
+        departureDotNetCallback = callbackRef;
+        const mapEl = $('map');
+        if (mapEl) mapEl.style.cursor = 'crosshair';
+    }
+
+    function cancelDeparturePointSelection() {
+        isSelectingDeparturePoint = false;
+        const mapEl = $('map');
+        if (mapEl) mapEl.style.cursor = '';
+    }
+
+    function setDeparturePoint(lat, lng, label = 'Punto de Partida (Base)') {
+        if (!map) return;
+        if (departureMarker) map.removeLayer(departureMarker);
+
+        const icon = L.divIcon({
+            className: 'departure-marker-wrapper',
+            html: `<div style="background:#16a34a; color:#ffffff; padding:4px 9px; border-radius:20px; font-weight:700; font-size:12px; box-shadow:0 3px 8px rgba(0,0,0,0.4); display:flex; align-items:center; gap:5px; border:2px solid #ffffff;"><span>🏁</span><span>Partida</span></div>`,
+            iconSize: [85, 30],
+            iconAnchor: [42, 30]
+        });
+
+        departureMarker = L.marker([lat, lng], { icon, zIndexOffset: 950 }).addTo(map);
+        departureMarker.bindTooltip(label, { permanent: false, direction: 'top' });
+        map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.8 });
+    }
+
+    // RF-WEB-05: Renderizado de Ruta Topológica Optimizada con Dijkstra sobre Ejes Viales
+    function renderOptimizedDijkstraRoute(geoJsonObj, stops) {
+        if (!map) return;
+        clearOptimizedRoute();
+
+        if (geoJsonObj) {
+            const parsed = typeof geoJsonObj === 'string' ? JSON.parse(geoJsonObj) : geoJsonObj;
+            currentDijkstraLayer = L.geoJSON(parsed, {
+                style: {
+                    color: '#2563eb',
+                    weight: 5,
+                    opacity: 0.85
+                }
+            }).addTo(map);
+        }
+
+        if (Array.isArray(stops) && stops.length > 0) {
+            stops.forEach(st => {
+                const icon = L.divIcon({
+                    className: 'route-stop-wrapper',
+                    html: `<div style="background:#dc2626; color:#ffffff; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:11px; border:2px solid #ffffff; box-shadow:0 2px 5px rgba(0,0,0,0.4);">${st.orden || 1}</div>`,
+                    iconSize: [26, 26],
+                    iconAnchor: [13, 13]
+                });
+                const m = L.marker([st.latitud, st.longitud], { icon, zIndexOffset: 900 }).addTo(map);
+                m.bindTooltip(`<b>Parada #${st.orden || 1}</b><br>${esc(st.titular || st.codigoSuministro || '')}<br><small>${esc(st.direccion || '')}</small>`, { direction: 'top' });
+                routeStopMarkers.push(m);
+            });
+        }
+
+        if (currentDijkstraLayer && currentDijkstraLayer.getBounds().isValid()) {
+            map.fitBounds(currentDijkstraLayer.getBounds().pad(0.12));
+        }
+    }
+
+    function clearOptimizedRoute() {
+        if (currentDijkstraLayer && map) {
+            map.removeLayer(currentDijkstraLayer);
+            currentDijkstraLayer = null;
+        }
+        if (departureMarker && map) {
+            map.removeLayer(departureMarker);
+            departureMarker = null;
+        }
+        routeStopMarkers.forEach(m => map && map.removeLayer(m));
+        routeStopMarkers = [];
+    }
+
+    // RF-WEB-03: Navegación espacial con control de inclinación (Pitch 3D)
+    function toggle3DTilt() {
+        is3DTiltActive = !is3DTiltActive;
+        const pane = document.querySelector('.leaflet-map-pane');
+        if (pane) {
+            if (is3DTiltActive) {
+                pane.style.transform = 'perspective(900px) rotateX(28deg)';
+                pane.style.transformOrigin = 'center 80%';
+                pane.style.transition = 'transform 0.5s cubic-bezier(0.4, 0, 0.2, 1)';
+            } else {
+                pane.style.transform = '';
+            }
+        }
+        return is3DTiltActive;
+    }
+
     return {
         init,
         highlightFeature,
@@ -739,7 +895,14 @@ window.arquis = (() => {
         clearRouteHistory,
         showRutaTrabajo,
         clearRutaTrabajo,
-        downloadFile
+        downloadFile,
+        setBasemap,
+        enableDeparturePointSelection,
+        cancelDeparturePointSelection,
+        setDeparturePoint,
+        renderOptimizedDijkstraRoute,
+        clearOptimizedRoute,
+        toggle3DTilt
     };
 })();
 

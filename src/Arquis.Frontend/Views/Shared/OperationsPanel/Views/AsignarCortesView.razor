@@ -1,5 +1,6 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
+@implements IDisposable
 
 <div class="drawer-view-container">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -209,6 +210,66 @@
                     <textarea class="form-control form-control-sm" rows="2" placeholder="Precintar llave de paso, registrar lectura y fotografiar acometida..." @bind="ticketObservaciones"></textarea>
                 </div>
 
+                <!-- SELECCIÓN DEL PUNTO DE PARTIDA INICIAL (RF-WEB-04) -->
+                <div class="mb-3 p-2 rounded bg-light border">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-semibold text-dark mb-0" style="font-size:0.72rem;">
+                            <i class="bi bi-geo-alt-fill text-success me-1"></i>Punto de Partida Cuadrilla (RF-WEB-04)
+                        </label>
+                        <span class="badge @(isCustomPartida ? "bg-success" : "bg-secondary")" style="font-size:0.65rem;">
+                            @(isCustomPartida ? "Punto en Mapa" : "Base Central")
+                        </span>
+                    </div>
+                    <div class="small text-muted mb-2 text-truncate" style="font-size:0.7rem;">
+                        @partidaNombre
+                    </div>
+                    <div class="d-flex gap-1">
+                        <button type="button" class="btn btn-sm @(isPickingPartidaOnMap ? "btn-warning" : "btn-outline-success") flex-fill py-1" style="font-size:0.72rem;"
+                                @onclick="ToggleMapDeparturePicker">
+                            <i class="bi bi-pin-map-fill me-1"></i>
+                            @(isPickingPartidaOnMap ? "Haga clic en el mapa..." : "Fijar con 1 clic en mapa")
+                        </button>
+                        @if (isCustomPartida)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:0.72rem;" @onclick="RestablecerBaseOperativa" title="Restablecer a Base Operativa">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                <!-- PREVISUALIZACIÓN DE RUTA ÓPTIMA CON DIJKSTRA (RF-WEB-05) -->
+                @if (idsSeleccionados.Count > 0)
+                {
+                    <div class="mb-3 p-2 rounded border bg-primary-subtle bg-opacity-10">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="small fw-bold text-primary" style="font-size:0.75rem;">
+                                <i class="bi bi-diagram-3-fill me-1"></i>Ruta Topológica Dijkstra (RF-WEB-05)
+                            </span>
+                            <button type="button" class="btn btn-sm btn-primary py-0 px-2" style="font-size:0.7rem;"
+                                    disabled="@isOptimizingDijkstra"
+                                    @onclick="OptimizarRutaDijkstraPreview">
+                                <i class="bi bi-lightning-charge-fill me-1"></i>
+                                @(isOptimizingDijkstra ? "Calculando..." : "Calcular con Dijkstra")
+                            </button>
+                        </div>
+                        @if (resultadoDijkstra != null)
+                        {
+                            <div class="small text-dark" style="font-size:0.72rem;">
+                                <div><i class="bi bi-signpost-split text-secondary me-1"></i>Distancia total: <strong>@resultadoDijkstra.DistanciaTotalKm km</strong> (@resultadoDijkstra.DistanciaTotalMetros m)</div>
+                                <div><i class="bi bi-clock-history text-secondary me-1"></i>Tiempo estimado: <strong>~@resultadoDijkstra.TiempoEstimadoMinutos min</strong></div>
+                                <div class="text-success mt-1"><i class="bi bi-check-circle-fill me-1"></i>Ruta sobre ejes viales y paradas 1, 2... @idsSeleccionados.Count ordenadas.</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <small class="text-muted d-block" style="font-size:0.68rem;">
+                                Ordena las paradas secuencialmente sobre la red de calles evitando cruzar manzanas catastrales.
+                            </small>
+                        }
+                    </div>
+                }
+
                 <button type="button" class="btn btn-sm btn-danger w-100 d-flex align-items-center justify-content-center gap-1 shadow-sm"
                         disabled="@(idsSeleccionados.Count == 0 || string.IsNullOrEmpty(operarioSeleccionado) || isSubmitting)"
                         @onclick="CrearTicket">
@@ -278,6 +339,26 @@
                         <strong class="text-danger">~@cuentasPorCortador cortes por cada cortador</strong>
                     </div>
                 }
+
+                <!-- PUNTO DE SALIDA DE CUADRILLAS MASIVAS (RF-WEB-04) -->
+                <div class="mb-3 p-2 rounded bg-light border">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label small fw-semibold text-dark mb-0" style="font-size:0.72rem;">
+                            <i class="bi bi-geo-alt-fill text-success me-1"></i>Punto de Salida de Cuadrillas (RF-WEB-04)
+                        </label>
+                        <span class="badge @(isCustomPartida ? "bg-success" : "bg-secondary")" style="font-size:0.65rem;">
+                            @(isCustomPartida ? "Punto en Mapa" : "Base Central")
+                        </span>
+                    </div>
+                    <div class="small text-muted mb-2 text-truncate" style="font-size:0.7rem;">
+                        @partidaNombre
+                    </div>
+                    <button type="button" class="btn btn-sm @(isPickingPartidaOnMap ? "btn-warning" : "btn-outline-success") w-100 py-1" style="font-size:0.72rem;"
+                            @onclick="ToggleMapDeparturePicker">
+                        <i class="bi bi-pin-map-fill me-1"></i>
+                        @(isPickingPartidaOnMap ? "Haga clic en el mapa..." : "Fijar punto de salida en mapa con 1 clic")
+                    </button>
+                </div>
 
                 <div class="mb-3">
                     <label class="form-label small fw-semibold text-muted mb-1" style="font-size:0.72rem;">Título del Operativo Masivo</label>
@@ -407,6 +488,110 @@
 
     // Historial de tickets
     private List<TicketRutaDto> ticketsCorte = new();
+
+    // Punto de Partida (RF-WEB-04) y Optimización Dijkstra (RF-WEB-05)
+    private DotNetObjectReference<AsignarCortesView>? dotNetRef;
+    private double partidaLat = -17.78180;
+    private double partidaLng = -63.18190;
+    private string partidaNombre = "Base Operativa Central - GeoIT";
+    private bool isCustomPartida = false;
+    private bool isPickingPartidaOnMap = false;
+    private bool isOptimizingDijkstra = false;
+    private ResultadoDijkstraDto? resultadoDijkstra;
+
+    [JSInvokable]
+    public void OnDeparturePointPicked(double lat, double lng)
+    {
+        partidaLat = lat;
+        partidaLng = lng;
+        partidaNombre = $"Punto fijado en mapa ({lat:F5}, {lng:F5})";
+        isCustomPartida = true;
+        isPickingPartidaOnMap = false;
+        StateHasChanged();
+    }
+
+    private async Task ToggleMapDeparturePicker()
+    {
+        if (isPickingPartidaOnMap)
+        {
+            isPickingPartidaOnMap = false;
+            await JS.InvokeVoidAsync("arquis.cancelDeparturePointSelection");
+        }
+        else
+        {
+            isPickingPartidaOnMap = true;
+            dotNetRef ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("arquis.enableDeparturePointSelection", dotNetRef);
+        }
+    }
+
+    private async Task RestablecerBaseOperativa()
+    {
+        partidaLat = -17.78180;
+        partidaLng = -63.18190;
+        partidaNombre = "Base Operativa Central - GeoIT";
+        isCustomPartida = false;
+        isPickingPartidaOnMap = false;
+        await JS.InvokeVoidAsync("arquis.cancelDeparturePointSelection");
+        await JS.InvokeVoidAsync("arquis.clearOptimizedRoute");
+        resultadoDijkstra = null;
+    }
+
+    private async Task OptimizarRutaDijkstraPreview()
+    {
+        if (idsSeleccionados.Count == 0) return;
+        isOptimizingDijkstra = true;
+        try
+        {
+            var puntos = entidadesDisponibles
+                .Where(e => idsSeleccionados.Contains(e.IdCodigo))
+                .Select(e => new
+                {
+                    IdCodigoFijo = e.IdCodigo,
+                    IdLote = e.IdLote ?? 0,
+                    CodigoSuministro = e.CodigoSuministro,
+                    Titular = e.Titular,
+                    Direccion = e.Direccion,
+                    Latitud = e.Latitud,
+                    Longitud = e.Longitud,
+                    MontoDeuda = e.MontoDeuda
+                }).ToList();
+
+            var req = new
+            {
+                Partida = new
+                {
+                    Latitud = partidaLat,
+                    Longitud = partidaLng,
+                    Nombre = partidaNombre
+                },
+                Puntos = puntos
+            };
+
+            var res = await Http.PostAsJsonAsync("/api/rutas-trabajo/optimizar-preview", req);
+            if (res.IsSuccessStatusCode)
+            {
+                resultadoDijkstra = await res.Content.ReadFromJsonAsync<ResultadoDijkstraDto>();
+                if (resultadoDijkstra != null)
+                {
+                    await JS.InvokeVoidAsync("arquis.renderOptimizedDijkstraRoute", resultadoDijkstra.GeometriaGeoJson, resultadoDijkstra.PuntosOrdenados);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error optimizando con Dijkstra: {ex.Message}");
+        }
+        finally
+        {
+            isOptimizingDijkstra = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        dotNetRef?.Dispose();
+    }
 
     private List<OperarioItemDto> SoloCortadores => operarios.Where(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)).ToList();
     private List<OperarioItemDto> OtrosOperarios => operarios.Where(o => !string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)).ToList();
@@ -556,6 +741,9 @@
                 Prioridad = ticketPrioridad,
                 OperarioAsignado = operarioSeleccionado,
                 Observaciones = ticketObservaciones,
+                PartidaLatitud = partidaLat,
+                PartidaLongitud = partidaLng,
+                PartidaNombre = partidaNombre,
                 IdsCodigosFijos = idsSeleccionados.ToList()
             };
 
@@ -608,7 +796,10 @@
                 Prioridad = "Alta",
                 OperariosAsignados = cortadoresMasivosSeleccionados.ToList(),
                 CantidadCuentas = cantidadMasiva,
-                Observaciones = "Corte inmediato por mora crítica mayor a 3 meses. Despacho masivo."
+                PartidaLatitud = partidaLat,
+                PartidaLongitud = partidaLng,
+                PartidaNombre = partidaNombre,
+                Observaciones = "Corte inmediato por mora crítica mayor a 3 meses. Despacho masivo optimizado con Dijkstra sobre red vial."
             };
 
             var res = await Http.PostAsJsonAsync("/api/rutas-trabajo/asignacion-masiva", dto);
@@ -684,6 +875,7 @@
     public class EntidadDisponibleDto
     {
         public int IdCodigo { get; set; }
+        public int? IdLote { get; set; }
         public string CodigoSuministro { get; set; } = "";
         public string Titular { get; set; } = "";
         public string Direccion { get; set; } = "";
@@ -725,6 +917,15 @@
         public double Latitud { get; set; }
         public double Longitud { get; set; }
         public string Estado { get; set; } = "";
+    }
+
+    public class ResultadoDijkstraDto
+    {
+        public double DistanciaTotalMetros { get; set; }
+        public double DistanciaTotalKm { get; set; }
+        public int TiempoEstimadoMinutos { get; set; }
+        public string GeometriaGeoJson { get; set; } = "{}";
+        public List<PuntoRutaDto>? PuntosOrdenados { get; set; }
     }
 
     public class CrearTicketRespuestaDto

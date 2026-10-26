@@ -21,6 +21,15 @@ namespace Arquis.Backend.Models.Entities
         public DateTime? FechaEjecucion { get; set; }
         public string? Observaciones { get; set; }
 
+        // Auditoría y Validación Geográfica Antifraude (RN-01 / RF-MOB-05)
+        public double? LatitudEjecucion { get; set; }
+        public double? LongitudEjecucion { get; set; }
+        public double? DistanciaAntifraudeMetros { get; set; }
+        public decimal? LecturaMedidor { get; set; }
+        public string? EstadoFinal { get; set; } // "Cortado", "Reconectado", "Observado"
+        public string? MotivoObservacion { get; set; }
+        public string? FotosEvidenciasJson { get; set; }
+
         [JsonIgnore]
         public RutaTrabajo? RutaTrabajo { get; set; }
     }

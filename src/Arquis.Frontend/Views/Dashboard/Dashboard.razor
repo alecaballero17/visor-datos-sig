@@ -9,7 +9,7 @@
 <PageTitle>Visor SIG - Dashboard</PageTitle>
 
 <div id="app" class="app-shell" data-api="@apiBase">
-    <Header UserName="@userName" OnLogout="Logout" OnOpenReports="OpenGeneralReports" OnOpenTracking="OpenTrackingModal" OnOpenOperationsDrawer="OpenOperationsDrawer" />
+    <Header UserName="@userName" OnLogout="Logout" OnOpenReports="OpenGeneralReports" OnOpenTracking="OpenTrackingModal" OnOpenOperationsDrawer="OpenOperationsDrawer" OnOpenDashboardKpis="OpenDashboardKpisModal" />
 
     <div class="app-body position-relative flex-grow-1 w-100 h-100">
         <main class="map-wrap position-relative flex-grow-1 w-100 h-100" role="main" aria-label="Visor territorial interactivo">
@@ -68,6 +68,9 @@
                                   SelectedMZA="reportMZA"
                                   CurrentUserName="@userName" />
 
+            <!-- Modal de Dashboard Operativo y KPIs (RF-WEB-02) -->
+            <DashboardKpiModal @bind-IsOpen="isKpiModalOpen" />
+
             <!-- 6. Panel Retráctil Modular de Operaciones, Rutas, Cuadrillas y Configuración -->
             <OperationsDrawer @ref="operationsDrawer" @bind-IsOpen="isOperationsDrawerOpen" />
         </main>
@@ -101,6 +104,14 @@
     private int? reportLoteId = null;
     private string? reportUV = null;
     private string? reportMZA = null;
+
+    // Estado del modal de Dashboard de KPIs Operativos (RF-WEB-02)
+    private bool isKpiModalOpen = false;
+
+    private void OpenDashboardKpisModal()
+    {
+        isKpiModalOpen = true;
+    }
 
     // Estado del Panel Retráctil de Operaciones y Opciones
     private bool isOperationsDrawerOpen = false;

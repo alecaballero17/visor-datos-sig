@@ -143,6 +143,36 @@ namespace Arquis.Backend.Data
                         );
                         CREATE INDEX IX_PuntosRuta_RutaTrabajoId ON dbo.PuntosRutaTrabajo(RutaTrabajoId, Orden ASC);
                     END
+
+                    -- Columnas para RF-WEB-04/05 (Partida y Geometría Dijkstra)
+                    IF COL_LENGTH('dbo.RutasTrabajo', 'PartidaLatitud') IS NULL
+                        ALTER TABLE dbo.RutasTrabajo ADD PartidaLatitud FLOAT NULL;
+                    IF COL_LENGTH('dbo.RutasTrabajo', 'PartidaLongitud') IS NULL
+                        ALTER TABLE dbo.RutasTrabajo ADD PartidaLongitud FLOAT NULL;
+                    IF COL_LENGTH('dbo.RutasTrabajo', 'PartidaNombre') IS NULL
+                        ALTER TABLE dbo.RutasTrabajo ADD PartidaNombre NVARCHAR(250) NULL;
+                    IF COL_LENGTH('dbo.RutasTrabajo', 'DistanciaTotalMetros') IS NULL
+                        ALTER TABLE dbo.RutasTrabajo ADD DistanciaTotalMetros FLOAT NULL;
+                    IF COL_LENGTH('dbo.RutasTrabajo', 'TiempoEstimadoMinutos') IS NULL
+                        ALTER TABLE dbo.RutasTrabajo ADD TiempoEstimadoMinutos INT NULL;
+                    IF COL_LENGTH('dbo.RutasTrabajo', 'GeometriaRutaGeoJson') IS NULL
+                        ALTER TABLE dbo.RutasTrabajo ADD GeometriaRutaGeoJson NVARCHAR(MAX) NULL;
+
+                    -- Columnas para RN-01 / RF-MOB-05 (Auditoría Antifraude)
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'LatitudEjecucion') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD LatitudEjecucion FLOAT NULL;
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'LongitudEjecucion') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD LongitudEjecucion FLOAT NULL;
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'DistanciaAntifraudeMetros') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD DistanciaAntifraudeMetros FLOAT NULL;
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'LecturaMedidor') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD LecturaMedidor DECIMAL(18,2) NULL;
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'EstadoFinal') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD EstadoFinal NVARCHAR(50) NULL;
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'MotivoObservacion') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD MotivoObservacion NVARCHAR(250) NULL;
+                    IF COL_LENGTH('dbo.PuntosRutaTrabajo', 'FotosEvidenciasJson') IS NULL
+                        ALTER TABLE dbo.PuntosRutaTrabajo ADD FotosEvidenciasJson NVARCHAR(MAX) NULL;
                 ");
             }
             catch (System.Exception ex)
