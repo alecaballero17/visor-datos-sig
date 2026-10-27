@@ -184,7 +184,7 @@ class ApiProvider {
           final data = error.response?.data;
           String? serverMsg;
           if (data is Map) {
-            serverMsg = data['mensaje']?.toString() ?? data['message']?.toString();
+            serverMsg = data['error']?.toString() ?? data['mensaje']?.toString() ?? data['message']?.toString();
           }
           final message = serverMsg ?? error.message ?? 'Error del servidor';
           return Exception(message);

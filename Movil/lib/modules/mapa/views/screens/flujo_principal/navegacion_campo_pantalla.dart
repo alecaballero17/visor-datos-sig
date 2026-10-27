@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../services/tracking_gps_service.dart';
 import '../../../services/rutas_trabajo_service.dart';
+import '../../widgets/formulario_cierre_orden_modal.dart';
 
 class NavegacionCampoPantalla extends StatefulWidget {
   final Map<String, dynamic>? rutaInicial;
@@ -181,130 +182,37 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
   Future<void> _ejecutarAccion() async {
     if (_objetivoActual == null || _rutaActiva == null) return;
 
-    final rutaId = _rutaActiva!['id'] as int;
-    final puntoId = _objetivoActual!['id'] as int;
     final esCorte = (_rutaActiva!['tipo'] ?? '').toString().toLowerCase().contains('corte');
 
-    final TextEditingController obsController = TextEditingController(
-      text: esCorte ? 'Válvula precintada. Corte ejecutado conforme al protocolo.' : 'Servicio restablecido y verificado.',
-    );
-
-    final confirmar = await showModalBottomSheet<bool>(
+    await FormularioCierreOrdenModal.mostrar(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: esCorte ? const Color(0xFFEF4444) : const Color(0xFF3B82F6),
-                  child: Icon(esCorte ? Icons.content_cut : Icons.water_drop, color: Colors.white, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    esCorte ? "Acta Digital: Corte de Servicio" : "Acta Digital: Reconexión de Servicio",
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Titular: ${_objetivoActual!['titular'] ?? 'No especificado'}", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                  const SizedBox(height: 4),
-                  Text("Lote: ${_objetivoActual!['lote'] ?? '—'} · Suministro: #${_objetivoActual!['codigoSuministro'] ?? '—'}", style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                  if (_objetivoActual!['direccion'] != null)
-                    Text("Dirección: ${_objetivoActual!['direccion']}", style: const TextStyle(color: Colors.white60, fontSize: 11)),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: obsController,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                labelText: "Constancia u Observaciones Técnicas",
-                labelStyle: const TextStyle(color: Colors.white60),
-                filled: true,
-                fillColor: const Color(0xFF334155),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white70,
-                      side: const BorderSide(color: Colors.white24),
-                    ),
-                    child: const Text("Cancelar"),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: esCorte ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                    child: Text(esCorte ? "Registrar Corte" : "Registrar Reconexión"),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (confirmar == true) {
-      final exito = await _rutasService.ejecutarAccionPunto(
-        rutaId: rutaId,
-        puntoId: puntoId,
-        observaciones: obsController.text,
-      );
-
-      if (exito) {
+      rutaActiva: _rutaActiva!,
+      objetivoActual: _objetivoActual!,
+      onCompletadoExitoso: (estadoFinal) {
         setState(() {
-          _objetivoActual!['estado'] = 'Completado';
+          _objetivoActual!['estado'] = estadoFinal == 'Observado' ? 'Observado' : 'Completado';
           _contarCompletados();
           _seleccionarObjetivoMasCercano();
         });
 
-        _mostrarNotificacionExito(esCorte);
-      }
-    }
+        _mostrarNotificacionExito(esCorte, estadoFinal);
+      },
+    );
   }
 
-  void _mostrarNotificacionExito(bool esCorte) {
+  void _mostrarNotificacionExito(bool esCorte, String estadoFinal) {
+    final mensaje = estadoFinal == 'Observado'
+        ? "Orden registrada como Observada con constancia y evidencia fotográfica transmitida."
+        : (esCorte
+            ? "Corte registrado satisfactoriamente con lectura y evidencia fotográfica. Sincronizado."
+            : "Reconexión registrada satisfactoriamente con lectura y evidencia fotográfica. Servicio restablecido.");
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        backgroundColor: const Color(0xFF10B981),
+        backgroundColor: estadoFinal == 'Observado' ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         content: Text(
-          esCorte
-              ? "Corte registrado satisfactoriamente. Sincronizado con la plataforma central."
-              : "Reconexión registrada satisfactoriamente. Servicio restablecido.",
+          mensaje,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),

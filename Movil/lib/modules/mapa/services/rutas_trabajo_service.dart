@@ -36,21 +36,55 @@ class RutasTrabajoService {
     }
   }
 
-  Future<bool> ejecutarAccionPunto({
+  Future<ResultadoEjecucionPunto> ejecutarAccionPunto({
     required int rutaId,
     required int puntoId,
     String? observaciones,
+    double? latitudMovil,
+    double? longitudMovil,
+    double? lecturaMedidor,
+    String? estadoFinal,
+    String? motivoObservacion,
+    List<String>? fotos,
   }) async {
     try {
+      final Map<String, dynamic> body = {
+        'observaciones': observaciones ?? 'Operativo ejecutado en campo con éxito.',
+      };
+      if (latitudMovil != null) body['latitudMovil'] = latitudMovil;
+      if (longitudMovil != null) body['longitudMovil'] = longitudMovil;
+      if (lecturaMedidor != null) body['lecturaMedidor'] = lecturaMedidor;
+      if (estadoFinal != null && estadoFinal.isNotEmpty) body['estadoFinal'] = estadoFinal;
+      if (motivoObservacion != null && motivoObservacion.isNotEmpty) body['motivoObservacion'] = motivoObservacion;
+      if (fotos != null && fotos.isNotEmpty) body['fotos'] = fotos;
+
       final res = await _api.put(
         '/rutas-trabajo/$rutaId/puntos/$puntoId/ejecutar',
-        data: {
-          'observaciones': observaciones ?? 'Operativo ejecutado en campo con éxito.',
-        },
+        data: body,
       );
-      return res != null;
+      return ResultadoEjecucionPunto(exito: res != null);
     } catch (e) {
-      return false;
+      final errMsg = e.toString().replaceAll('Exception: ', '');
+      final isAntifraude = errMsg.toLowerCase().contains('antifraude') || errMsg.toLowerCase().contains('tolerancia');
+      return ResultadoEjecucionPunto(
+        exito: false,
+        error: errMsg,
+        antifraudeRechazado: isAntifraude,
+      );
     }
   }
+}
+
+class ResultadoEjecucionPunto {
+  final bool exito;
+  final String? error;
+  final bool antifraudeRechazado;
+  final double? distanciaActualMetros;
+
+  ResultadoEjecucionPunto({
+    required this.exito,
+    this.error,
+    this.antifraudeRechazado = false,
+    this.distanciaActualMetros,
+  });
 }

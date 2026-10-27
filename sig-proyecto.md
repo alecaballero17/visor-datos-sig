@@ -190,13 +190,13 @@ A continuación se detalla el estado de cumplimiento y la arquitectura implement
 
 ### **5.2. Aplicación Móvil (Operaciones en Campo - Flutter)**
 
-| Código | Requisito Funcional | Estado | Grado | Brechas Pendientes para Siguiente Fase |
+| Código | Requisito Funcional | Estado | Grado | Detalles / Brechas Pendientes para Siguiente Fase |
 | :--- | :--- | :---: | :---: | :--- |
 | **RF-MOB-01** | Autenticación de Operadores | Parcial | 70% | Login operativo contra API; pendiente persistencia segura de token/cookie (`shared_preferences`) para auto-login offline. |
 | **RF-MOB-02** | Bandeja de Trabajo y Órdenes Asignadas | En Proceso | 45% | La app arranca en mapa; pendiente construir la pantalla en lista scrolleable de órdenes secuenciales ($1, 2, 3\dots$) según mockups. |
 | **RF-MOB-03** | Georreferenciación y Navegación Asistida | Parcial | 65% | GPS en tiempo real y distancias calculadas; pendiente botón "Navegar" con Deep Linking (`url_launcher`) hacia Waze/Google Maps. |
-| **RF-MOB-04** | Registro Operativo y Evidencias | Pendiente | 30% | Modal simplificado; pendiente selector Cortado vs Observado, lectura de medidor y captura de hasta 3 fotografías (`image_picker`). |
-| **RF-MOB-05** | Validación Antifraude (Radio 30 m) | Backend 100% / App 10% | 30% | La API valida y rechaza si $d > 30\text{ m}$; la app móvil debe capturar y enviar `LatitudMovil` y `LongitudMovil` al confirmar el cierre. |
+| **RF-MOB-04** | Registro Operativo y Evidencias | **Completado** | **100%** | Modal completo `FormularioCierreOrdenModal.dart` integrado con selector radial (*Cortado/Reconectado* vs *Observado* con catálogo estructurado de 8 motivos), campo numérico de *Lectura del medidor*, campo de notas y **captura estricta de 1 fotografía de evidencia** (`image_picker` con preview, reintento y codificación Base64). |
+| **RF-MOB-05** | Validación Antifraude (Radio 30 m) | **Completado** | **100%** | Doble anillo de validación: cálculo preventivo en el cliente con alerta visual de proximidad e indicador de distancia respecto al predio, y validación estricta en backend (`RN-01`) que rechaza solicitudes con $d > 30\text{ m}$. Integrado con coordenadas GPS en vivo (`TrackingGpsService`). |
 | **RF-MOB-06** | OCR del Medidor con ML Kit | No Iniciado | 0% | Módulo avanzado opcional; pendiente integrar `google_mlkit_text_recognition`. |
 
 
