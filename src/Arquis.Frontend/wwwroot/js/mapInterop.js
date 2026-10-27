@@ -864,9 +864,14 @@ window.arquis = (() => {
         routeStopMarkers = [];
     }
 
-    // RF-WEB-03: Navegación espacial con control de inclinación (Pitch 3D)
-    function toggle3DTilt() {
-        is3DTiltActive = !is3DTiltActive;
+    // RF-WEB-03: Navegación espacial con control de inclinación y rotación (WebGL 3D Nativo)
+    function toggle3DTilt(forceState) {
+        if (window.arquisWebGL) {
+            is3DTiltActive = window.arquisWebGL.toggle3D(forceState);
+            return is3DTiltActive;
+        }
+
+        is3DTiltActive = typeof forceState === 'boolean' ? forceState : !is3DTiltActive;
         const pane = document.querySelector('.leaflet-map-pane');
         if (pane) {
             if (is3DTiltActive) {

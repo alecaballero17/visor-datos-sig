@@ -171,3 +171,32 @@ Herramienta nativa/híbrida para teléfonos inteligentes utilizada por las cuadr
      * Código Fuente completo compilable tanto de la solución Web como de la App Móvil.  
      * Repositorio de código o enlace centralizado en la nube con empaquetado para despliegue en servidor web.
 
+---
+
+# **5\. Matriz de Seguimiento y Estado de Ejecución del Proyecto**
+
+A continuación se detalla el estado de cumplimiento y la arquitectura implementada en la plataforma:
+
+### **5.1. Plataforma Web (Administración y Monitoreo)**
+
+| Código | Requisito Funcional | Estado | Grado | Detalles de la Implementación Técnica |
+| :--- | :--- | :---: | :---: | :--- |
+| **RF-WEB-01** | Autenticación y Control de Sesión | **Completado** | **100%** | Cookie segura (`Arquis.Auth`), roles RBAC (`Administrador`, `Consultor`, `Cortador`, `Reconector`), y **cierre automático tras 15 minutos exactos de inactividad** en backend (`ExpireTimeSpan = TimeSpan.FromMinutes(15)`) y frontend. |
+| **RF-WEB-02** | Dashboard General y Métricas Operativas | **Completado** | **100%** | 6 tarjetas de resumen (Total, Normal, Para Corte, Cortado, Baja Parcial, Baja Total), gráfico de dona de distribución porcentual y comparativa de barras de intervenciones ejecutadas vs. pendientes por cuadrilla en `DashboardController.cs` y `DashboardKpiModal.razor`. |
+| **RF-WEB-03** | Visor Geográfico Catastral 2D y 3D | **Completado** | **100%** | **Doble motor integrado**: Visor 2D (Leaflet) para gestión y catastro rápido, y **Motor WebGL Nativo 3D** (`webglEngine.js` con Three.js) acelerado por hardware con extrusión volumétrica de lotes/manzanas, balizas luminiscentes de acometidas según estado comercial, controles espaciales de **Inclinación (Pitch: 15°-85°)**, **Rotación (Bearing: 0°-360°)** y **tasa constante $\ge 30-60$ FPS** (RNF-02). |
+| **RF-WEB-04** | Planificación Operativa y Asignación | **Completado** | **100%** | Creación masiva e individual de tickets de corte y reconexión, selección territorial por UV/MZA, asignación de cuadrillas con roles específicos y **selección interactiva del punto de partida inicial mediante clic directo en el mapa**. |
+| **RF-WEB-05** | Optimización de Rutas mediante Red Vial | **Completado** | **100%** | Algoritmo de Dijkstra sobre la topología vial `dbo.Vias` (`DijkstraRoutingService.cs`), ordenamiento secuencial estricto ($1, 2, 3\dots N$) sobre ejes de calle prohibiendo cruce diagonal de manzanas, cálculo de distancias/tiempos y persistencia GeoJSON. |
+| **RF-WEB-06** | Monitoreo y Seguimiento de Personal | **Completado** | **100%** | Módulo de telemetría completa integrado en el panel lateral (`MonitoreoGpsView.razor`): **modo en vivo** con posiciones GPS instantáneas, velocidad, rumbo y batería; **modo histórico** con reproductor animado tipo Timeline y timestamps; y **panel lateral con porcentaje de cumplimiento de la hoja de ruta asignada** ($\% = \frac{\text{Ejecutadas}}{\text{Total}} \times 100\%$), métricas de avance y trazado de ruta en mapa. |
+
+### **5.2. Aplicación Móvil (Operaciones en Campo - Flutter)**
+
+| Código | Requisito Funcional | Estado | Grado | Brechas Pendientes para Siguiente Fase |
+| :--- | :--- | :---: | :---: | :--- |
+| **RF-MOB-01** | Autenticación de Operadores | Parcial | 70% | Login operativo contra API; pendiente persistencia segura de token/cookie (`shared_preferences`) para auto-login offline. |
+| **RF-MOB-02** | Bandeja de Trabajo y Órdenes Asignadas | En Proceso | 45% | La app arranca en mapa; pendiente construir la pantalla en lista scrolleable de órdenes secuenciales ($1, 2, 3\dots$) según mockups. |
+| **RF-MOB-03** | Georreferenciación y Navegación Asistida | Parcial | 65% | GPS en tiempo real y distancias calculadas; pendiente botón "Navegar" con Deep Linking (`url_launcher`) hacia Waze/Google Maps. |
+| **RF-MOB-04** | Registro Operativo y Evidencias | Pendiente | 30% | Modal simplificado; pendiente selector Cortado vs Observado, lectura de medidor y captura de hasta 3 fotografías (`image_picker`). |
+| **RF-MOB-05** | Validación Antifraude (Radio 30 m) | Backend 100% / App 10% | 30% | La API valida y rechaza si $d > 30\text{ m}$; la app móvil debe capturar y enviar `LatitudMovil` y `LongitudMovil` al confirmar el cierre. |
+| **RF-MOB-06** | OCR del Medidor con ML Kit | No Iniciado | 0% | Módulo avanzado opcional; pendiente integrar `google_mlkit_text_recognition`. |
+
+
