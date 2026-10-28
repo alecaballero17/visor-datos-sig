@@ -34,17 +34,8 @@ namespace Arquis.Backend.Controllers
             var countBajaParcial = await _context.CodigosFijos.CountAsync(c => c.Estado == 4);
             var countBajaTotal = await _context.CodigosFijos.CountAsync(c => c.Estado == 5);
 
-            // En caso de base recién inicializada con estado 0 por SHP original, agrupar con no verificados
-            var countSinVerificar = await _context.CodigosFijos.CountAsync(c => c.Estado == 0 || (c.Estado != 1 && c.Estado != 2 && c.Estado != 3 && c.Estado != 4 && c.Estado != 5));
-            if (countNormal == 0 && countSinVerificar > 0)
-            {
-                // Si la carga inicial asignó 0 o no clasificado, simular distribución inicial proporcional
-                countNormal = (int)(countSinVerificar * 0.78);
-                countParaCorte = (int)(countSinVerificar * 0.12);
-                countCortado = (int)(countSinVerificar * 0.06);
-                countBajaParcial = (int)(countSinVerificar * 0.03);
-                countBajaTotal = countSinVerificar - countNormal - countParaCorte - countCortado - countBajaParcial;
-            }
+            var countSinVerificar = await _context.CodigosFijos.CountAsync(c => c.Estado < 1 || c.Estado > 5);
+            var estadosNoVerificados = await _context.CodigosFijos.CountAsync(c => !c.EstadoVerificado);
 
             // 2. Gráfico de Dona: Distribución porcentual del estado de las conexiones del municipio
             double sumTotal = totalConexiones > 0 ? totalConexiones : 1;
@@ -83,18 +74,6 @@ namespace Arquis.Backend.Controllers
                 .OrderByDescending(c => c.TotalAsignadas)
                 .ToList();
 
-            // Si no hay cuadrillas con rutas creadas aún, aportar cuadrillas demo para renderizar la comparativa
-            if (cuadrillasStats.Count == 0)
-            {
-                cuadrillasStats = new()
-                {
-                    new { Operario = "Pedro (Cortador)", Rol = "Cortador", TotalAsignadas = 25, Ejecutadas = 18, Pendientes = 7, Observadas = 0, PorcentajeCumplimiento = 72.0 },
-                    new { Operario = "Mario (Cortador)", Rol = "Cortador", TotalAsignadas = 20, Ejecutadas = 12, Pendientes = 8, Observadas = 1, PorcentajeCumplimiento = 60.0 },
-                    new { Operario = "Carlos (Reconector)", Rol = "Reconector", TotalAsignadas = 15, Ejecutadas = 11, Pendientes = 4, Observadas = 0, PorcentajeCumplimiento = 73.3 },
-                    new { Operario = "Luis (Reconector)", Rol = "Reconector", TotalAsignadas = 18, Ejecutadas = 9, Pendientes = 9, Observadas = 0, PorcentajeCumplimiento = 50.0 }
-                };
-            }
-
             var totalLotes = await _context.Lotes.CountAsync();
             var totalVias = await _context.Vias.CountAsync();
             var totalManzanas = await _context.Manzanas.CountAsync();
@@ -109,7 +88,9 @@ namespace Arquis.Backend.Controllers
                     conexionesParaCorte = countParaCorte,
                     conexionesCortado = countCortado,
                     conexionesBajaParcial = countBajaParcial,
-                    conexionesBajaTotal = countBajaTotal
+                    conexionesBajaTotal = countBajaTotal,
+                    conexionesSinClasificar = countSinVerificar,
+                    estadosNoVerificados
                 },
                 // Gráfico de Dona RF-WEB-02
                 graficoDona = new
@@ -121,7 +102,8 @@ namespace Arquis.Backend.Controllers
                         paraCorte = pctParaCorte,
                         cortado = pctCortado,
                         bajaParcial = pctBajaParcial,
-                        bajaTotal = pctBajaTotal
+                        bajaTotal = pctBajaTotal,
+                        sinClasificar = Math.Round(countSinVerificar / sumTotal * 100.0, 1)
                     },
                     cantidades = new
                     {

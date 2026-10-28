@@ -55,7 +55,7 @@ namespace Arquis.Backend.Services
             public int TiempoEstimadoMinutos { get; set; }
             public string GeometriaGeoJson { get; set; } = string.Empty;
             public List<List<double>> CoordenadasRuta { get; set; } = new(); // [[lng, lat], ...]
-            public string AlgoritmoUtilizado { get; set; } = "Dijkstra Topológico sobre dbo.Vias";
+            public string AlgoritmoUtilizado { get; set; } = "Vecino más cercano por distancia Dijkstra sobre dbo.Vias (bidireccional)";
         }
 
         /// <summary>
@@ -84,22 +84,17 @@ namespace Arquis.Backend.Services
                     .Select(v => new { v.IdVia, v.Nombre, v.Geom })
                     .ToListAsync();
 
-                if (vias.Count > 0)
+                // Node intersections before building edges: crossings need not be source vertices.
+                var lines = vias.SelectMany(v => Enumerable.Range(0, v.Geom!.NumGeometries)
+                    .Select(i => v.Geom.GetGeometryN(i))).OfType<LineString>()
+                    .Where(l => !l.IsEmpty && l.NumPoints >= 2).ToArray();
+                if (lines.Length > 0)
                 {
-                    foreach (var via in vias)
-                    {
-                        var geom = via.Geom;
-                        if (geom == null) continue;
-
-                        for (int i = 0; i < geom.NumGeometries; i++)
-                        {
-                            var subGeom = geom.GetGeometryN(i);
-                            if (subGeom is LineString line && line.Coordinates.Length >= 2)
-                            {
-                                graph.AgregarLinea(line.Coordinates, via.Nombre ?? $"Via-{via.IdVia}");
-                            }
-                        }
-                    }
+                    var noded = NetTopologySuite.Operation.Union.UnaryUnionOp.Union(
+                        (Geometry)lines[0].Factory.CreateMultiLineString(lines));
+                    for (int i = 0; i < noded.NumGeometries; i++)
+                        if (noded.GetGeometryN(i) is LineString line)
+                            graph.AgregarLinea(line.Coordinates, "Red vial");
                 }
 
                 _cachedGraph = graph;
@@ -133,6 +128,8 @@ namespace Arquis.Backend.Services
             }
 
             var graph = await ObtenerGrafoAsync();
+            if (!graph.TieneVias)
+                throw new RutaNoDisponibleException("No hay vías cargadas en dbo.Vias. Prepare la base de datos antes de calcular recorridos.");
             var resultado = new ResultadoOptimizacionRuta
             {
                 Partida = partida
@@ -144,7 +141,7 @@ namespace Arquis.Backend.Services
             // Punto de partida inicial
             var currentLat = partida.Latitud;
             var currentLng = partida.Longitud;
-            rutaCoordinates.Add(new List<double> { currentLng, currentLat });
+
 
             var restantes = new List<PuntoIntervencionDto>(puntos);
             var ordenados = new List<PuntoIntervencionDto>();
@@ -175,9 +172,7 @@ namespace Arquis.Backend.Services
 
                 if (mejorPunto == null)
                 {
-                    // Fallback directo si no hubiera candidatos
-                    mejorPunto = restantes[0];
-                    mejorDistancia = CalcularHaversine(currentLat, currentLng, mejorPunto.Latitud, mejorPunto.Longitud);
+                    throw new RutaNoDisponibleException("No existe un recorrido conectado por las vías disponibles para todos los puntos seleccionados. Seleccione puntos de la misma red vial y a menos de 200 m de una calle.");
                 }
 
                 mejorPunto.Orden = ordenNum++;
@@ -228,7 +223,7 @@ namespace Arquis.Backend.Services
                     tiempoEstimadoMinutos = resultado.TiempoEstimadoMinutos,
                     totalPuntos = ordenados.Count,
                     puntoPartida = partida.Nombre,
-                    algoritmo = "Dijkstra - Ejes Viales dbo.Vias (Sin cruce de manzanas)"
+                    algoritmo = resultado.AlgoritmoUtilizado
                 }
             };
 
@@ -249,227 +244,117 @@ namespace Arquis.Backend.Services
         }
     }
 
-    /// <summary>
-    /// Representación de la Red Topológica de Vías para ejecución de Dijkstra.
-    /// </summary>
+    public sealed class RutaNoDisponibleException(string message) : Exception(message);
+
+    /// <summary>Bidirectional street graph. Routes end at the street access, not inside parcels.</summary>
     public class RoadNetworkGraph
     {
-        public class Node
-        {
-            public int Id { get; set; }
-            public double Lat { get; set; }
-            public double Lng { get; set; }
-            public List<Edge> Edges { get; set; } = new();
-        }
-
-        public class Edge
-        {
-            public int TargetNodeId { get; set; }
-            public double WeightMeters { get; set; }
-            public string StreetName { get; set; } = string.Empty;
-            public List<Coordinate> GeometryPoints { get; set; } = new();
-        }
+        private readonly List<Coordinate> nodes = new();
+        private readonly Dictionary<(double, double), int> nodeIds = new();
+        private readonly List<List<(int Target, double Distance)>> edges = new();
+        private readonly List<(int A, int B)> segments = new();
+        public bool TieneVias => segments.Count > 0;
 
         public class PathResult
         {
-            public double DistanciaMetros { get; set; }
+            public double DistanciaMetros { get; set; } = double.PositiveInfinity;
             public List<Coordinate> Coordenadas { get; set; } = new();
         }
 
-        private readonly List<Node> _nodes = new();
-        private readonly Dictionary<(long, long), int> _coordToNodeIndex = new();
-        private const double SnapToleranceDegrees = 0.0001; // ~10 metros
-
-        private (long, long) Discretize(double lat, double lng)
+        private int Node(Coordinate c)
         {
-            long latGrid = (long)Math.Round(lat / SnapToleranceDegrees);
-            long lngGrid = (long)Math.Round(lng / SnapToleranceDegrees);
-            return (latGrid, lngGrid);
-        }
-
-        public int ObtenerOCrearNodo(double lat, double lng)
-        {
-            var key = Discretize(lat, lng);
-            if (_coordToNodeIndex.TryGetValue(key, out var existingId))
-            {
-                return existingId;
-            }
-
-            int id = _nodes.Count;
-            var node = new Node { Id = id, Lat = lat, Lng = lng };
-            _nodes.Add(node);
-            _coordToNodeIndex[key] = id;
+            // Only merge numerical noise; do not connect nearby parallel streets.
+            var key = (Math.Round(c.X, 9), Math.Round(c.Y, 9));
+            if (nodeIds.TryGetValue(key, out int id)) return id;
+            id = nodes.Count;
+            nodes.Add(new Coordinate(c));
+            edges.Add(new());
+            nodeIds[key] = id;
             return id;
         }
 
         public void AgregarLinea(Coordinate[] coords, string streetName)
         {
-            if (coords == null || coords.Length < 2) return;
-
-            for (int i = 0; i < coords.Length - 1; i++)
+            for (int i = 1; i < coords.Length; i++)
             {
-                var c1 = coords[i];
-                var c2 = coords[i + 1];
-
-                int u = ObtenerOCrearNodo(c1.Y, c1.X);
-                int v = ObtenerOCrearNodo(c2.Y, c2.X);
-
-                if (u == v) continue;
-
-                double dist = DijkstraRoutingService.CalcularHaversine(c1.Y, c1.X, c2.Y, c2.X);
-                if (dist < 0.5) dist = 0.5; // evitar pesos nulos
-
-                var segCoords = new List<Coordinate> { c1, c2 };
-                var revSegCoords = new List<Coordinate> { c2, c1 };
-
-                _nodes[u].Edges.Add(new Edge
-                {
-                    TargetNodeId = v,
-                    WeightMeters = dist,
-                    StreetName = streetName,
-                    GeometryPoints = segCoords
-                });
-
-                _nodes[v].Edges.Add(new Edge
-                {
-                    TargetNodeId = u,
-                    WeightMeters = dist,
-                    StreetName = streetName,
-                    GeometryPoints = revSegCoords
-                });
+                int a = Node(coords[i - 1]), b = Node(coords[i]);
+                if (a == b) continue;
+                double distance = Distance(nodes[a], nodes[b]);
+                edges[a].Add((b, distance));
+                edges[b].Add((a, distance));
+                segments.Add((a, b));
             }
         }
 
-        public int EncontrarNodoMasCercano(double lat, double lng)
+        private static double Distance(Coordinate a, Coordinate b) =>
+            DijkstraRoutingService.CalcularHaversine(a.Y, a.X, b.Y, b.X);
+
+        private (int Segment, Coordinate Point, double Distance) Snap(double lat, double lng)
         {
-            if (_nodes.Count == 0) return -1;
-
-            int bestId = 0;
-            double bestDist = double.MaxValue;
-
-            for (int i = 0; i < _nodes.Count; i++)
+            int best = -1;
+            double min = double.PositiveInfinity;
+            var point = new Coordinate(lng, lat);
+            var projected = point;
+            // Local metric projection compensates for longitude scale at this latitude.
+            double scale = Math.Cos(lat * Math.PI / 180);
+            for (int i = 0; i < segments.Count; i++)
             {
-                var n = _nodes[i];
-                double d = DijkstraRoutingService.CalcularHaversine(lat, lng, n.Lat, n.Lng);
-                if (d < bestDist)
-                {
-                    bestDist = d;
-                    bestId = i;
-                }
+                var (a, b) = segments[i];
+                var start = nodes[a]; var end = nodes[b];
+                double dx = (end.X - start.X) * scale, dy = end.Y - start.Y;
+                double t = Math.Clamp(((lng - start.X) * scale * dx + (lat - start.Y) * dy)
+                    / (dx * dx + dy * dy), 0, 1);
+                var candidate = new Coordinate(start.X + t * (end.X - start.X), start.Y + t * dy);
+                double distance = Distance(point, candidate);
+                if (distance < min) { best = i; min = distance; projected = candidate; }
             }
-
-            return bestId;
+            return (best, projected, min);
         }
 
-        /// <summary>
-        /// Algoritmo de Dijkstra para calcular la ruta más corta sobre la red topológica vial.
-        /// </summary>
         public PathResult CalcularRutaDijkstra(double startLat, double startLng, double endLat, double endLng)
         {
-            // Si la red vial no tiene datos cargados aún, trazar línea directa geodésica
-            if (_nodes.Count == 0)
+            if (!double.IsFinite(startLat) || !double.IsFinite(startLng) ||
+                !double.IsFinite(endLat) || !double.IsFinite(endLng) ||
+                Math.Abs(startLat) > 90 || Math.Abs(endLat) > 90 ||
+                Math.Abs(startLng) > 180 || Math.Abs(endLng) > 180) return new();
+            var start = Snap(startLat, startLng); var end = Snap(endLat, endLng);
+            // Reject points outside the dataset rather than inventing long access lines.
+            if (start.Segment < 0 || end.Segment < 0 || start.Distance > 200 || end.Distance > 200)
+                return new();
+            if (start.Segment == end.Segment)
+                return new() { DistanciaMetros = Distance(start.Point, end.Point),
+                    Coordenadas = new() { start.Point, end.Point } };
+
+            var distances = Enumerable.Repeat(double.PositiveInfinity, nodes.Count).ToArray();
+            var previous = Enumerable.Repeat(-1, nodes.Count).ToArray();
+            var queue = new PriorityQueue<int, double>();
+            var source = segments[start.Segment]; var target = segments[end.Segment];
+            foreach (int id in new[] { source.A, source.B })
             {
-                double directDist = DijkstraRoutingService.CalcularHaversine(startLat, startLng, endLat, endLng);
-                return new PathResult
-                {
-                    DistanciaMetros = directDist,
-                    Coordenadas = new List<Coordinate>
-                    {
-                        new(startLng, startLat),
-                        new(endLng, endLat)
-                    }
-                };
+                distances[id] = Distance(start.Point, nodes[id]);
+                queue.Enqueue(id, distances[id]);
             }
-
-            int startNode = EncontrarNodoMasCercano(startLat, startLng);
-            int endNode = EncontrarNodoMasCercano(endLat, endLng);
-
-            if (startNode == endNode || startNode < 0 || endNode < 0)
+            while (queue.TryDequeue(out int current, out double cost))
             {
-                double directDist = DijkstraRoutingService.CalcularHaversine(startLat, startLng, endLat, endLng);
-                return new PathResult
+                if (cost > distances[current]) continue;
+                foreach (var edge in edges[current])
                 {
-                    DistanciaMetros = directDist,
-                    Coordenadas = new List<Coordinate>
-                    {
-                        new(startLng, startLat),
-                        new(endLng, endLat)
-                    }
-                };
-            }
-
-            // Dijkstra con PriorityQueue (Min-Heap)
-            var distances = new Dictionary<int, double>();
-            var previous = new Dictionary<int, (int NodeId, List<Coordinate> EdgeGeom)>();
-            var pq = new PriorityQueue<int, double>();
-
-            distances[startNode] = 0;
-            pq.Enqueue(startNode, 0);
-
-            while (pq.Count > 0)
-            {
-                var current = pq.Dequeue();
-
-                if (current == endNode) break;
-
-                double currentDist = distances[current];
-
-                foreach (var edge in _nodes[current].Edges)
-                {
-                    double newDist = currentDist + edge.WeightMeters;
-                    if (!distances.TryGetValue(edge.TargetNodeId, out var prevDist) || newDist < prevDist)
-                    {
-                        distances[edge.TargetNodeId] = newDist;
-                        previous[edge.TargetNodeId] = (current, edge.GeometryPoints);
-                        pq.Enqueue(edge.TargetNodeId, newDist);
-                    }
+                    double next = cost + edge.Distance;
+                    if (next >= distances[edge.Target]) continue;
+                    distances[edge.Target] = next;
+                    previous[edge.Target] = current;
+                    queue.Enqueue(edge.Target, next);
                 }
             }
-
-            // Reconstrucción del camino si se alcanzó el destino
-            if (distances.ContainsKey(endNode))
-            {
-                var pathCoords = new List<Coordinate>();
-                int curr = endNode;
-
-                while (previous.TryGetValue(curr, out var step))
-                {
-                    // Invertir para agregar secuencialmente
-                    for (int k = step.EdgeGeom.Count - 1; k >= 0; k--)
-                    {
-                        pathCoords.Insert(0, step.EdgeGeom[k]);
-                    }
-                    curr = step.NodeId;
-                }
-
-                // Asegurar extremos de conexión con los puntos exactos de partida y llegada
-                pathCoords.Insert(0, new Coordinate(startLng, startLat));
-                pathCoords.Add(new Coordinate(endLng, endLat));
-
-                double distConAcometidas = distances[endNode] +
-                    DijkstraRoutingService.CalcularHaversine(startLat, startLng, _nodes[startNode].Lat, _nodes[startNode].Lng) +
-                    DijkstraRoutingService.CalcularHaversine(_nodes[endNode].Lat, _nodes[endNode].Lng, endLat, endLng);
-
-                return new PathResult
-                {
-                    DistanciaMetros = distConAcometidas,
-                    Coordenadas = pathCoords
-                };
-            }
-
-            // Si los nodos están en componentes inconexos, retornar ruta estimada conectando a red
-            double fallbackDist = DijkstraRoutingService.CalcularHaversine(startLat, startLng, endLat, endLng) * 1.35; // factor de rodeo urbano
-            return new PathResult
-            {
-                DistanciaMetros = fallbackDist,
-                Coordenadas = new List<Coordinate>
-                {
-                    new(startLng, startLat),
-                    new(_nodes[startNode].Lng, _nodes[startNode].Lat),
-                    new(_nodes[endNode].Lng, _nodes[endNode].Lat),
-                    new(endLng, endLat)
-                }
-            };
+            int finish = distances[target.A] + Distance(nodes[target.A], end.Point)
+                <= distances[target.B] + Distance(nodes[target.B], end.Point) ? target.A : target.B;
+            if (!double.IsFinite(distances[finish])) return new();
+            var path = new List<Coordinate>();
+            for (int id = finish; id >= 0; id = previous[id]) path.Add(nodes[id]);
+            path.Reverse();
+            path.Insert(0, start.Point);
+            path.Add(end.Point);
+            return new() { DistanciaMetros = distances[finish] + Distance(nodes[finish], end.Point), Coordenadas = path };
         }
     }
 }

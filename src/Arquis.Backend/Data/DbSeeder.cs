@@ -13,9 +13,7 @@ namespace Arquis.Backend.Data
             await RoleSeeder.SeedAsync(context);
             await UserSeeder.SeedAsync(context);
             await MenuSeeder.SeedAsync(context);
-            await GeoDataSeeder.SeedAsync(context);
             await EnsureVinculacionCatastralAsync(context);
-            await SeedDemoTrackingAndRutasAsync(context);
         }
 
         private static async Task EnsureVinculacionCatastralAsync(ArquisDbContext context)

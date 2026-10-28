@@ -606,7 +606,12 @@ window.arquis = (() => {
         ensureLayers();
         clearRouteHistory();
 
-        const latlngs = puntos.map(p => [p.latitud, p.longitud]);
+        let latlngs = [];
+        try {
+            const feature = JSON.parse(ruta.geometriaRutaGeoJson || '{}');
+            if (feature.geometry?.type === 'LineString')
+                latlngs = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+        } catch (error) { console.warn('Geometría de ruta no disponible', error); }
 
         // Polilínea de fondo brillante y línea principal
         const polylineGlow = L.polyline(latlngs, {
@@ -692,18 +697,23 @@ window.arquis = (() => {
         clearRutaTrabajo();
 
         const puntos = ruta.puntos.sort((a, b) => (a.orden || 0) - (b.orden || 0));
-        const latlngs = puntos.map(p => [p.latitud, p.longitud]);
+        let latlngs = [];
+        try {
+            const feature = JSON.parse(ruta.geometriaRutaGeoJson || '{}');
+            if (feature.geometry?.type === 'LineString')
+                latlngs = feature.geometry.coordinates.map(c => [c[1], c[0]]);
+        } catch (error) { console.warn('Geometría de ruta no disponible', error); }
 
         const esCorte = (ruta.tipo || '').toLowerCase().includes('corte');
         const colorRuta = esCorte ? '#ea4335' : '#1a73e8';
 
         // Trazado de conexión de la misión
-        const polyline = L.polyline(latlngs, {
+        const polyline = latlngs.length >= 2 ? L.polyline(latlngs, {
             color: colorRuta,
             weight: 3.5,
             dashArray: '6, 8',
             opacity: 0.85
-        }).addTo(rutasTrabajoLayer);
+        }).addTo(rutasTrabajoLayer) : null;
 
         puntos.forEach((p, idx) => {
             const completado = p.estado === 'Completado' || p.estado === 'Ejecutado';
@@ -739,7 +749,7 @@ window.arquis = (() => {
             `);
         });
 
-        map.fitBounds(polyline.getBounds(), { padding: [60, 60] });
+        map.fitBounds(polyline ? polyline.getBounds() : L.latLngBounds(puntos.map(p => [p.latitud, p.longitud])), { padding: [60, 60] });
     }
 
     function clearRutaTrabajo() {
@@ -886,6 +896,7 @@ window.arquis = (() => {
     }
 
     return {
+        refreshVisibleLayers,
         init,
         highlightFeature,
         clearHighlight: clearSelectionGraphics,

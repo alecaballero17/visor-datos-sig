@@ -1,0 +1,62 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+@if (connectionError)
+{
+    <div class="small text-warning" role="status">Actualización en vivo desconectada; se reintentará automáticamente.</div>
+}
+
+@code {
+    [Parameter] public EventCallback OnUpdate { get; set; }
+    [Parameter] public string[] Events { get; set; } = ["ReceivePosicion", "ReceivePuntoActualizado", "ReceiveRutaAsignada", "ReceiveRutaActualizada", "ReceiveOperarioRolActualizado"];
+    private DotNetObjectReference<RealtimeUpdates>? reference;
+    private string? subscription;
+    private bool disposed, connectionError;
+    private bool updating, pending;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        reference = DotNetObjectReference.Create(this);
+        subscription = await JS.InvokeAsync<string>("arquisRealtime.subscribe", Http.BaseAddress!.GetLeftPart(UriPartial.Authority), reference, Events);
+        if (disposed) await JS.InvokeVoidAsync("arquisRealtime.unsubscribe", subscription);
+    }
+
+    [JSInvokable]
+    public Task ConnectionChanged(bool connected) => InvokeAsync(async () =>
+    {
+        if (disposed) return;
+        connectionError = !connected;
+        StateHasChanged();
+        if (connected) await Refresh();
+    });
+
+    [JSInvokable]
+    public Task Changed() => InvokeAsync(Refresh);
+
+    private async Task Refresh()
+    {
+        if (disposed) return;
+        pending = true;
+        if (updating) return;
+        updating = true;
+        try
+        {
+            do { pending = false; await OnUpdate.InvokeAsync(); }
+            while (pending && !disposed);
+        }
+        finally { updating = false; }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        disposed = true;
+        try
+        {
+            if (subscription != null) await JS.InvokeVoidAsync("arquisRealtime.unsubscribe", subscription);
+        }
+        catch (JSDisconnectedException) { }
+        reference?.Dispose();
+    }
+}

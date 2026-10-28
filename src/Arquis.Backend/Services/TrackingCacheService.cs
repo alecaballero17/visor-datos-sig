@@ -13,7 +13,6 @@ namespace Arquis.Backend.Services
         public void ActualizarPosicion(TrackingPosicion pos)
         {
             if (string.IsNullOrWhiteSpace(pos.OperarioId)) return;
-            pos.Timestamp = DateTime.UtcNow;
             _posicionesActivas[pos.OperarioId] = pos;
         }
 

@@ -81,6 +81,13 @@ app.UseExceptionHandler(errorApp =>
 {
     errorApp.Run(async context =>
     {
+        var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+        if (error is RutaNoDisponibleException)
+        {
+            context.Response.StatusCode = 400;
+            await context.Response.WriteAsJsonAsync(new { error = error.Message });
+            return;
+        }
         context.Response.StatusCode = 500;
         context.Response.ContentType = "application/problem+json";
         await context.Response.WriteAsJsonAsync(new

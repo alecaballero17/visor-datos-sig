@@ -1,6 +1,6 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
-@implements IDisposable
+<RealtimeUpdates OnUpdate="ActualizarEnVivo" />
 
 <div class="drawer-view-container">
     <!-- Encabezado del Panel Lateral (RF-WEB-06) -->
@@ -358,7 +358,6 @@
     private List<TrackingPuntoItemDto> puntosHistorial = new();
     private RutaTrabajoDto? rutaActiva = null;
 
-    private System.Threading.Timer? refreshTimerLive;
 
     protected override async Task OnInitializedAsync()
     {
@@ -371,14 +370,6 @@
         await CargarOperariosActivos();
         await CargarHojaDeRutaAsignada();
 
-        // Polling suave en vivo cada 4 segundos cuando está en modo live
-        refreshTimerLive = new System.Threading.Timer(async _ =>
-        {
-            if (modoVista == "live")
-            {
-                await InvokeAsync(CargarOperariosActivos);
-            }
-        }, null, 4000, 4000);
     }
 
     private void SetModoVista(string modo)
@@ -583,9 +574,16 @@
         }
     }
 
-    public void Dispose()
+    private async Task ActualizarEnVivo()
     {
-        refreshTimerLive?.Dispose();
+        await CargarOperarios();
+        if (modoVista == "live")
+        {
+            await CargarOperariosActivos();
+            foreach (var op in operariosActivos)
+                await JS.InvokeVoidAsync("arquis.updateOperarioMarker", op);
+        }
+        await CargarHojaDeRutaAsignada();
     }
 
     public class OperarioItemDto
@@ -621,6 +619,7 @@
 
     public class RutaTrabajoDto
     {
+        public string? GeometriaRutaGeoJson { get; set; }
         public int Id { get; set; }
         public string Codigo { get; set; } = "";
         public string Titulo { get; set; } = "";

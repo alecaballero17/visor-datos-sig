@@ -123,9 +123,9 @@ namespace Arquis.Backend.Controllers
 
             if (Math.Abs(dto.Partida.Latitud) < 0.0001 && Math.Abs(dto.Partida.Longitud) < 0.0001)
             {
-                dto.Partida.Latitud = -17.78180;
-                dto.Partida.Longitud = -63.18190;
-                dto.Partida.Nombre = "Base Operativa San Ignacio (GeoIT)";
+                dto.Partida.Latitud = dto.Puntos[0].Latitud;
+                dto.Partida.Longitud = dto.Puntos[0].Longitud;
+                dto.Partida.Nombre = "Primera parada";
             }
 
             var resultado = await _routingService.OptimizarRutaAsync(dto.Partida, dto.Puntos);
@@ -173,27 +173,7 @@ namespace Arquis.Backend.Controllers
 
                 puntosAIntervenir.AddRange(codigosDb);
 
-                // Si faltan puntos para llegar a la cantidad solicitada (ej. 100 o 200 solicitados),
-                // generar puntos distribuidos en la zona urbana de operaciones
-                var rnd = new Random();
-                int restante = cant - puntosAIntervenir.Count;
-                int baseIndice = puntosAIntervenir.Count + 1;
-                for (int k = 0; k < restante; k++)
-                {
-                    var lat = -17.78000 + (rnd.NextDouble() - 0.5) * 0.02;
-                    var lng = -63.18000 + (rnd.NextDouble() - 0.5) * 0.02;
-                    puntosAIntervenir.Add(new CrearPuntoDto
-                    {
-                        CodigoSuministro = $"CF-{90000 + baseIndice + k}",
-                        Titular = $"Titular Suministro #{baseIndice + k}",
-                        Lote = $"Lote {10 + (k % 50)}",
-                        Direccion = $"Sector UV {1 + (k % 8)} - MZA {1 + (k % 25)}",
-                        Latitud = lat,
-                        Longitud = lng,
-                        MontoDeuda = dto.Tipo == "Corte" ? (decimal)rnd.Next(180, 890) : 0.00m,
-                        Observaciones = dto.Tipo == "Corte" ? "Corte programado por mora" : "Habilitación inmediata solicitada"
-                    });
-                }
+
             }
 
             if (puntosAIntervenir.Count == 0)
@@ -206,8 +186,8 @@ namespace Arquis.Backend.Controllers
 
             var partidaBase = new DijkstraRoutingService.PuntoPartidaDto
             {
-                Latitud = dto.PartidaLatitud ?? -17.78180,
-                Longitud = dto.PartidaLongitud ?? -63.18190,
+                Latitud = dto.PartidaLatitud ?? puntosAIntervenir[0].Latitud,
+                Longitud = dto.PartidaLongitud ?? puntosAIntervenir[0].Longitud,
                 Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Base de Despacho Operativo"
             };
 
@@ -328,52 +308,15 @@ namespace Arquis.Backend.Controllers
                 return BadRequest(new { error = "La ruta debe tener un título y al menos un punto asignado." });
             }
 
-            var count = await _context.RutasTrabajo.CountAsync() + 1;
-            var prefijo = dto.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ? "RR" : "RC";
-            var codigo = $"{prefijo}-{DateTime.UtcNow.Year}-{count:D3}";
-
-            var nuevaRuta = new RutaTrabajo
+            return await CrearTicket(new CrearTicketDto
             {
-                Codigo = codigo,
                 Titulo = dto.Titulo,
                 Tipo = dto.Tipo,
-                Estado = "Pendiente",
                 Prioridad = dto.Prioridad,
                 OperarioAsignado = dto.OperarioAsignado,
-                OperarioId = dto.OperarioAsignado,
-                CreadoPor = "Gerente de Operaciones",
-                FechaCreacion = DateTime.UtcNow,
-                FechaAsignacion = DateTime.UtcNow,
-                Observaciones = dto.Observaciones
-            };
-
-            int orden = 1;
-            foreach (var p in dto.Puntos)
-            {
-                nuevaRuta.Puntos.Add(new PuntoRutaTrabajo
-                {
-                    Orden = orden++,
-                    IdCodigoFijo = p.IdCodigoFijo,
-                    IdLote = p.IdLote,
-                    CodigoSuministro = p.CodigoSuministro,
-                    Lote = p.Lote,
-                    Titular = p.Titular,
-                    Direccion = p.Direccion,
-                    Latitud = p.Latitud,
-                    Longitud = p.Longitud,
-                    MontoDeuda = p.MontoDeuda,
-                    Estado = "Pendiente",
-                    Observaciones = p.Observaciones
-                });
-            }
-
-            _context.RutasTrabajo.Add(nuevaRuta);
-            await _context.SaveChangesAsync();
-
-            // Notify connected clients (including mobile devices) via SignalR
-            await _hubContext.Clients.All.SendAsync("ReceiveRutaAsignada", nuevaRuta);
-
-            return CreatedAtAction(nameof(ObtenerPorId), new { id = nuevaRuta.Id }, nuevaRuta);
+                Observaciones = dto.Observaciones,
+                PuntosPersonalizados = dto.Puntos
+            });
         }
 
         [HttpPut("{id:int}/iniciar")]
@@ -682,11 +625,13 @@ namespace Arquis.Backend.Controllers
                 puntos.AddRange(dto.PuntosPersonalizados);
             }
 
+            if (puntos.Count == 0) return BadRequest(new { error = "No hay puntos geográficos disponibles para crear la ruta." });
+
             // Optimizar ruta con Dijkstra sobre dbo.Vias partiendo desde el punto seleccionado
             var partida = new DijkstraRoutingService.PuntoPartidaDto
             {
-                Latitud = dto.PartidaLatitud ?? -17.78180,
-                Longitud = dto.PartidaLongitud ?? -63.18190,
+                Latitud = dto.PartidaLatitud ?? puntos[0].Latitud,
+                Longitud = dto.PartidaLongitud ?? puntos[0].Longitud,
                 Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Base de Operaciones"
             };
 

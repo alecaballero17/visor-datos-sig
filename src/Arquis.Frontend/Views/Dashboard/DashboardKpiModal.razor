@@ -3,6 +3,7 @@
 
 @if (IsOpen)
 {
+    <RealtimeUpdates OnUpdate="CargarMetricas" Events="@(new[] { "ReceivePuntoActualizado", "ReceiveRutaAsignada", "ReceiveRutaActualizada" })" />
     <div class="kpi-modal-backdrop anim-fade-in" role="dialog" aria-modal="true" @onclick="CloseModal">
         <div class="kpi-modal-card anim-scale-in shadow-2xl" @onclick:stopPropagation="true">
             <!-- Encabezado del Dashboard -->
@@ -34,8 +35,16 @@
                         <div class="fw-semibold">Consultando indicadores territoriales y métricas en tiempo real...</div>
                     </div>
                 }
+                else if (errorMetricas != null)
+                {
+                    <div class="alert alert-warning" role="alert">@errorMetricas</div>
+                }
                 else
                 {
+                    @if (SinClasificar > 0 || NoVerificados > 0)
+                    {
+                        <div class="alert alert-info">@SinClasificar conexiones sin clasificar. @NoVerificados estados de servicio sin verificar; los estados iniciales del catastro no confirman servicio activo.</div>
+                    }
                     <!-- 1. Tarjetas de Resumen (6 KPIs Oficiales según RF-WEB-02) -->
                     <div class="row g-2 mb-4">
                         <!-- Total Catastradas -->
@@ -186,6 +195,10 @@
 
                                 <!-- Lista de Barras de Progreso por Cuadrilla -->
                                 <div class="d-flex flex-column gap-3 py-1">
+                                    @if (Cuadrillas.Count == 0)
+                                    {
+                                        <p class="text-muted">No hay órdenes asignadas para mostrar desempeño.</p>
+                                    }
                                     @foreach (var c in Cuadrillas)
                                     {
                                         <div>
@@ -208,13 +221,14 @@
                                                         <span style="font-size:0.65rem;">@c.Ejecutadas</span>
                                                     }
                                                 </div>
-                                                <div class="progress-bar bg-light text-muted" role="progressbar" style="width: @(100 - c.PorcentajeCumplimiento)%;">
+                                                <div class="progress-bar bg-light text-muted" role="progressbar" style="width: @(c.TotalAsignadas > 0 ? c.Pendientes * 100.0 / c.TotalAsignadas : 0)%;">
                                                     @if ((100 - c.PorcentajeCumplimiento) >= 15)
                                                     {
                                                         <span style="font-size:0.65rem;">@c.Pendientes</span>
                                                     }
                                                 </div>
                                             </div>
+                                            <small class="text-muted">@c.Pendientes pendientes · @c.Observadas observadas</small>
                                         </div>
                                     }
                                 </div>
@@ -245,6 +259,8 @@
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
 
     private bool isLoading = true;
+    private string? errorMetricas;
+    private int SinClasificar, NoVerificados;
 
     // Métricas
     private int TotalConexiones = 0;
@@ -271,6 +287,7 @@
         public int TotalAsignadas { get; set; }
         public int Ejecutadas { get; set; }
         public int Pendientes { get; set; }
+        public int Observadas { get; set; }
         public double PorcentajeCumplimiento { get; set; }
     }
 
@@ -287,6 +304,7 @@
     private async Task CargarMetricas()
     {
         isLoading = true;
+        errorMetricas = null;
         try
         {
             var res = await Http.GetFromJsonAsync<System.Text.Json.JsonElement>("api/dashboard/kpis");
@@ -294,6 +312,8 @@
             if (res.TryGetProperty("tarjetasResumen", out var t))
             {
                 TotalConexiones = t.GetProperty("totalConexionesCatastradas").GetInt32();
+                SinClasificar = t.GetProperty("conexionesSinClasificar").GetInt32();
+                NoVerificados = t.GetProperty("estadosNoVerificados").GetInt32();
                 Normal = t.GetProperty("conexionesNormal").GetInt32();
                 ParaCorte = t.GetProperty("conexionesParaCorte").GetInt32();
                 Cortado = t.GetProperty("conexionesCortado").GetInt32();
@@ -324,6 +344,7 @@
         }
         catch (Exception ex)
         {
+            errorMetricas = "No se pudieron consultar las métricas. Pulse Actualizar para reintentar.";
             Console.WriteLine($"Error cargando KPIs del dashboard: {ex.Message}");
         }
         finally

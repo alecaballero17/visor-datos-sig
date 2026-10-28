@@ -481,6 +481,11 @@
 }
 </style>
 
+@if (IsOpen)
+{
+    <RealtimeUpdates OnUpdate="CargarDatosIniciales" />
+}
+
 @code {
     [Parameter] public bool IsOpen { get; set; }
     [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
@@ -869,6 +874,7 @@
 
     public class RutaTrabajoDto
     {
+        public string? GeometriaRutaGeoJson { get; set; }
         public int Id { get; set; }
         public string Codigo { get; set; } = "";
         public string Titulo { get; set; } = "";

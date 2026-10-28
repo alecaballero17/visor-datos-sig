@@ -491,9 +491,9 @@
 
     // Punto de Partida (RF-WEB-04) y Optimización Dijkstra (RF-WEB-05)
     private DotNetObjectReference<AsignarReconexionesView>? dotNetRef;
-    private double partidaLat = -17.78180;
-    private double partidaLng = -63.18190;
-    private string partidaNombre = "Base Operativa Central - GeoIT";
+    private double partidaLat = 0;
+    private double partidaLng = 0;
+    private string partidaNombre = "Primera parada seleccionada";
     private bool isCustomPartida = false;
     private bool isPickingPartidaOnMap = false;
     private bool isOptimizingDijkstra = false;
@@ -527,9 +527,9 @@
 
     private async Task RestablecerBaseOperativa()
     {
-        partidaLat = -17.78180;
-        partidaLng = -63.18190;
-        partidaNombre = "Base Operativa Central - GeoIT";
+        partidaLat = 0;
+        partidaLng = 0;
+        partidaNombre = "Primera parada seleccionada";
         isCustomPartida = false;
         isPickingPartidaOnMap = false;
         await JS.InvokeVoidAsync("arquis.cancelDeparturePointSelection");
@@ -576,10 +576,19 @@
                 {
                     await JS.InvokeVoidAsync("arquis.renderOptimizedDijkstraRoute", resultadoDijkstra.GeometriaGeoJson, resultadoDijkstra.PuntosOrdenados);
                 }
+                mensajeError = null;
+            }
+            else
+            {
+                resultadoDijkstra = null;
+                await JS.InvokeVoidAsync("arquis.clearOptimizedRoute");
+                var error = await res.Content.ReadFromJsonAsync<ErrorDto>();
+                mensajeError = error?.Error ?? "No se pudo calcular una ruta por las vías disponibles.";
             }
         }
         catch (Exception ex)
         {
+            mensajeError = "No se pudo calcular la ruta. Verifique la conexión y los puntos seleccionados.";
             Console.WriteLine($"Error optimizando reconexiones con Dijkstra: {ex.Message}");
         }
         finally
@@ -741,8 +750,8 @@
                 Prioridad = ticketPrioridad,
                 OperarioAsignado = operarioSeleccionado,
                 Observaciones = ticketObservaciones,
-                PartidaLatitud = partidaLat,
-                PartidaLongitud = partidaLng,
+                PartidaLatitud = isCustomPartida ? (double?)partidaLat : null,
+                PartidaLongitud = isCustomPartida ? (double?)partidaLng : null,
                 PartidaNombre = partidaNombre,
                 IdsCodigosFijos = idsSeleccionados.ToList()
             };
@@ -796,8 +805,8 @@
                 Prioridad = "Alta",
                 OperariosAsignados = reconectoresMasivosSeleccionados.ToList(),
                 CantidadCuentas = cantidadMasiva,
-                PartidaLatitud = partidaLat,
-                PartidaLongitud = partidaLng,
+                PartidaLatitud = isCustomPartida ? (double?)partidaLat : null,
+                PartidaLongitud = isCustomPartida ? (double?)partidaLng : null,
                 PartidaNombre = partidaNombre,
                 Observaciones = "Habilitación y reconexión inmediata de servicio de agua potable con pago verificado. Despacho masivo optimizado con Dijkstra sobre red vial."
             };
