@@ -1,4 +1,5 @@
 import 'dart:io';
+import '../../models/secuencia_atencion.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,7 +10,7 @@ import '../../services/tracking_gps_service.dart';
 /// Integra:
 /// 1. Selector Cortado/Reconectado vs Observado (con motivos predefinidos)
 /// 2. Campo numérico para Lectura del Medidor
-/// 3. Captura obligatoria de 1 Fotografía de evidencia
+/// 3. Captura de 1–3 fotografías de cámara
 /// 4. Validación geográfica y temporal antifraude (RN-01, radio de 30 m)
 class FormularioCierreOrdenModal extends StatefulWidget {
   final Map<String, dynamic> rutaActiva;
@@ -32,6 +33,8 @@ class FormularioCierreOrdenModal extends StatefulWidget {
     return showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      isDismissible: false,
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Padding(
         padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
@@ -58,8 +61,10 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
   // Estado del formulario
   String _estadoSeleccionado = 'Ejecutado'; // 'Ejecutado' o 'Observado'
   String _motivoObservacion = 'Casa cerrada / Abonado ausente';
-  File? _fotoEvidencia; // Exactamente 1 fotografía según requerimiento
+  final List<File> _fotos = [];
   bool _isCargando = false;
+  bool _resultadoIncierto = false;
+  bool _capturandoFoto = false;
   String? _errorMessage;
 
   final List<String> _motivosPredefinidos = [
@@ -74,22 +79,15 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
   ];
 
   @override
-  void initState() {
-    super.initState();
-    final esCorte = (widget.rutaActiva['tipo'] ?? '').toString().toLowerCase().contains('corte');
-    _observacionesCtrl.text = esCorte
-        ? 'Válvula precintada. Corte ejecutado conforme al protocolo.'
-        : 'Servicio restablecido y verificado correctamente.';
-  }
-
-  @override
   void dispose() {
     _lecturaCtrl.dispose();
     _observacionesCtrl.dispose();
     super.dispose();
   }
 
-  Future<void> _capturarFoto(ImageSource source) async {
+  Future<void> _capturarFoto(ImageSource source, {int? reemplazar}) async {
+    if (_isCargando || _capturandoFoto || (reemplazar == null && _fotos.length >= 3)) return;
+    setState(() => _capturandoFoto = true);
     try {
       final XFile? image = await _picker.pickImage(
         source: source,
@@ -97,82 +95,42 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
         maxWidth: 1280,
       );
 
-      if (image != null) {
+      if (image != null && mounted && !_isCargando) {
         setState(() {
-          _fotoEvidencia = File(image.path);
+          if (reemplazar == null) {
+            _fotos.add(File(image.path));
+          } else {
+            _fotos[reemplazar] = File(image.path);
+          }
           _errorMessage = null;
         });
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = "No se pudo capturar la fotografía: $e";
       });
+    } finally {
+      if (mounted) setState(() => _capturandoFoto = false);
     }
   }
 
   void _mostrarOpcionesFoto() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Capturar Fotografía de Evidencia (1 foto)",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              const SizedBox(height: 12),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF0284C7),
-                  child: Icon(Icons.camera_alt, color: Colors.white, size: 20),
-                ),
-                title: const Text("Tomar con la Cámara", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                subtitle: const Text("Recomendado para evidenciar medidor en campo", style: TextStyle(color: Colors.white60, fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _capturarFoto(ImageSource.camera);
-                },
-              ),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF334155),
-                  child: Icon(Icons.photo_library, color: Colors.white, size: 20),
-                ),
-                title: const Text("Seleccionar de la Galería", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                subtitle: const Text("Para pruebas o fotografías tomadas previamente", style: TextStyle(color: Colors.white60, fontSize: 12)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _capturarFoto(ImageSource.gallery);
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _eliminarFoto() {
-    setState(() {
-      _fotoEvidencia = null;
-    });
+    _capturarFoto(ImageSource.camera);
   }
 
   Future<void> _guardarRegistro() async {
+    if (_isCargando || _capturandoFoto) return;
     final esCorte = (widget.rutaActiva['tipo'] ?? '').toString().toLowerCase().contains('corte');
+    final lecturaValidada = double.tryParse(_lecturaCtrl.text.trim().replaceAll(',', '.'));
     final estadoFinal = _estadoSeleccionado == 'Observado'
         ? 'Observado'
         : (esCorte ? 'Cortado' : 'Reconectado');
 
     // 1. Validaciones de formulario
     if (_estadoSeleccionado == 'Ejecutado') {
-      if (_lecturaCtrl.text.trim().isEmpty) {
-        setState(() => _errorMessage = "Por favor ingrese la lectura o avance actual del medidor.");
+      if (lecturaValidada == null || !lecturaValidada.isFinite || lecturaValidada < 0) {
+        setState(() => _errorMessage = "Ingrese una lectura numérica válida, mayor o igual a cero.");
         return;
       }
     } else {
@@ -182,44 +140,55 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
       }
     }
 
-    // 2. Validación de Evidencia Fotográfica (Exactamente 1 foto)
-    if (_fotoEvidencia == null) {
+    // 2. Evidencia obligatoria para todos los estados.
+    if (_fotos.isEmpty) {
       setState(() => _errorMessage = "RF-MOB-04: Es obligatorio adjuntar la fotografía de evidencia antes de enviar.");
       return;
     }
 
-    // 3. Captura y Validación Geográfica Antifraude (RF-MOB-05 / RN-01)
-    final tracking = TrackingGpsService();
-    final double latMovil = tracking.latitud;
-    final double lngMovil = tracking.longitud;
-
-    final double targetLat = (widget.objetivoActual['latitud'] as num).toDouble();
-    final double targetLng = (widget.objetivoActual['longitud'] as num).toDouble();
-    final double distCalculada = TrackingGpsService.calcularDistanciaMetros(latMovil, lngMovil, targetLat, targetLng);
-
-    // Validación preventiva en el cliente (Regla de 30 metros)
-    if (distCalculada > 30.0) {
-      setState(() {
-        _errorMessage = "RN-01 Antifraude: Su distancia actual (${distCalculada.toStringAsFixed(1)} m) excede el radio de tolerancia de 30 m respecto al predio (${widget.objetivoActual['codigoSuministro']}). Debe encontrarse físicamente en el lugar.";
-      });
-      return;
-    }
-
-    setState(() {
-      _isCargando = true;
-      _errorMessage = null;
-    });
-
+    setState(() { _isCargando = true; _errorMessage = null; });
     try {
+      if (_resultadoIncierto) {
+        final ruta = await _rutasService.obtenerDetalleRuta(widget.rutaActiva['id'] as int);
+        final puntos = ordenarPuntos(ruta['puntos'] ?? []);
+        final coincidencias = puntos.where((p) => p['id'] == widget.objetivoActual['id']);
+        if (coincidencias.isEmpty) throw Exception('No se pudo verificar el punto. No se reenviará el cierre.');
+        final punto = coincidencias.first;
+        if (puntoAtendido(punto)) {
+          if (!mounted) return;
+          widget.onCompletadoExitoso?.call(punto['estadoFinal']?.toString() ?? punto['estado'].toString());
+          Navigator.pop(context, true);
+          return;
+        }
+        _resultadoIncierto = false;
+      }
+      final pos = await TrackingGpsService().capturarPosicionFresca();
+      if (!mounted) return;
+      final latMovil = pos.latitude;
+      final lngMovil = pos.longitude;
+      final targetLat = (widget.objetivoActual['latitud'] as num).toDouble();
+      final targetLng = (widget.objetivoActual['longitud'] as num).toDouble();
+      final distancia = TrackingGpsService.calcularDistanciaMetros(latMovil, lngMovil, targetLat, targetLng);
+      if (distancia > 30) {
+        throw Exception('Distancia ${distancia.toStringAsFixed(1)} m; máximo 30 m. Precisión GPS ±${pos.accuracy.toStringAsFixed(0)} m.');
+      }
       // Conversión de la fotografía a Base64 para adjuntarla al payload
-      final bytes = await _fotoEvidencia!.readAsBytes();
-      final base64String = "data:image/jpeg;base64,${base64Encode(bytes)}";
+      final fotos = <String>[];
+      for (final foto in List<File>.of(_fotos)) {
+        final bytes = await foto.readAsBytes();
+        fotos.add('data:image/jpeg;base64,${base64Encode(bytes)}');
+      }
+      if (!mounted) return;
 
-      final double? lectura = double.tryParse(_lecturaCtrl.text.trim().replaceAll(',', '.'));
+      final double? lectura = _estadoSeleccionado == 'Ejecutado' ? lecturaValidada : null;
 
       final rutaId = widget.rutaActiva['id'] as int;
       final puntoId = widget.objetivoActual['id'] as int;
 
+      if (DateTime.now().difference(pos.timestamp) >= const Duration(seconds: 10)) {
+        throw Exception("La ubicación caducó preparando las fotos. Reintente para capturar GPS nuevo.");
+      }
+      _resultadoIncierto = true;
       final resultado = await _rutasService.ejecutarAccionPunto(
         rutaId: rutaId,
         puntoId: puntoId,
@@ -229,7 +198,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
         lecturaMedidor: lectura,
         estadoFinal: estadoFinal,
         motivoObservacion: _estadoSeleccionado == 'Observado' ? _motivoObservacion : null,
-        fotos: [base64String],
+        fotos: fotos,
       );
 
       if (!mounted) return;
@@ -259,9 +228,14 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
     final double targetLat = (widget.objetivoActual['latitud'] as num).toDouble();
     final double targetLng = (widget.objetivoActual['longitud'] as num).toDouble();
     final double distCalculada = TrackingGpsService.calcularDistanciaMetros(tracking.latitud, tracking.longitud, targetLat, targetLng);
-    final bool dentroDeRadio = distCalculada <= 30.0;
+    final tieneGps = tracking.ultimaPosicion != null && !tracking.isSimulacionActiva;
+    final bool dentroDeRadio = tieneGps && distCalculada <= 30.0;
 
-    return Container(
+    return PopScope(
+      canPop: !_isCargando && !_capturandoFoto,
+      child: AbsorbPointer(
+      absorbing: _isCargando || _capturandoFoto,
+      child: Container(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.90),
       decoration: const BoxDecoration(
         color: Color(0xFF1E293B),
@@ -312,7 +286,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
                       ),
                       IconButton(
                         icon: const Icon(Icons.close, color: Colors.white60, size: 20),
-                        onPressed: () => Navigator.pop(context, false),
+                        onPressed: _isCargando ? null : () => Navigator.pop(context, false),
                       ),
                     ],
                   ),
@@ -359,14 +333,14 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
                               color: dentroDeRadio ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
                             ),
                             const SizedBox(width: 4),
-                            Text(
-                              "Distancia al medidor: ${distCalculada.toStringAsFixed(1)} m ${dentroDeRadio ? '(Dentro del radio de 30 m)' : '(¡Fuera del radio permitido!)'}",
+                            Expanded(child: Text(
+                              tieneGps ? 'Última distancia: ${distCalculada.toStringAsFixed(1)} m. Al guardar se solicitará GPS nuevo.' : 'Sin GPS real. Al guardar se solicitará una captura nueva.',
                               style: TextStyle(
                                 color: dentroDeRadio ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
-                            ),
+                            )),
                           ],
                         ),
                       ],
@@ -524,105 +498,21 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
 
                   const SizedBox(height: 14),
 
-                  // 5. Módulo de Fotografía de Evidencia (1 Sola Foto)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "Evidencia Fotográfica (1 Foto):",
-                        style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w600, fontSize: 13),
-                      ),
-                      if (_fotoEvidencia != null)
-                        const Text(
-                          "✓ 1 Foto capturada",
-                          style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 11),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-
-                  if (_fotoEvidencia == null)
-                    InkWell(
-                      onTap: _mostrarOpcionesFoto,
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF38BDF8).withAlpha(100), style: BorderStyle.solid),
-                        ),
-                        child: const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.add_a_photo, color: Color(0xFF38BDF8), size: 24),
-                            SizedBox(width: 10),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Tomar Fotografía de Evidencia",
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                                Text(
-                                  "1 imagen nítida del medidor o fachada del predio",
-                                  style: TextStyle(color: Colors.white60, fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    // Previsualización de la Única Fotografía Adjunta
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFF10B981).withAlpha(120)),
-                      ),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              _fotoEvidencia!,
-                              width: 64,
-                              height: 64,
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Fotografía de Evidencia Adjunta",
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                ),
-                                Text(
-                                  "1 archivo listo para transmitir al backend",
-                                  style: TextStyle(color: Colors.white60, fontSize: 11),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.refresh, color: Color(0xFF38BDF8), size: 22),
-                            onPressed: _mostrarOpcionesFoto,
-                            tooltip: "Cambiar / Repetir foto",
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFEF4444), size: 22),
-                            onPressed: _eliminarFoto,
-                            tooltip: "Eliminar foto",
-                          ),
-                        ],
-                      ),
+                  const Text('Evidencia: 1–3 fotos de cámara', style: TextStyle(color: Colors.white)),
+                  for (var i = 0; i < _fotos.length; i++)
+                    ListTile(
+                      leading: Image.file(_fotos[i], width: 64, height: 64, fit: BoxFit.cover),
+                      title: Text('Fotografía ${i + 1}', style: const TextStyle(color: Colors.white)),
+                      trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                        IconButton(tooltip: 'Repetir foto', icon: const Icon(Icons.camera_alt),
+                          onPressed: _isCargando ? null : () => _capturarFoto(ImageSource.camera, reemplazar: i)),
+                        IconButton(tooltip: 'Eliminar foto', icon: const Icon(Icons.delete_outline),
+                          onPressed: _isCargando ? null : () => setState(() => _fotos.removeAt(i))),
+                      ]),
                     ),
+                  if (_fotos.length < 3)
+                    TextButton.icon(onPressed: _isCargando ? null : _mostrarOpcionesFoto,
+                      icon: const Icon(Icons.add_a_photo), label: const Text('Tomar fotografía')),
 
                   const SizedBox(height: 14),
 
@@ -720,6 +610,6 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
           ),
         ],
       ),
-    );
+    )));
   }
 }

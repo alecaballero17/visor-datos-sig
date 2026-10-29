@@ -1,20 +1,65 @@
 import 'dart:ui';
+import 'modules/auth/models/sesion_usuario.dart';
+import 'modules/mapa/services/tracking_gps_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'modules/auth/views/screens/flujo_principal/auth_pantalla_inicio.dart';
 
 Future<void> main() async {
-  await dotenv.load(fileName: ".env");
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env.example");
+  TrackingGpsService();
+  SesionUsuario.actual.addListener(() {
+    if (SesionUsuario.actual.value == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        appNavigatorKey.currentState?.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthPantallaInicio()),
+          (_) => false,
+        );
+      });
+    }
+  });
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+final appNavigatorKey = GlobalKey<NavigatorState>();
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final tracking = TrackingGpsService();
+    if (state == AppLifecycleState.resumed && SesionUsuario.actual.value != null) {
+      tracking.iniciarTransmision();
+    } else if (state != AppLifecycleState.resumed) {
+      tracking.detenerTransmision();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    TrackingGpsService().detenerTransmision();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'UI Engine Demo',
+      navigatorKey: appNavigatorKey,
+      title: 'GeoIT Operaciones',
       debugShowCheckedModeBanner: false,
       // Habilita el arrastre fluido (smooth drag) con Mouse, Touch, Stylus y Trackpad en todas las plataformas
       scrollBehavior: const MaterialScrollBehavior().copyWith(

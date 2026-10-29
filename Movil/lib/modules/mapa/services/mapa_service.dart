@@ -1,4 +1,4 @@
-import '../../../../core/network/api_provider.dart';
+import '../../../core/network/api_provider.dart';
 import 'mapa_endpoints.dart';
 
 class MapaService {

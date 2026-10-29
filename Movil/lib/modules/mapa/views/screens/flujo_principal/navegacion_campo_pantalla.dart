@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' show pi;
+import '../../../models/secuencia_atencion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -25,6 +27,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
   Map<String, dynamic>? _objetivoActual;
   int _puntosCompletados = 0;
   bool _cargando = true;
+  String? _errorCarga;
 
   // Estado del GPS en vivo
   double _userLat = -17.78100;
@@ -65,71 +68,58 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
   @override
   void dispose() {
     _timerSimulacionPaso?.cancel();
+    if (_tracking.isSimulacionActiva) {
+      final real = _tracking.ultimaPosicion;
+      _tracking.latitud = real?.latitude ?? -16.397;
+      _tracking.longitud = real?.longitude ?? -60.960;
+      _tracking.velocidad = 0;
+    }
+    _tracking.isSimulacionActiva = false;
+    _tracking.onLocationChanged = null;
     _tracking.detenerTransmision();
     super.dispose();
   }
 
   Future<void> _cargarRuta() async {
-    setState(() => _cargando = true);
-
-    if (widget.rutaInicial != null) {
-      _rutaActiva = widget.rutaInicial;
-    } else {
-      await _tracking.cargarSesionUsuario();
-      final rutas = await _rutasService.obtenerRutasAsignadas(operario: _tracking.operarioId.isNotEmpty ? _tracking.operarioId : null);
-      if (rutas.isNotEmpty) {
-        _rutaActiva = rutas.first as Map<String, dynamic>;
-      }
-    }
-
-    if (_rutaActiva != null) {
-      _puntos = List.from(_rutaActiva!['puntos'] ?? []);
+    setState(() { _cargando = true; _errorCarga = null; });
+    try {
+      final id = widget.rutaInicial?['id'] as int?;
+      if (id == null) throw Exception('Seleccione una ruta desde la bandeja.');
+      final ruta = await _rutasService.obtenerDetalleRuta(id);
+      if (!mounted) return;
+      _rutaActiva = ruta;
+      _puntos = ordenarPuntos(ruta['puntos'] ?? []);
       _contarCompletados();
-      _seleccionarObjetivoMasCercano();
+      _seleccionarSiguienteObjetivo();
+    } catch (e) {
+      if (!mounted) return;
+      _errorCarga = e.toString().replaceFirst('Exception: ', '');
+    } finally {
+      if (mounted) setState(() => _cargando = false);
     }
-
-    setState(() => _cargando = false);
   }
 
   void _contarCompletados() {
-    _puntosCompletados = _puntos.where((p) => p['estado'] == 'Completado' || p['estado'] == 'Ejecutado').length;
+    _puntosCompletados = _puntos.where((p) => puntoAtendido(Map<String, dynamic>.from(p))).length;
   }
 
-  void _seleccionarObjetivoMasCercano() {
-    final pendientes = _puntos.where((p) => p['estado'] != 'Completado' && p['estado'] != 'Ejecutado').toList();
-    if (pendientes.isEmpty) {
-      _objetivoActual = null;
+  void _seleccionarSiguienteObjetivo() {
+    _objetivoActual = siguientePunto(_puntos);
+    if (_objetivoActual == null) {
       _distanciaMetros = 0;
       _tiempoEstimado = 'Ruta finalizada';
       return;
     }
-
-    Map<String, dynamic>? masCercano;
-    double menorDistancia = double.infinity;
-
-    for (var p in pendientes) {
-      final pLat = (p['latitud'] as num).toDouble();
-      final pLng = (p['longitud'] as num).toDouble();
-      final dist = TrackingGpsService.calcularDistanciaMetros(_userLat, _userLng, pLat, pLng);
-      if (dist < menorDistancia) {
-        menorDistancia = dist;
-        masCercano = p;
-      }
-    }
-
-    _objetivoActual = masCercano;
     _recalcularDistancia();
-
-    if (_objetivoActual != null) {
-      _mapController.move(
-        LatLng((_objetivoActual!['latitud'] as num).toDouble(), (_objetivoActual!['longitud'] as num).toDouble()),
-        17.0,
-      );
-    }
   }
 
   void _recalcularDistancia() {
     if (_objetivoActual == null) return;
+    if (_tracking.ultimaPosicion == null && !_tracking.isSimulacionActiva) {
+      _distanciaMetros = 0;
+      _tiempoEstimado = 'Esperando GPS';
+      return;
+    }
     final tLat = (_objetivoActual!['latitud'] as num).toDouble();
     final tLng = (_objetivoActual!['longitud'] as num).toDouble();
     _distanciaMetros = TrackingGpsService.calcularDistanciaMetros(_userLat, _userLng, tLat, tLng);
@@ -172,7 +162,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
         backgroundColor: Color(0xFF10B981),
         behavior: SnackBarBehavior.floating,
         content: Text(
-          "Ha llegado a la ubicación del suministro. Proceda al registro de la intervención.",
+          "ENSAYO: destino simulado alcanzado. El registro operativo permanece bloqueado.",
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
@@ -190,9 +180,9 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
       objetivoActual: _objetivoActual!,
       onCompletadoExitoso: (estadoFinal) {
         setState(() {
-          _objetivoActual!['estado'] = estadoFinal == 'Observado' ? 'Observado' : 'Completado';
+          _objetivoActual!['estado'] = const ['Observado', 'Omitido'].contains(estadoFinal) ? estadoFinal : 'Completado';
           _contarCompletados();
-          _seleccionarObjetivoMasCercano();
+          _seleccionarSiguienteObjetivo();
         });
 
         _mostrarNotificacionExito(esCorte, estadoFinal);
@@ -223,17 +213,34 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
   Widget build(BuildContext context) {
     final esCorte = (_rutaActiva?['tipo'] ?? '').toString().toLowerCase().contains('corte');
 
+    final tienePosicion = _tracking.ultimaPosicion != null || _tracking.isSimulacionActiva;
     final List<LatLng> linePoints = [
-      LatLng(_userLat, _userLng),
+      if (tienePosicion) LatLng(_userLat, _userLng),
       if (_objetivoActual != null)
         LatLng((_objetivoActual!['latitud'] as num).toDouble(), (_objetivoActual!['longitud'] as num).toDouble()),
     ];
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(title: Text(_tracking.isSimulacionActiva ? 'ENSAYO · sin registro operativo' : 'Atención en secuencia'),
+        bottom: PreferredSize(preferredSize: const Size.fromHeight(44), child: Padding(
+          padding: const EdgeInsets.all(8), child: Text(
+            _tracking.ultimoError ?? (_tracking.ultimaPosicion == null ? 'Esperando GPS real…' :
+              'GPS ±${_tracking.ultimaPosicion!.accuracy.toStringAsFixed(0)} m · ${_tracking.ultimaPosicion!.timestamp.toLocal()}'),
+            maxLines: 2, style: const TextStyle(fontSize: 12)))),
+        actions: [IconButton(tooltip: 'Reintentar GPS', icon: const Icon(Icons.gps_fixed), onPressed: () async {
+          await _tracking.solicitarPermisosUbicacion();
+          if (mounted) setState(() {});
+        })]),
       body: _cargando
           ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
-          : Stack(
+          : _errorCarga != null
+            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(_errorCarga!, style: const TextStyle(color: Colors.white)),
+                TextButton(onPressed: _cargarRuta, child: const Text("Reintentar")),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Volver")),
+              ]))
+            : Stack(
               children: [
                 FlutterMap(
                   mapController: _mapController,
@@ -259,7 +266,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
                     ),
                     MarkerLayer(
                       markers: [
-                        Marker(
+                        if (tienePosicion) Marker(
                           point: LatLng(_userLat, _userLng),
                           width: 44,
                           height: 44,
@@ -280,7 +287,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
                           final pLat = (p['latitud'] as num).toDouble();
                           final pLng = (p['longitud'] as num).toDouble();
                           final isTarget = _objetivoActual != null && _objetivoActual!['id'] == p['id'];
-                          final completado = p['estado'] == 'Completado' || p['estado'] == 'Ejecutado';
+                          final completado = puntoAtendido(Map<String, dynamic>.from(p));
 
                           return Marker(
                             point: LatLng(pLat, pLng),
@@ -408,7 +415,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
                       FloatingActionButton.small(
                         heroTag: 'nav_nearest',
                         backgroundColor: const Color(0xFF1E293B),
-                        onPressed: _seleccionarObjetivoMasCercano,
+                        onPressed: _seleccionarSiguienteObjetivo,
                         child: const Icon(Icons.near_me, color: Colors.white70),
                       ),
                     ],

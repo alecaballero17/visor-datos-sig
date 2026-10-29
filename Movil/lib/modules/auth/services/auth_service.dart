@@ -1,5 +1,7 @@
-import '../../../../core/network/api_provider.dart';
+import '../../../core/network/api_provider.dart';
 import 'auth_endpoints.dart';
+import '../models/sesion_usuario.dart';
+import '../../../core/network/interceptors/auth_interceptor.dart';
 
 class AuthService {
   Future<dynamic> login(String usuarioEmail, String password) async {
@@ -11,6 +13,7 @@ class AuthService {
         'origen': 'movil',
       },
     );
+    SesionUsuario.actual.value = SesionUsuario.fromJson(Map<String, dynamic>.from(response));
     return response;
   }
 
@@ -28,7 +31,12 @@ class AuthService {
   }
 
   Future<void> logout() async {
-    await api.post(AuthEndpoints.cerrar);
+    try {
+      await api.post(AuthEndpoints.cerrar);
+    } finally {
+      AuthInterceptor.sessionCookie = null;
+      SesionUsuario.actual.value = null;
+    }
   }
 
   Future<dynamic> checkSession() async {

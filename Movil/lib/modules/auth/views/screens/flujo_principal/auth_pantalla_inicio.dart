@@ -14,7 +14,13 @@ class AuthPantallaInicio extends StatefulWidget {
 }
 
 class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
-  static final AuthController controlador = AuthController();
+  final AuthController controlador = AuthController();
+
+  @override
+  void dispose() {
+    controlador.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +103,7 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                             const Icon(Icons.badge_outlined, color: Color(0xFF1A73E8), size: 18),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: "Esta cuenta se registrará con perfil de Operador de Campo para uso exclusivo en la app móvil."
+                              child: "El registro no habilita el trabajo de campo. Un administrador debe asignar el perfil correspondiente."
                                   .texto(color: const Color(0xFF1F1F1F), size: 12),
                             ),
                           ],

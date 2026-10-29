@@ -1,47 +1,48 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:geolocator/geolocator.dart';
-import '../../../../core/network/api_provider.dart';
+import '../../../core/network/api_provider.dart';
+import '../../auth/models/sesion_usuario.dart';
 
 class TrackingGpsService {
   static final TrackingGpsService _instance = TrackingGpsService._internal();
   factory TrackingGpsService() => _instance;
-  TrackingGpsService._internal();
+  TrackingGpsService._internal() {
+    SesionUsuario.actual.addListener(() {
+      final sesion = SesionUsuario.actual.value;
+      if (sesion == null) {
+        limpiarSesion();
+      } else {
+        configurarOperario(id: sesion.usuario, nombre: sesion.nombre, cargo: sesion.roles.join(', '));
+      }
+    });
+  }
 
   Timer? _timerTransmision;
+  bool _capturando = false;
+  int _generacion = 0;
   bool isTransmitting = false;
   bool isSimulacionActiva = false;
-
-  // Estado dinámico del operario autenticado
   String operarioId = '';
   String nombreOperario = '';
-  String rol = 'Operario';
-  double latitud = -17.78100;
-  double longitud = -63.18120;
-  double velocidad = 0.0;
-  double rumbo = 0.0;
-  int bateria = 100;
-
-  // Callbacks para UI
+  String rol = '';
+  // Centro del mapa, nunca se transmite como una lectura GPS.
+  double latitud = -16.397;
+  double longitud = -60.960;
+  double velocidad = 0;
+  double rumbo = 0;
+  Position? ultimaPosicion;
+  String? ultimoError;
   Function(double lat, double lng, double speed, double heading)? onLocationChanged;
 
   Future<void> cargarSesionUsuario() async {
-    try {
-      final res = await ApiProvider().get('/autenticacion/sesion');
-      if (res is Map<String, dynamic>) {
-        operarioId = res['usuario']?.toString() ?? '';
-        nombreOperario = res['nombre']?.toString() ?? operarioId;
-        final roles = res['roles'] as List?;
-        if (roles != null && roles.isNotEmpty) {
-          rol = roles.first.toString();
-        }
-      }
-    } catch (_) {
-      if (operarioId.isEmpty) {
-        operarioId = 'Operario';
-        nombreOperario = 'Operario de Campo';
-      }
-    }
+    final generacion = _generacion;
+    final res = await ApiProvider().get('/autenticacion/sesion');
+    if (generacion != _generacion) throw Exception('La sesión cambió durante la consulta.');
+    final sesion = SesionUsuario.fromJson(Map<String, dynamic>.from(res));
+    SesionUsuario.actual.value = sesion;
+    configurarOperario(id: sesion.usuario, nombre: sesion.nombre,
+      cargo: sesion.roles.join(', '));
   }
 
   void configurarOperario({required String id, required String nombre, required String cargo}) {
@@ -50,134 +51,102 @@ class TrackingGpsService {
     rol = cargo;
   }
 
-  /// Solicita los permisos de ubicación al usuario para que salte el diálogo nativo
+  void limpiarSesion() {
+    detenerTransmision();
+    operarioId = '';
+    nombreOperario = '';
+    rol = '';
+    ultimaPosicion = null;
+    ultimoError = null;
+    isSimulacionActiva = false;
+    latitud = -16.397;
+    longitud = -60.960;
+    velocidad = 0;
+    rumbo = 0;
+    onLocationChanged = null;
+  }
+
+  Future<Position> capturarPosicionFresca() async {
+    if (isSimulacionActiva) {
+      throw Exception('Modo de ensayo: no permite registrar atención ni transmitir GPS. Salga y vuelva a abrir la ruta para usar GPS real.');
+    }
+    final generacion = _generacion;
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      throw Exception('GPS apagado. Active la ubicación y reintente.');
+    }
+    var permiso = await Geolocator.checkPermission();
+    if (permiso == LocationPermission.denied) permiso = await Geolocator.requestPermission();
+    if (permiso == LocationPermission.deniedForever) {
+      throw Exception('Permiso de ubicación bloqueado. Habilítelo en Ajustes de la aplicación.');
+    }
+    if (permiso != LocationPermission.always && permiso != LocationPermission.whileInUse) {
+      throw Exception('Permiso de ubicación denegado. Habilítelo y reintente.');
+    }
+    final pos = await Geolocator.getCurrentPosition(locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 15)));
+    if (generacion != _generacion || isSimulacionActiva) {
+      throw Exception('La sesión o el modo de ubicación cambió. Reintente.');
+    }
+    final edad = DateTime.now().difference(pos.timestamp);
+    if (edad.isNegative || edad >= const Duration(seconds: 10) ||
+        !pos.latitude.isFinite || !pos.longitude.isFinite ||
+        pos.latitude.abs() > 90 || pos.longitude.abs() > 180 ||
+        !pos.accuracy.isFinite || pos.accuracy < 0) {
+      throw Exception('No se obtuvo una ubicación GPS válida y reciente. Reintente.');
+    }
+    ultimaPosicion = pos;
+    ultimoError = null;
+    latitud = pos.latitude;
+    longitud = pos.longitude;
+    velocidad = max(0, pos.speed * 3.6);
+    rumbo = pos.heading;
+    onLocationChanged?.call(latitud, longitud, velocidad, rumbo);
+    return pos;
+  }
+
   Future<bool> solicitarPermisosUbicacion() async {
     try {
-      // 1. Comprobar si los servicios de GPS están activados en el teléfono
-      bool servicioHabilitado = await Geolocator.isLocationServiceEnabled();
-      if (!servicioHabilitado) {
-        // Solicitar abrir la pantalla de activación de GPS
-        await Geolocator.openLocationSettings();
-      }
-
-      // 2. Comprobar permisos actuales
-      LocationPermission permiso = await Geolocator.checkPermission();
-      if (permiso == LocationPermission.denied) {
-        // Disparar diálogo nativo de permisos de Android / iOS
-        permiso = await Geolocator.requestPermission();
-        if (permiso == LocationPermission.denied) {
-          return false;
-        }
-      }
-
-      if (permiso == LocationPermission.deniedForever) {
-        // Permiso denegado permanentemente, abrir configuración de la app
-        await Geolocator.openAppSettings();
-        return false;
-      }
-
-      final concedido = permiso == LocationPermission.always || permiso == LocationPermission.whileInUse;
-      if (concedido) {
-        try {
-          final pos = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              timeLimit: Duration(seconds: 5),
-            ),
-          );
-          latitud = pos.latitude;
-          longitud = pos.longitude;
-          velocidad = max(0, pos.speed * 3.6);
-          rumbo = pos.heading;
-          onLocationChanged?.call(latitud, longitud, velocidad, rumbo);
-        } catch (_) {}
-      }
-
-      return concedido;
-    } catch (_) {
+      await capturarPosicionFresca();
+      return true;
+    } catch (e) {
+      ultimoError = e.toString().replaceFirst('Exception: ', '');
       return false;
     }
   }
 
   void iniciarTransmision({Duration intervalo = const Duration(seconds: 4)}) {
-    if (operarioId.isEmpty) {
-      cargarSesionUsuario();
-    }
-
-    // Solicitar permisos de inmediato para activar el hardware GPS
-    solicitarPermisosUbicacion();
-
     if (isTransmitting) return;
     isTransmitting = true;
-
-    _timerTransmision = Timer.periodic(intervalo, (_) async {
-      await _capturarYEnviarPosicion();
-    });
-
+    _timerTransmision = Timer.periodic(intervalo, (_) => _capturarYEnviarPosicion());
     _capturarYEnviarPosicion();
   }
 
   void detenerTransmision() {
+    _generacion++;
     _timerTransmision?.cancel();
     _timerTransmision = null;
     isTransmitting = false;
   }
 
   Future<void> _capturarYEnviarPosicion() async {
+    if (_capturando || !isTransmitting || isSimulacionActiva) return;
+    _capturando = true;
+    final generacion = _generacion;
     try {
-      if (!isSimulacionActiva) {
-        // Comprobar o solicitar permiso si aún no se tiene
-        var permiso = await Geolocator.checkPermission();
-        if (permiso == LocationPermission.denied) {
-          permiso = await Geolocator.requestPermission();
-        }
-
-        if (permiso == LocationPermission.always || permiso == LocationPermission.whileInUse) {
-          final pos = await Geolocator.getCurrentPosition(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              timeLimit: Duration(seconds: 4),
-            ),
-          ).catchError((_) => Position(
-            latitude: latitud,
-            longitude: longitud,
-            timestamp: DateTime.now(),
-            accuracy: 10,
-            altitude: 400,
-            altitudeAccuracy: 1,
-            heading: rumbo,
-            headingAccuracy: 1,
-            speed: velocidad / 3.6,
-            speedAccuracy: 1,
-          ));
-
-          latitud = pos.latitude;
-          longitud = pos.longitude;
-          velocidad = max(0, pos.speed * 3.6);
-          rumbo = pos.heading;
-        }
-      }
-
-      onLocationChanged?.call(latitud, longitud, velocidad, rumbo);
-
-      // Enviar a la plataforma web vía API
-      await ApiProvider().post(
-        '/tracking/posicion',
-        data: {
-          'operarioId': operarioId,
-          'nombreOperario': nombreOperario,
-          'rol': rol,
-          'latitud': latitud,
-          'longitud': longitud,
-          'velocidad': velocidad,
-          'rumbo': rumbo,
-          'bateria': bateria,
-          'timestamp': DateTime.now().toUtc().toIso8601String(),
-          'enLinea': true,
-        },
-      );
+      if (operarioId.isEmpty) await cargarSesionUsuario();
+      final pos = await capturarPosicionFresca();
+      if (!isTransmitting || generacion != _generacion || isSimulacionActiva) return;
+      await ApiProvider().post('/tracking/posicion', data: {
+        'operarioId': operarioId, 'nombreOperario': nombreOperario, 'rol': rol,
+        'latitud': pos.latitude, 'longitud': pos.longitude,
+        'velocidad': velocidad, 'rumbo': rumbo,
+        'timestamp': pos.timestamp.toUtc().toIso8601String(), 'enLinea': true,
+      });
     } catch (e) {
-      // Ignorar errores de red transitorios
+      ultimoError = e.toString().replaceFirst('Exception: ', '');
+      onLocationChanged?.call(latitud, longitud, velocidad, rumbo);
+    } finally {
+      _capturando = false;
     }
   }
 
@@ -196,7 +165,7 @@ class TrackingGpsService {
       longitud = targetLng;
       velocidad = 0;
       onLocationChanged?.call(latitud, longitud, velocidad, rumbo);
-      _capturarYEnviarPosicion();
+
       return;
     }
 
@@ -210,7 +179,7 @@ class TrackingGpsService {
     longitud += (dLng / (dist + 0.0001)) * step * 100;
 
     onLocationChanged?.call(latitud, longitud, velocidad, rumbo);
-    _capturarYEnviarPosicion();
+
   }
 
   /// Calcula distancia en metros usando la fórmula de Haversine

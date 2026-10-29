@@ -1,30 +1,19 @@
-import '../../../../core/network/api_provider.dart';
+import '../../../core/network/api_provider.dart';
 
 class RutasTrabajoService {
   final ApiProvider _api = ApiProvider();
 
-  Future<List<dynamic>> obtenerRutasAsignadas({String? operario}) async {
-    try {
-      final Map<String, dynamic> params = {};
-      if (operario != null && operario.isNotEmpty) {
-        params['operario'] = operario;
-      }
-      final res = await _api.get('/rutas-trabajo/asignadas', queryParameters: params.isNotEmpty ? params : null);
-      if (res is List) return res;
-      return [];
-    } catch (e) {
-      return [];
-    }
+  Future<List<dynamic>> obtenerRutasAsignadas({required String operario}) async {
+    if (operario.trim().isEmpty) throw ArgumentError('Se requiere el empleado autenticado.');
+    final res = await _api.get('/rutas-trabajo/asignadas', queryParameters: {'operario': operario});
+    if (res is! List) throw const FormatException('Respuesta de rutas inválida');
+    return res;
   }
 
-  Future<Map<String, dynamic>?> obtenerDetalleRuta(int rutaId) async {
-    try {
-      final res = await _api.get('/rutas-trabajo/$rutaId');
-      if (res is Map<String, dynamic>) return res;
-      return null;
-    } catch (e) {
-      return null;
-    }
+  Future<Map<String, dynamic>> obtenerDetalleRuta(int rutaId) async {
+    final res = await _api.get('/rutas-trabajo/$rutaId');
+    if (res is! Map<String, dynamic>) throw const FormatException('Detalle de ruta inválido');
+    return res;
   }
 
   Future<bool> iniciarRuta(int rutaId) async {

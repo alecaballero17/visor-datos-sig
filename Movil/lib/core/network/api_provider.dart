@@ -16,15 +16,20 @@ class ApiProvider {
   }
 
   ApiProvider._internal() {
-    String baseUrl = dotenv.env['API_URL_LOCAL'] ?? 'http://localhost:5080/api';
+    const localOverride = String.fromEnvironment('API_URL_LOCAL');
+    const androidOverride = String.fromEnvironment('API_URL_ANDROID');
+    String baseUrl = localOverride.isNotEmpty ? localOverride :
+      (dotenv.env['API_URL_LOCAL'] ?? 'http://localhost:5080/api');
     if (!kIsWeb && Platform.isAndroid) {
-      baseUrl = dotenv.env['API_URL_ANDROID'] ?? 'http://10.0.2.2:5080/api';
+      baseUrl = androidOverride.isNotEmpty ? androidOverride :
+        (dotenv.env['API_URL_ANDROID'] ?? 'http://10.0.2.2:5080/api');
     }
 
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
         connectTimeout: const Duration(seconds: 15),
+        sendTimeout: const Duration(seconds: 30),
         receiveTimeout: const Duration(seconds: 15),
         headers: {
           'Content-Type': 'application/json',
@@ -40,10 +45,10 @@ class ApiProvider {
     if (kDebugMode) {
       _dio.interceptors.add(LogInterceptor(
         request: true,
-        requestHeader: true,
-        requestBody: true,
-        responseHeader: true,
-        responseBody: true,
+        requestHeader: false,
+        requestBody: false,
+        responseHeader: false,
+        responseBody: false,
         error: true,
       ));
     }
