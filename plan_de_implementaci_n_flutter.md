@@ -1,6 +1,19 @@
 # Plan de implementación de GeoIT Operaciones — Web y Android
 
-Actualizado: 28 de octubre de 2026. Incluye el avance del código móvil y el estado de la web, la API y SQL Server. Las pruebas SQL citadas corresponden al 27/10/2026; no se repitieron tras el avance móvil.
+Actualizado: 29 de octubre de 2026. Las pruebas SQL citadas corresponden al 27/10/2026; no se repitieron tras el avance móvil.
+
+## Actualización del 29/10 — lógica móvil en Windows
+
+Esta actualización sustituye los pendientes de implementación de bandeja y navegación descritos en las fases 3 y 4 del avance del 28/10:
+
+- Modelos completos `RutaTrabajo`/`PuntoTrabajo` para los contratos actuales; secuencia validada, paradas ordenadas, progreso y siguiente pendiente. Rutas vacías, cerradas o canceladas no permiten atención.
+- Bandeja como entrada tras login, con acceso al mapa y cierre de sesión. Relectura de asignación/detalle antes de iniciar y atender; protección frente a respuestas antiguas o de otro empleado. Los errores de inicio conservan el mensaje de la API.
+- Navegación externa con `url_launcher`: Google Maps y Waze, alternativa web si falta la aplicación y error si ninguna apertura funciona. El destino siempre es la siguiente parada asignada. «Cómo llegar» del catastro abre navegación sin inventar una ruta de trabajo.
+- GPS con caducidad visible de diez segundos, control de primer plano, permisos solicitados mediante acción explícita, acceso a ajustes, normalización de velocidad/rumbo y retorno desde ensayo a GPS real. Las posiciones simuladas no se transmiten ni habilitan cierres. La distancia mostrada es de proximidad en línea recta; no representa una ruta vial.
+- Flutter 3.44/Dart 3.12 disponibles. Se ejecutan pruebas locales de lógica; consultar el resultado final en `Movil/PRUEBAS_OPERACION.md`. Estas pruebas no contactan SQL Server ni acreditan cámara/GPS físicos.
+- `flutter doctor -v`: falta Android SDK y no hay Android conectado. `flutter pub get` descargó dependencias, pero informó que falta soporte de enlaces simbólicos (modo de desarrollador de Windows). No se generó APK.
+
+Siguen pendientes las pruebas nativas de permisos, ciclo de vida, cámara y apertura de Maps/Waze, así como el circuito integrado y los bloqueos API/SQL de fase 0. Las notas siguientes conservan el diagnóstico del 27–28/10 como antecedente.
 
 ## Cómo interpretar el estado
 

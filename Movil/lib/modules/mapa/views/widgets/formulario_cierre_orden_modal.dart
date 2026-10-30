@@ -150,7 +150,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
     try {
       if (_resultadoIncierto) {
         final ruta = await _rutasService.obtenerDetalleRuta(widget.rutaActiva['id'] as int);
-        final puntos = ordenarPuntos(ruta['puntos'] ?? []);
+        final puntos = ordenarPuntos(ruta.puntos.map((p) => p.toJson()));
         final coincidencias = puntos.where((p) => p['id'] == widget.objetivoActual['id']);
         if (coincidencias.isEmpty) throw Exception('No se pudo verificar el punto. No se reenviará el cierre.');
         final punto = coincidencias.first;

@@ -4,7 +4,7 @@ import '../../../../../shared/utils/ui_engine/string_modifiers.dart';
 import '../../../../../shared/utils/ui_engine/icon_modifiers.dart';
 
 import '../../../controllers/auth_controller.dart';
-import '../../../../mapa/views/screens/flujo_principal/mapa_pantalla_inicio.dart';
+import '../../../../mapa/views/screens/flujo_principal/bandeja_rutas_pantalla.dart';
 
 class AuthPantallaInicio extends StatefulWidget {
   const AuthPantallaInicio({super.key});
@@ -153,10 +153,10 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                         if (controlador.isLogin) {
                           final success = await controlador.login(actualizar);
                           if (!context.mounted) return;
-                          if (success) {
+                          if (success && mounted) {
                             Navigator.pushReplacement(
                               context,
-                              MaterialPageRoute(builder: (context) => const MapaPantallaInicio()),
+                              MaterialPageRoute(builder: (context) => const BandejaRutasPantalla()),
                             );
                           }
                         } else {

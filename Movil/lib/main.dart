@@ -41,11 +41,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final tracking = TrackingGpsService();
-    if (state == AppLifecycleState.resumed && SesionUsuario.actual.value != null) {
-      tracking.iniciarTransmision();
-    } else if (state != AppLifecycleState.resumed) {
-      tracking.detenerTransmision();
-    }
+    tracking.actualizarPrimerPlano(state == AppLifecycleState.resumed);
   }
 
   @override

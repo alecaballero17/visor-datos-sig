@@ -1,530 +1,434 @@
 import 'dart:async';
-import 'dart:math' show pi;
-import '../../../models/secuencia_atencion.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import '../../../models/ruta_trabajo.dart';
 import '../../../services/tracking_gps_service.dart';
 import '../../../services/rutas_trabajo_service.dart';
+import '../../../services/navegacion_externa_service.dart';
+import '../../../../auth/models/sesion_usuario.dart';
 import '../../widgets/formulario_cierre_orden_modal.dart';
 
 class NavegacionCampoPantalla extends StatefulWidget {
-  final Map<String, dynamic>? rutaInicial;
-
-  const NavegacionCampoPantalla({super.key, this.rutaInicial});
-
+  final RutaTrabajo rutaInicial;
+  const NavegacionCampoPantalla({super.key, required this.rutaInicial});
   @override
-  State<NavegacionCampoPantalla> createState() => _NavegacionCampoPantallaState();
+  State<NavegacionCampoPantalla> createState() =>
+      _NavegacionCampoPantallaState();
 }
 
-class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla> {
-  final TrackingGpsService _tracking = TrackingGpsService();
-  final RutasTrabajoService _rutasService = RutasTrabajoService();
-  final MapController _mapController = MapController();
+class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
+    with WidgetsBindingObserver {
+  final _tracking = TrackingGpsService();
+  final _service = RutasTrabajoService();
+  final _map = MapController();
+  RutaTrabajo? _ruta;
+  String? _error;
+  bool _cargando = true,
+      _formulario = false,
+      _abriendoMapa = false,
+      _gpsOcupado = false;
+  Timer? _reloj, _simulacion;
+  String? _usuario;
+  int _consulta = 0;
 
-  Map<String, dynamic>? _rutaActiva;
-  List<dynamic> _puntos = [];
-  Map<String, dynamic>? _objetivoActual;
-  int _puntosCompletados = 0;
-  bool _cargando = true;
-  String? _errorCarga;
-
-  // Estado del GPS en vivo
-  double _userLat = -17.78100;
-  double _userLng = -63.18120;
-  double _userSpeed = 0.0;
-  double _userHeading = 0.0;
-
-  // Distancia y tiempo restante al objetivo actual
-  double _distanciaMetros = 0.0;
-  String _tiempoEstimado = '0 min';
-
-  Timer? _timerSimulacionPaso;
-  bool _simulandoAvance = false;
+  PuntoTrabajo? get _objetivo => _ruta?.siguiente;
+  bool get _gpsVigente =>
+      TrackingGpsService.posicionVigente(_tracking.ultimaPosicion);
+  bool get _ensayo => _tracking.isSimulacionActiva;
+  bool get _tienePosicion => _ensayo || _gpsVigente;
+  double? get _distancia {
+    final punto = _objetivo;
+    if (!_tienePosicion || punto == null || !punto.tieneCoordenadas) {
+      return null;
+    }
+    return TrackingGpsService.calcularDistanciaMetros(
+      _tracking.latitud,
+      _tracking.longitud,
+      punto.latitud!,
+      punto.longitud!,
+    );
+  }
 
   @override
   void initState() {
     super.initState();
-    _userLat = _tracking.latitud;
-    _userLng = _tracking.longitud;
-    _userSpeed = _tracking.velocidad;
-    _userHeading = _tracking.rumbo;
-
-    _tracking.onLocationChanged = (lat, lng, speed, heading) {
-      if (!mounted) return;
-      setState(() {
-        _userLat = lat;
-        _userLng = lng;
-        _userSpeed = speed;
-        _userHeading = heading;
-        _recalcularDistancia();
-      });
+    _usuario = SesionUsuario.actual.value?.usuario;
+    WidgetsBinding.instance.addObserver(this);
+    _tracking.onLocationChanged = (_, _, _, _) {
+      if (mounted) setState(() {});
     };
+    // Caducar también la distancia visible aunque el receptor deje de entregar lecturas.
+    _reloj = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+    _cargar();
+    _reintentarGps();
+  }
 
-    _tracking.iniciarTransmision();
-    _cargarRuta();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) {
+      _simulacion?.cancel();
+      _simulacion = null;
+      _tracking.detenerTransmision();
+    } else {
+      if (!_ensayo) _tracking.iniciarTransmision();
+      if (!_formulario) _cargar();
+      if (mounted) setState(() {});
+    }
   }
 
   @override
   void dispose() {
-    _timerSimulacionPaso?.cancel();
-    if (_tracking.isSimulacionActiva) {
-      final real = _tracking.ultimaPosicion;
-      _tracking.latitud = real?.latitude ?? -16.397;
-      _tracking.longitud = real?.longitude ?? -60.960;
-      _tracking.velocidad = 0;
-    }
-    _tracking.isSimulacionActiva = false;
+    WidgetsBinding.instance.removeObserver(this);
+    _reloj?.cancel();
+    _simulacion?.cancel();
     _tracking.onLocationChanged = null;
     _tracking.detenerTransmision();
+    _tracking.isSimulacionActiva = false;
+    final real = _tracking.ultimaPosicion;
+    _tracking.latitud = real?.latitude ?? -16.397;
+    _tracking.longitud = real?.longitude ?? -60.960;
+    _tracking.velocidad = 0;
+    _map.dispose();
     super.dispose();
   }
 
-  Future<void> _cargarRuta() async {
-    setState(() { _cargando = true; _errorCarga = null; });
+  Future<void> _cargar() async {
+    if (_formulario) return;
+    final consulta = ++_consulta;
+    setState(() {
+      _cargando = true;
+      _error = null;
+    });
     try {
-      final id = widget.rutaInicial?['id'] as int?;
-      if (id == null) throw Exception('Seleccione una ruta desde la bandeja.');
-      final ruta = await _rutasService.obtenerDetalleRuta(id);
-      if (!mounted) return;
-      _rutaActiva = ruta;
-      _puntos = ordenarPuntos(ruta['puntos'] ?? []);
-      _contarCompletados();
-      _seleccionarSiguienteObjetivo();
-    } catch (e) {
-      if (!mounted) return;
-      _errorCarga = e.toString().replaceFirst('Exception: ', '');
-    } finally {
-      if (mounted) setState(() => _cargando = false);
-    }
-  }
-
-  void _contarCompletados() {
-    _puntosCompletados = _puntos.where((p) => puntoAtendido(Map<String, dynamic>.from(p))).length;
-  }
-
-  void _seleccionarSiguienteObjetivo() {
-    _objetivoActual = siguientePunto(_puntos);
-    if (_objetivoActual == null) {
-      _distanciaMetros = 0;
-      _tiempoEstimado = 'Ruta finalizada';
-      return;
-    }
-    _recalcularDistancia();
-  }
-
-  void _recalcularDistancia() {
-    if (_objetivoActual == null) return;
-    if (_tracking.ultimaPosicion == null && !_tracking.isSimulacionActiva) {
-      _distanciaMetros = 0;
-      _tiempoEstimado = 'Esperando GPS';
-      return;
-    }
-    final tLat = (_objetivoActual!['latitud'] as num).toDouble();
-    final tLng = (_objetivoActual!['longitud'] as num).toDouble();
-    _distanciaMetros = TrackingGpsService.calcularDistanciaMetros(_userLat, _userLng, tLat, tLng);
-    _tiempoEstimado = TrackingGpsService.formatearTiempoEstimado(_distanciaMetros);
-  }
-
-  void _toggleSimulacionAvance() {
-    if (_simulandoAvance) {
-      _timerSimulacionPaso?.cancel();
-      setState(() => _simulandoAvance = false);
-      return;
-    }
-
-    if (_objetivoActual == null) return;
-    setState(() => _simulandoAvance = true);
-
-    final tLat = (_objetivoActual!['latitud'] as num).toDouble();
-    final tLng = (_objetivoActual!['longitud'] as num).toDouble();
-
-    _timerSimulacionPaso = Timer.periodic(const Duration(milliseconds: 600), (timer) {
-      if (!mounted || !_simulandoAvance) {
-        timer.cancel();
-        return;
+      final ruta = await _service.obtenerDetalleRuta(widget.rutaInicial.id);
+      if (_usuario == null ||
+          SesionUsuario.actual.value?.usuario != _usuario ||
+          !ruta.perteneceA(_usuario!)) {
+        throw Exception(
+          'La ruta no pertenece a la sesión actual. Regrese a la bandeja.',
+        );
       }
+      if (!mounted || consulta != _consulta) return;
+      setState(() => _ruta = ruta);
+    } catch (e) {
+      if (mounted && consulta == _consulta) {
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
+      }
+    } finally {
+      if (mounted && consulta == _consulta) setState(() => _cargando = false);
+    }
+  }
 
-      _tracking.avanzarHacia(tLat, tLng, velocidadKmh: 25.0);
-      _mapController.move(LatLng(_userLat, _userLng), _mapController.camera.zoom);
+  Future<void> _reintentarGps() async {
+    if (_gpsOcupado) return;
+    setState(() => _gpsOcupado = true);
+    _simulacion?.cancel();
+    _simulacion = null;
+    await _tracking.volverAGpsReal();
+    if (mounted) setState(() => _gpsOcupado = false);
+  }
 
-      if (_distanciaMetros < 15) {
+  Future<void> _navegar(AplicacionNavegacion app) async {
+    final punto = _objetivo;
+    if (_abriendoMapa || punto == null || !punto.tieneCoordenadas || _ensayo) {
+      return;
+    }
+    setState(() => _abriendoMapa = true);
+    try {
+      await NavegacionExternaService().navegar(
+        punto.latitud!,
+        punto.longitud!,
+        app: app,
+      );
+    } catch (e) {
+      if (mounted) _mensaje(e.toString());
+    } finally {
+      if (mounted) setState(() => _abriendoMapa = false);
+    }
+  }
+
+  void _simular() {
+    if (_simulacion != null) {
+      _simulacion!.cancel();
+      setState(() => _simulacion = null);
+      return;
+    }
+    final punto = _objetivo;
+    if (punto == null || !punto.tieneCoordenadas) return;
+    _tracking.avanzarHacia(punto.latitud!, punto.longitud!);
+    _simulacion = Timer.periodic(const Duration(milliseconds: 600), (timer) {
+      _tracking.avanzarHacia(punto.latitud!, punto.longitud!);
+      if ((_distancia ?? double.infinity) < 10) {
         timer.cancel();
-        setState(() => _simulandoAvance = false);
-        _mostrarAlertaLlegada();
+        if (mounted) setState(() => _simulacion = null);
       }
     });
+    setState(() {});
   }
 
-  void _mostrarAlertaLlegada() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          "ENSAYO: destino simulado alcanzado. El registro operativo permanece bloqueado.",
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
+  Future<void> _atender() async {
+    final punto = _objetivo;
+    if (_formulario ||
+        _cargando ||
+        _error != null ||
+        _ensayo ||
+        !_gpsVigente ||
+        punto == null ||
+        !punto.tieneCoordenadas ||
+        !(_ruta?.puedeAtender ?? false)) {
+      return;
+    }
+    setState(() => _formulario = true);
+    try {
+      // Releer antes de abrir: otra pantalla/sesión pudo cambiar el estado o la asignación.
+      final actual = await _service.obtenerDetalleRuta(_ruta!.id);
+      if (SesionUsuario.actual.value?.usuario != _usuario ||
+          !actual.perteneceA(_usuario!)) {
+        throw Exception(
+          'La asignación o la sesión cambió. Regrese a la bandeja.',
+        );
+      }
+      if (!mounted) return;
+      setState(() => _ruta = actual);
+      final siguiente = actual.siguiente;
+      if (!actual.puedeAtender || siguiente?.id != punto.id) {
+        _mensaje(
+          'La ruta cambió. Revise el siguiente punto antes de continuar.',
+        );
+        return;
+      }
+      await FormularioCierreOrdenModal.mostrar(
+        context: context,
+        rutaActiva: actual.toJson(),
+        objetivoActual: siguiente!.toJson(),
+        onCompletadoExitoso: (_) =>
+            _mensaje('Atención registrada. Actualizando la ruta…'),
+      );
+    } catch (e) {
+      if (mounted) _mensaje(e.toString());
+    } finally {
+      if (mounted) {
+        setState(() => _formulario = false);
+        await _cargar();
+      }
+    }
   }
 
-  Future<void> _ejecutarAccion() async {
-    if (_objetivoActual == null || _rutaActiva == null) return;
-
-    final esCorte = (_rutaActiva!['tipo'] ?? '').toString().toLowerCase().contains('corte');
-
-    await FormularioCierreOrdenModal.mostrar(
-      context: context,
-      rutaActiva: _rutaActiva!,
-      objetivoActual: _objetivoActual!,
-      onCompletadoExitoso: (estadoFinal) {
-        setState(() {
-          _objetivoActual!['estado'] = const ['Observado', 'Omitido'].contains(estadoFinal) ? estadoFinal : 'Completado';
-          _contarCompletados();
-          _seleccionarSiguienteObjetivo();
-        });
-
-        _mostrarNotificacionExito(esCorte, estadoFinal);
-      },
-    );
-  }
-
-  void _mostrarNotificacionExito(bool esCorte, String estadoFinal) {
-    final mensaje = estadoFinal == 'Observado'
-        ? "Orden registrada como Observada con constancia y evidencia fotográfica transmitida."
-        : (esCorte
-            ? "Corte registrado satisfactoriamente con lectura y evidencia fotográfica. Sincronizado."
-            : "Reconexión registrada satisfactoriamente con lectura y evidencia fotográfica. Servicio restablecido.");
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: estadoFinal == 'Observado' ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          mensaje,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
+  void _mensaje(String mensaje) => ScaffoldMessenger.of(
+    context,
+  ).showSnackBar(SnackBar(content: Text(mensaje)));
 
   @override
   Widget build(BuildContext context) {
-    final esCorte = (_rutaActiva?['tipo'] ?? '').toString().toLowerCase().contains('corte');
-
-    final tienePosicion = _tracking.ultimaPosicion != null || _tracking.isSimulacionActiva;
-    final List<LatLng> linePoints = [
-      if (tienePosicion) LatLng(_userLat, _userLng),
-      if (_objetivoActual != null)
-        LatLng((_objetivoActual!['latitud'] as num).toDouble(), (_objetivoActual!['longitud'] as num).toDouble()),
-    ];
-
+    final punto = _objetivo;
+    final distancia = _distancia;
+    final posicion = _tracking.ultimaPosicion;
+    final destinoValido = punto?.tieneCoordenadas ?? false;
+    final centro = _tienePosicion
+        ? LatLng(_tracking.latitud, _tracking.longitud)
+        : destinoValido
+        ? LatLng(punto!.latitud!, punto.longitud!)
+        : const LatLng(-16.397, -60.960);
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
-      appBar: AppBar(title: Text(_tracking.isSimulacionActiva ? 'ENSAYO · sin registro operativo' : 'Atención en secuencia'),
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(44), child: Padding(
-          padding: const EdgeInsets.all(8), child: Text(
-            _tracking.ultimoError ?? (_tracking.ultimaPosicion == null ? 'Esperando GPS real…' :
-              'GPS ±${_tracking.ultimaPosicion!.accuracy.toStringAsFixed(0)} m · ${_tracking.ultimaPosicion!.timestamp.toLocal()}'),
-            maxLines: 2, style: const TextStyle(fontSize: 12)))),
-        actions: [IconButton(tooltip: 'Reintentar GPS', icon: const Icon(Icons.gps_fixed), onPressed: () async {
-          await _tracking.solicitarPermisosUbicacion();
-          if (mounted) setState(() {});
-        })]),
+      appBar: AppBar(
+        title: Text(
+          _ensayo ? 'ENSAYO · sin registro operativo' : 'Atención en secuencia',
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Actualizar ruta',
+            onPressed: _cargando || _formulario ? null : _cargar,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: _cargando
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF38BDF8)))
-          : _errorCarga != null
-            ? Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(_errorCarga!, style: const TextStyle(color: Colors.white)),
-                TextButton(onPressed: _cargarRuta, child: const Text("Reintentar")),
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Volver")),
-              ]))
-            : Stack(
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_error!),
+                  TextButton(
+                    onPressed: _cargar,
+                    child: const Text('Reintentar'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Volver a la bandeja'),
+                  ),
+                ],
+              ),
+            )
+          : Column(
               children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: LatLng(_userLat, _userLng),
-                    initialZoom: 17.0,
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.arquis.alfa',
-                    ),
-                    PolylineLayer(
-                      polylines: [
-                        Polyline(
-                          points: linePoints,
-                          strokeWidth: 5,
-                          color: const Color(0xFF0284C7),
-                          borderStrokeWidth: 2,
-                          borderColor: Colors.white,
-                        ),
-                      ],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        if (tienePosicion) Marker(
-                          point: LatLng(_userLat, _userLng),
-                          width: 44,
-                          height: 44,
-                          child: Transform.rotate(
-                            angle: _userHeading * pi / 180,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: const Color(0xFF0284C7),
-                                border: Border.all(color: Colors.white, width: 2),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 6)],
-                              ),
-                              child: const Icon(Icons.navigation, color: Colors.white, size: 20),
-                            ),
-                          ),
-                        ),
-                        ..._puntos.map((p) {
-                          final pLat = (p['latitud'] as num).toDouble();
-                          final pLng = (p['longitud'] as num).toDouble();
-                          final isTarget = _objetivoActual != null && _objetivoActual!['id'] == p['id'];
-                          final completado = puntoAtendido(Map<String, dynamic>.from(p));
-
-                          return Marker(
-                            point: LatLng(pLat, pLng),
-                            width: isTarget ? 44 : 32,
-                            height: isTarget ? 44 : 32,
-                            child: Container(
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: completado
-                                    ? const Color(0xFF10B981)
-                                    : (isTarget ? (esCorte ? const Color(0xFFEF4444) : const Color(0xFF2563EB)) : Colors.blueGrey),
-                                border: Border.all(color: Colors.white, width: isTarget ? 2.5 : 1.5),
-                              ),
-                              child: Center(
-                                child: completado
-                                    ? const Icon(Icons.check, color: Colors.white, size: 16)
-                                    : Text(
-                                        "${p['orden'] ?? '1'}",
-                                        style: TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: isTarget ? 14 : 11,
-                                        ),
-                                      ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ],
-                ),
-
-                // Encabezado Superior de Navegación Turn-by-Turn
-                SafeArea(
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.white12),
-                        boxShadow: const [BoxShadow(color: Colors.black38, blurRadius: 10, offset: Offset(0, 3))],
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF0284C7).withAlpha(40),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(Icons.turn_slight_right, color: Color(0xFF38BDF8), size: 26),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      TrackingGpsService.formatearDistancia(_distanciaMetros),
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text("· $_tiempoEstimado", style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 13, fontWeight: FontWeight.w500)),
-                                  ],
-                                ),
-                                Text(
-                                  _objetivoActual != null
-                                      ? "Lote ${_objetivoActual!['lote'] ?? '—'} · ${_objetivoActual!['titular'] ?? 'Pendiente'}"
-                                      : "Todos los puntos han sido completados",
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white70, size: 20),
-                            onPressed: () => Navigator.pop(context),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
-                // Indicador de Velocidad y Controles
-                Positioned(
-                  right: 16,
-                  top: 100,
+                Padding(
+                  padding: const EdgeInsets.all(8),
                   child: Column(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: Column(
-                          children: [
-                            Text(
-                              _userSpeed.toStringAsFixed(0),
-                              style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 17),
+                      Text(
+                        _ensayo
+                            ? 'Posición simulada. No se transmite ni permite cierres.'
+                            : _tracking.ultimoError ??
+                                  (!_gpsVigente
+                                      ? 'GPS ausente o caducado. Reintente.'
+                                      : 'GPS ±${posicion!.accuracy.toStringAsFixed(0)} m · ${posicion.timestamp.toLocal()}'),
+                      ),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        children: [
+                          TextButton(
+                            onPressed: _gpsOcupado ? null : _reintentarGps,
+                            child: Text(
+                              _gpsOcupado
+                                  ? 'Obteniendo GPS…'
+                                  : _ensayo
+                                  ? 'Volver a GPS real'
+                                  : 'Reintentar GPS',
                             ),
-                            const Text("km/h", style: TextStyle(color: Colors.white60, fontSize: 9)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      FloatingActionButton.small(
-                        heroTag: 'nav_center',
-                        backgroundColor: const Color(0xFF1E293B),
-                        onPressed: () => _mapController.move(LatLng(_userLat, _userLng), 17.5),
-                        child: const Icon(Icons.my_location, color: Color(0xFF38BDF8)),
-                      ),
-                      const SizedBox(height: 10),
-                      FloatingActionButton.small(
-                        heroTag: 'nav_nearest',
-                        backgroundColor: const Color(0xFF1E293B),
-                        onPressed: _seleccionarSiguienteObjetivo,
-                        child: const Icon(Icons.near_me, color: Colors.white70),
+                          ),
+                          TextButton(
+                            onPressed: () => Geolocator.openAppSettings(),
+                            child: const Text('Permisos'),
+                          ),
+                          TextButton(
+                            onPressed: () => Geolocator.openLocationSettings(),
+                            child: const Text('Ajustes GPS'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ),
-
-                // Panel Inferior de Gestión de Intervención
-                Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Container(
-                    margin: const EdgeInsets.all(16),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white12),
-                      boxShadow: const [BoxShadow(color: Colors.black45, blurRadius: 14, offset: Offset(0, 4))],
-                    ),
+                Expanded(
+                  child: FlutterMap(
+                    mapController: _map,
+                    options: MapOptions(initialCenter: centro, initialZoom: 16),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.arquis.alfa',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          if (_tienePosicion)
+                            Marker(
+                              point: centro,
+                              width: 40,
+                              height: 40,
+                              child: Icon(
+                                Icons.my_location,
+                                color: _ensayo ? Colors.amber : Colors.blue,
+                              ),
+                            ),
+                          for (final parada
+                              in _ruta?.puntos ?? <PuntoTrabajo>[])
+                            if (parada.tieneCoordenadas)
+                              Marker(
+                                point: LatLng(
+                                  parada.latitud!,
+                                  parada.longitud!,
+                                ),
+                                width: 36,
+                                height: 36,
+                                child: CircleAvatar(
+                                  backgroundColor: parada.atendido
+                                      ? Colors.green
+                                      : parada.id == punto?.id
+                                      ? Colors.red
+                                      : Colors.blueGrey,
+                                  child: Text('${parada.orden}'),
+                                ),
+                              ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "Hoja de Ruta: ${_rutaActiva?['codigo'] ?? 'Activa'}",
-                              style: const TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.w600, fontSize: 12),
-                            ),
-                            Text(
-                              "$_puntosCompletados / ${_puntos.length} Intervenidos",
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                            ),
-                          ],
+                        Text(
+                          '${_ruta?.codigo} · ${_ruta?.atendidos ?? 0}/${_ruta?.puntos.length ?? 0} atendidos',
                         ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: _puntos.isNotEmpty ? _puntosCompletados / _puntos.length : 0,
-                            backgroundColor: Colors.white12,
-                            valueColor: AlwaysStoppedAnimation<Color>(esCorte ? const Color(0xFFEF4444) : const Color(0xFF10B981)),
-                            minHeight: 6,
+                        if (_ruta != null)
+                          LinearProgressIndicator(
+                            value: _ruta!.puntos.isEmpty
+                                ? 0
+                                : _ruta!.atendidos / _ruta!.puntos.length,
                           ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        if (_objetivoActual != null) ...[
+                        if (punto != null &&
+                            (_ruta?.puedeAtender ?? false)) ...[
+                          Text(
+                            '${punto.orden}. ${punto.titular ?? "Cliente"} · ${punto.codigoSuministro ?? ""}',
+                          ),
+                          Text(punto.direccion ?? 'Sin dirección'),
+                          Text(
+                            !destinoValido
+                                ? 'Destino sin coordenadas válidas. Solicite corregir la asignación.'
+                                : distancia == null
+                                ? 'Distancia no disponible: esperando GPS reciente'
+                                : '${TrackingGpsService.formatearDistancia(distancia)} en línea recta · proximidad de registro: 30 m',
+                          ),
                           Row(
                             children: [
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "${_objetivoActual!['titular'] ?? 'Titular no asignado'}",
-                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                    ),
-                                    Text(
-                                      "Lote ${_objetivoActual!['lote'] ?? '—'} · Código: ${_objetivoActual!['codigoSuministro'] ?? '—'}",
-                                      style: const TextStyle(color: Colors.white60, fontSize: 12),
-                                    ),
-                                    if (_objetivoActual!['montoDeuda'] != null)
-                                      Text(
-                                        "Deuda acumulada: Bs. ${_objetivoActual!['montoDeuda']}",
-                                        style: const TextStyle(color: Color(0xFFF87171), fontWeight: FontWeight.bold, fontSize: 11),
-                                      ),
-                                  ],
+                                child: FilledButton.icon(
+                                  onPressed:
+                                      !destinoValido || _ensayo || _abriendoMapa
+                                      ? null
+                                      : () => _navegar(
+                                          AplicacionNavegacion.googleMaps,
+                                        ),
+                                  icon: const Icon(Icons.directions),
+                                  label: const Text('Navegar'),
                                 ),
                               ),
-                              OutlinedButton.icon(
-                                onPressed: _toggleSimulacionAvance,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: _simulandoAvance ? Colors.amber : const Color(0xFF38BDF8),
-                                  side: BorderSide(color: _simulandoAvance ? Colors.amber : const Color(0xFF38BDF8)),
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              TextButton(
+                                onPressed:
+                                    !destinoValido || _ensayo || _abriendoMapa
+                                    ? null
+                                    : () => _navegar(AplicacionNavegacion.waze),
+                                child: const Text('Waze'),
+                              ),
+                              TextButton(
+                                onPressed: !destinoValido || _gpsOcupado
+                                    ? null
+                                    : _simular,
+                                child: Text(
+                                  _simulacion == null ? 'Simular' : 'Pausar',
                                 ),
-                                icon: Icon(_simulandoAvance ? Icons.pause : Icons.fast_forward, size: 14),
-                                label: Text(_simulandoAvance ? "Pausar" : "Simular", style: const TextStyle(fontSize: 11)),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 12),
-
-                          SizedBox(
-                            width: double.infinity,
-                            height: 48,
-                            child: ElevatedButton.icon(
-                              onPressed: _ejecutarAccion,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: esCorte ? const Color(0xFFEF4444) : const Color(0xFF2563EB),
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: Icon(esCorte ? Icons.content_cut : Icons.water_drop, size: 18),
-                              label: Text(
-                                esCorte ? "Registrar Corte de Servicio" : "Registrar Reconexión de Agua",
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
-                            ),
+                          FilledButton(
+                            onPressed:
+                                _formulario ||
+                                    _ensayo ||
+                                    !_gpsVigente ||
+                                    !destinoValido ||
+                                    (distancia ?? double.infinity) > 30
+                                ? null
+                                : _atender,
+                            child: const Text('Registrar atención'),
                           ),
-                        ] else ...[
-                          const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 6),
-                            child: Text(
-                              "Todos los puntos de la hoja de ruta han sido ejecutados.",
-                              style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.w600, fontSize: 13),
-                            ),
+                        ] else
+                          Text(
+                            _ruta?.puntos.isEmpty ?? true
+                                ? 'Ruta sin paradas'
+                                : 'Ruta finalizada o cancelada',
                           ),
-                        ],
                       ],
                     ),
                   ),

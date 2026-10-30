@@ -1,5 +1,24 @@
 # Avance del flujo operativo móvil
 
+## Actualización del 29/10/2026 — Windows
+
+Bandeja como pantalla posterior al login, modelos tipados completos, validación de secuencia/asignación y navegación externa implementados. Google Maps y Waze abren el siguiente destino; ante falta de app se intenta Google Maps web. El GPS caduca a los diez segundos, permite abrir ajustes y volver del ensayo a GPS real; el seguimiento se detiene fuera de primer plano.
+
+Las pruebas automatizadas cubren modelos, secuencia, estados, sesión/cookie, coordenadas inválidas, antigüedad GPS, cambio de empleado y enlaces externos con lanzador sustituido. No usan servicios HTTP reales ni dispositivos GPS.
+
+Resultados ejecutados el 29/10: `flutter test --no-pub` pasó las **18 pruebas**. El análisis dirigido a los ocho archivos principales nuevos/modificados terminó con **No issues found**. El análisis global terminó con **18 diagnósticos preexistentes** (advertencias e información, sin errores); por eso su código de salida sigue siendo 1. `git diff --check` pasó.
+
+Entorno comprobado: Flutter 3.44.0/Dart 3.12.0 en Windows. `flutter doctor -v` no encuentra Android SDK ni dispositivo Android. `flutter pub get` descarga dependencias, pero indica habilitar el modo de desarrollador de Windows para enlaces simbólicos de plugins. Resolver ambos puntos antes de compilar/instalar Android.
+
+Para repetir las comprobaciones sin repetir la resolución de dependencias:
+
+```powershell
+flutter analyze --no-pub
+flutter test --no-pub
+```
+
+El análisis global conserva advertencias preexistentes de imports, código muerto y APIs deprecadas; no equivalen a errores de compilación. El APK y el ensayo integrado siguen pendientes. Las notas históricas siguientes corresponden al avance anterior.
+
 Los cambios se limitan a `Movil/`. La API y la web conservan sus contratos.
 
 ## Configuración
