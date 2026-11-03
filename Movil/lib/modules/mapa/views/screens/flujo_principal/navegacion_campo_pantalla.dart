@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../models/ruta_trabajo.dart';
+import '../../../models/recorrido_asignado.dart';
 import '../../../services/tracking_gps_service.dart';
 import '../../../services/rutas_trabajo_service.dart';
 import '../../../services/navegacion_externa_service.dart';
@@ -24,6 +25,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
   final _service = RutasTrabajoService();
   final _map = MapController();
   RutaTrabajo? _ruta;
+  List<LatLng> _recorrido = const [];
   String? _error;
   bool _cargando = true,
       _formulario = false,
@@ -113,7 +115,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
         );
       }
       if (!mounted || consulta != _consulta) return;
-      setState(() => _ruta = ruta);
+      _actualizarRuta(ruta);
     } catch (e) {
       if (mounted && consulta == _consulta) {
         setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
@@ -193,7 +195,7 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
         );
       }
       if (!mounted) return;
-      setState(() => _ruta = actual);
+      _actualizarRuta(actual);
       final siguiente = actual.siguiente;
       if (!actual.puedeAtender || siguiente?.id != punto.id) {
         _mensaje(
@@ -222,6 +224,29 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
     context,
   ).showSnackBar(SnackBar(content: Text(mensaje)));
 
+  void _actualizarRuta(RutaTrabajo ruta) {
+    setState(() {
+      _ruta = ruta;
+      _recorrido = leerRecorridoAsignado(ruta.geometriaRutaGeoJson);
+    });
+  }
+
+  void _verRecorrido() {
+    if (_recorrido.isEmpty) return;
+    final limites = LatLngBounds.fromPoints(_recorrido);
+    if (limites.southWest == limites.northEast) {
+      _map.move(_recorrido.first, 17);
+    } else {
+      _map.fitCamera(
+        CameraFit.bounds(
+          bounds: limites,
+          padding: const EdgeInsets.all(32),
+          maxZoom: 18,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final punto = _objetivo;
@@ -239,6 +264,13 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
           _ensayo ? 'ENSAYO · sin registro operativo' : 'Atención en secuencia',
         ),
         actions: [
+          IconButton(
+            tooltip: 'Ver recorrido asignado',
+            onPressed: _cargando || _error != null || _recorrido.isEmpty
+                ? null
+                : _verRecorrido,
+            icon: const Icon(Icons.route),
+          ),
           IconButton(
             tooltip: 'Actualizar ruta',
             onPressed: _cargando || _formulario ? null : _cargar,
@@ -267,6 +299,17 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
             )
           : Column(
               children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                  child: Text(
+                    _recorrido.isEmpty
+                        ? 'Esta asignación no incluye un recorrido válido. Se muestran sus paradas.'
+                        : 'Línea azul: recorrido Dijkstra asignado por administración.',
+                    style: TextStyle(
+                      color: _recorrido.isEmpty ? Colors.orange : Colors.blue,
+                    ),
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(8),
                   child: Column(
@@ -308,13 +351,29 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
                 Expanded(
                   child: FlutterMap(
                     mapController: _map,
-                    options: MapOptions(initialCenter: centro, initialZoom: 16),
+                    options: MapOptions(
+                      initialCenter: centro,
+                      initialZoom: 16,
+                      onMapReady: _verRecorrido,
+                    ),
                     children: [
                       TileLayer(
                         urlTemplate:
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.arquis.alfa',
                       ),
+                      if (_recorrido.isNotEmpty)
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: _recorrido,
+                              color: Colors.blue,
+                              strokeWidth: 5,
+                              borderColor: Colors.white,
+                              borderStrokeWidth: 2,
+                            ),
+                          ],
+                        ),
                       MarkerLayer(
                         markers: [
                           if (_tienePosicion)

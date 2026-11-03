@@ -1,5 +1,22 @@
 # Avance del flujo operativo móvil
 
+## Demostración: recorrido asignado y fotografía opcional
+
+La pantalla de atención dibuja en azul la geometría Dijkstra recibida en
+`geometriaRutaGeoJson`, encuadra el trazado al abrir y ofrece “Ver recorrido
+asignado” para volver a encuadrarlo. Mantiene el orden y los vértices calculados
+por el administrador. Si falta o es inválida, informa que solo muestra paradas.
+Google Maps/Waze siguen siendo navegación externa al siguiente destino.
+
+El cierre acepta cero o una fotografía de cámara y comentario opcional.
+Permite repetir o eliminar la foto. La lectura de medidor y la validación GPS
+siguen siendo obligatorias para ejecutar. Estas reglas sustituyen la exigencia
+histórica de 1–3 fotos descrita en las notas anteriores.
+
+Pruebas nuevas: decodificación del recorrido sin atajos y rechazo de geometrías
+inválidas; formulario sin foto/comentario que conserva la lectura requerida y
+avanza hasta la comprobación GPS sin enviar una orden real.
+
 ## Actualización del 29/10/2026 — Windows
 
 Bandeja como pantalla posterior al login, modelos tipados completos, validación de secuencia/asignación y navegación externa implementados. Google Maps y Waze abren el siguiente destino; ante falta de app se intenta Google Maps web. El GPS caduca a los diez segundos, permite abrir ajustes y volver del ensayo a GPS real; el seguimiento se detiene fuera de primer plano.

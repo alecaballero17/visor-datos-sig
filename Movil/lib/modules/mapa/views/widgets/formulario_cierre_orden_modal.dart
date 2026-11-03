@@ -10,7 +10,7 @@ import '../../services/tracking_gps_service.dart';
 /// Integra:
 /// 1. Selector Cortado/Reconectado vs Observado (con motivos predefinidos)
 /// 2. Campo numérico para Lectura del Medidor
-/// 3. Captura de 1–3 fotografías de cámara
+/// 3. Captura opcional de una fotografía de cámara
 /// 4. Validación geográfica y temporal antifraude (RN-01, radio de 30 m)
 class FormularioCierreOrdenModal extends StatefulWidget {
   final Map<String, dynamic> rutaActiva;
@@ -86,7 +86,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
   }
 
   Future<void> _capturarFoto(ImageSource source, {int? reemplazar}) async {
-    if (_isCargando || _capturandoFoto || (reemplazar == null && _fotos.length >= 3)) return;
+    if (_isCargando || _capturandoFoto || (reemplazar == null && _fotos.isNotEmpty)) return;
     setState(() => _capturandoFoto = true);
     try {
       final XFile? image = await _picker.pickImage(
@@ -138,12 +138,6 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
         setState(() => _errorMessage = "Debe seleccionar un motivo estructurado para la observación.");
         return;
       }
-    }
-
-    // 2. Evidencia obligatoria para todos los estados.
-    if (_fotos.isEmpty) {
-      setState(() => _errorMessage = "RF-MOB-04: Es obligatorio adjuntar la fotografía de evidencia antes de enviar.");
-      return;
     }
 
     setState(() { _isCargando = true; _errorMessage = null; });
@@ -498,7 +492,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
 
                   const SizedBox(height: 14),
 
-                  const Text('Evidencia: 1–3 fotos de cámara', style: TextStyle(color: Colors.white)),
+                  const Text('Fotografía opcional (máximo una)', style: TextStyle(color: Colors.white)),
                   for (var i = 0; i < _fotos.length; i++)
                     ListTile(
                       leading: Image.file(_fotos[i], width: 64, height: 64, fit: BoxFit.cover),
@@ -510,7 +504,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
                           onPressed: _isCargando ? null : () => setState(() => _fotos.removeAt(i))),
                       ]),
                     ),
-                  if (_fotos.length < 3)
+                  if (_fotos.isEmpty)
                     TextButton.icon(onPressed: _isCargando ? null : _mostrarOpcionesFoto,
                       icon: const Icon(Icons.add_a_photo), label: const Text('Tomar fotografía')),
 
