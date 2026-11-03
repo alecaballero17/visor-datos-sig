@@ -4,7 +4,7 @@ window.arquisRealtime = (() => {
     const subscriptions = new Map();
     let nextId = 0;
     const events = ['ReceivePosicion', 'ReceivePuntoActualizado', 'ReceiveRutaAsignada',
-        'ReceiveRutaActualizada', 'ReceiveOperarioRolActualizado'];
+        'ReceiveRutaActualizada', 'ReceiveEstadoServicioActualizado', 'ReceiveOperarioRolActualizado'];
     function notify(hub, method, event) {
         for (const entry of hub.listeners.values()) {
             if (!event || entry.events.includes(event)) {

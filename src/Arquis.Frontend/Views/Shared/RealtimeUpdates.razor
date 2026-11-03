@@ -9,7 +9,7 @@
 
 @code {
     [Parameter] public EventCallback OnUpdate { get; set; }
-    [Parameter] public string[] Events { get; set; } = ["ReceivePosicion", "ReceivePuntoActualizado", "ReceiveRutaAsignada", "ReceiveRutaActualizada", "ReceiveOperarioRolActualizado"];
+    [Parameter] public string[] Events { get; set; } = ["ReceivePosicion", "ReceivePuntoActualizado", "ReceiveRutaAsignada", "ReceiveRutaActualizada", "ReceiveEstadoServicioActualizado", "ReceiveOperarioRolActualizado"];
     private DotNetObjectReference<RealtimeUpdates>? reference;
     private string? subscription;
     private bool disposed, connectionError;

@@ -26,15 +26,16 @@ namespace Arquis.Backend.Controllers
         public async Task<IActionResult> ObtenerKpis()
         {
             // 1. Tarjetas de Resumen: Estados de Conexiones Catastradas
-            // Catálogo estándar: 1=Normal, 2=Para Corte, 3=Cortado, 4=Baja Parcial, 5=Baja Total
+            // Catálogo: 0=Para reconexión, 1=Normal, 2=Para corte, 3=Cortado, 4/5=Bajas.
             var totalConexiones = await _context.CodigosFijos.CountAsync();
+            var countParaReconexion = await _context.CodigosFijos.CountAsync(c => c.Estado == 0);
             var countNormal = await _context.CodigosFijos.CountAsync(c => c.Estado == 1);
             var countParaCorte = await _context.CodigosFijos.CountAsync(c => c.Estado == 2);
             var countCortado = await _context.CodigosFijos.CountAsync(c => c.Estado == 3);
             var countBajaParcial = await _context.CodigosFijos.CountAsync(c => c.Estado == 4);
             var countBajaTotal = await _context.CodigosFijos.CountAsync(c => c.Estado == 5);
 
-            var countSinVerificar = await _context.CodigosFijos.CountAsync(c => c.Estado < 1 || c.Estado > 5);
+            var countSinVerificar = await _context.CodigosFijos.CountAsync(c => c.Estado > 5);
             var estadosNoVerificados = await _context.CodigosFijos.CountAsync(c => !c.EstadoVerificado);
 
             // 2. Gráfico de Dona: Distribución porcentual del estado de las conexiones del municipio
@@ -85,6 +86,7 @@ namespace Arquis.Backend.Controllers
                 {
                     totalConexionesCatastradas = totalConexiones,
                     conexionesNormal = countNormal,
+                    conexionesParaReconexion = countParaReconexion,
                     conexionesParaCorte = countParaCorte,
                     conexionesCortado = countCortado,
                     conexionesBajaParcial = countBajaParcial,
@@ -99,6 +101,7 @@ namespace Arquis.Backend.Controllers
                     porcentajes = new
                     {
                         normal = pctNormal,
+                        paraReconexion = Math.Round(countParaReconexion / sumTotal * 100.0, 1),
                         paraCorte = pctParaCorte,
                         cortado = pctCortado,
                         bajaParcial = pctBajaParcial,
@@ -108,6 +111,7 @@ namespace Arquis.Backend.Controllers
                     cantidades = new
                     {
                         normal = countNormal,
+                        paraReconexion = countParaReconexion,
                         paraCorte = countParaCorte,
                         cortado = countCortado,
                         bajaParcial = countBajaParcial,

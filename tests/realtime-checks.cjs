@@ -26,7 +26,7 @@ async function main() {
     const reference = id => ({ invokeMethodAsync: async (...args) => calls.push([id, ...args]) });
     const api = window.arquisRealtime;
     const a = api.subscribe('http://localhost:5080', reference('a'), ['ReceivePosicion']);
-    const b = api.subscribe('http://localhost:5080', reference('b'), ['ReceivePuntoActualizado']);
+    const b = api.subscribe('http://localhost:5080', reference('b'), ['ReceivePuntoActualizado', 'ReceiveEstadoServicioActualizado']);
     await Promise.resolve();
     assert.equal(hubs.length, 1, 'Subscribers share a single connection');
     calls.length = 0;
@@ -35,6 +35,9 @@ async function main() {
     calls.length = 0;
     hubs[0].events.get('ReceivePuntoActualizado')();
     assert.deepEqual(calls, [['b', 'Changed']], 'Completion events reach dashboard subscribers');
+    calls.length = 0;
+    hubs[0].events.get('ReceiveEstadoServicioActualizado')();
+    assert.deepEqual(calls, [['b', 'Changed']], 'Manual service changes refresh dashboard without sending a GPS update');
     calls.length = 0;
     hubs[0].reconnecting();
     assert(calls.every(call => call[1] === 'ConnectionChanged' && call[2] === false));

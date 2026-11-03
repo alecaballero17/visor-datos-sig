@@ -155,6 +155,8 @@ namespace Arquis.Backend.Controllers
                 // Obtener códigos fijos reales de la base de datos
                 var codigosDb = await _context.CodigosFijos
                     .Where(c => c.Latitud != null && c.Longitud != null)
+                    .Where(CandidatosServicio.ParaTipo(dto.Tipo))
+                    .OrderBy(c => c.IdCodigo)
                     .Take(cant)
                     .Select(c => new CrearPuntoDto
                     {
@@ -538,10 +540,7 @@ namespace Arquis.Backend.Controllers
                     (c.Lote != null && c.Lote.NroLote != null && c.Lote.NroLote.Contains(busqueda)));
             }
 
-            if (string.Equals(tipo, "Reconexion", StringComparison.OrdinalIgnoreCase))
-            {
-                query = query.Where(c => c.Estado == 0 || !c.EstadoVerificado);
-            }
+            query = query.Where(CandidatosServicio.ParaTipo(tipo));
 
             var items = await query
                 .OrderBy(c => c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.UV : "")
@@ -567,6 +566,26 @@ namespace Arquis.Backend.Controllers
                 .ToListAsync();
 
             return Ok(items);
+        }
+
+        // Solo cambia un suministro existente: Cortado (3) -> candidato a reconexión (0).
+        [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Administrador")]
+        [HttpPut("codigos/{id:int}/candidato-reconexion")]
+        public async Task<IActionResult> MarcarCandidatoReconexion(int id)
+        {
+            var actualizado = await _context.CodigosFijos
+                .Where(CandidatosServicio.PuedePasarAReconexion(id))
+                .ExecuteUpdateAsync(s => s.SetProperty(c => c.Estado, (byte)0)
+                    .SetProperty(c => c.EstadoVerificado, true)
+                    .SetProperty(c => c.FechaCambioEstado, DateTime.UtcNow));
+            if (actualizado == 0)
+            {
+                if (!await _context.CodigosFijos.AnyAsync(c => c.IdCodigo == id))
+                    return NotFound(new { error = "No existe el suministro." });
+                return Conflict(new { error = "Solo un suministro en estado Cortado puede pasar a candidato a reconexión. Actualice la lista." });
+            }
+            await _hubContext.Clients.All.SendAsync("ReceiveEstadoServicioActualizado", new { idCodigo = id, estado = 0 });
+            return Ok(new { idCodigo = id, estado = 0 });
         }
 
         public class CrearTicketDto
@@ -601,6 +620,10 @@ namespace Arquis.Backend.Controllers
                         .ThenInclude(l => l!.Manzana)
                     .Where(c => dto.IdsCodigosFijos.Contains(c.IdCodigo) && c.Latitud != null && c.Longitud != null)
                     .ToListAsync();
+
+                var estadoRequerido = string.Equals(dto.Tipo, "Corte", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
+                if (codigos.Count != dto.IdsCodigosFijos.Distinct().Count() || codigos.Any(c => c.Estado != estadoRequerido))
+                    return Conflict(new { error = "La selección contiene suministros no disponibles para esta operación. Actualice la lista." });
 
                 foreach (var c in codigos)
                 {

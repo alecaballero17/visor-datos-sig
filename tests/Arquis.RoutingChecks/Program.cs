@@ -1,6 +1,7 @@
 using Arquis.Backend.Services;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Operation.Union;
+using Arquis.Backend.Models.Entities;
 
 static void Check(bool condition, string name)
 {
@@ -8,6 +9,25 @@ static void Check(bool condition, string name)
     Console.WriteLine($"PASS: {name}");
 }
 var graph = new RoadNetworkGraph();
+// El estado sin verificar no habilita por sí mismo una reconexión.
+var suministros = Enumerable.Range(0, 6).SelectMany(estado => new[] { true, false }
+    .Select(verificado => new CodigoFijo { IdCodigo = estado * 2 + (verificado ? 1 : 2), Estado = (byte)estado, EstadoVerificado = verificado }))
+    .ToArray().AsQueryable();
+foreach (var (tipo, estado) in new[] { ("Corte", 2), ("Reconexion", 0), ("Cortado", 3) })
+{
+    var candidatos = suministros.Where(CandidatosServicio.ParaTipo(tipo)).ToList();
+    Check(candidatos.Count == 2 && candidatos.All(c => c.Estado == estado), $"{tipo}: only its service state qualifies, regardless of verification");
+}
+Check(!suministros.Where(CandidatosServicio.ParaTipo("desconocido")).Any(), "Unknown operations cannot select arbitrary supplies");
+var cortado = suministros.First(c => c.Estado == 3);
+Check(suministros.Where(CandidatosServicio.PuedePasarAReconexion(cortado.IdCodigo)).Count() == 1,
+    "Manual reconnection selects only the requested cut supply");
+cortado.Estado = 0;
+Check(!suministros.Where(CandidatosServicio.PuedePasarAReconexion(cortado.IdCodigo)).Any(),
+    "Repeated manual transition cannot change a candidate again");
+Check(suministros.Where(CandidatosServicio.ParaTipo("Reconexion")).Any(c => c.IdCodigo == cortado.IdCodigo),
+    "Manually marked cut supply joins reconnection candidates");
+Check(!suministros.Where(CandidatosServicio.PuedePasarAReconexion(-1)).Any(), "Unknown supplies cannot be transitioned");
 Check(double.IsPositiveInfinity(graph.CalcularRutaDijkstra(0, 0, 0, .001).DistanciaMetros), "Empty network rejects route");
 graph.AgregarLinea([new(0, 0), new(.001, 0), new(.001, .001)], "L-shaped street");
 var path = graph.CalcularRutaDijkstra(0, .0002, .0008, .001);

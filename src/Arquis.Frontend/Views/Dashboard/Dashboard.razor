@@ -6,7 +6,7 @@
 @inject IConfiguration Config
 @inject IUserFriendlyErrorService ErrorService
 
-<RealtimeUpdates OnUpdate="ActualizarCapasOperativas" Events="@(new[] { "ReceivePuntoActualizado" })" />
+<RealtimeUpdates OnUpdate="ActualizarCapasOperativas" Events="@(new[] { "ReceivePuntoActualizado", "ReceiveEstadoServicioActualizado" })" />
 
 <PageTitle>Visor SIG - Dashboard</PageTitle>
 
@@ -108,7 +108,7 @@
     private string? reportMZA = null;
 
     // Estado del modal de Dashboard de KPIs Operativos (RF-WEB-02)
-    private bool isKpiModalOpen = false;
+    private bool isKpiModalOpen = true;
 
     private void OpenDashboardKpisModal()
     {
