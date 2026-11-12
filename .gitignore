@@ -8,7 +8,6 @@
 *.log
 .DS_Store
 .setup/
-03_DatosPrueba/DatosSIG_Reproj/
 .env
 .env.*
 !.env.example
