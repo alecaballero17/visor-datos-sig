@@ -295,35 +295,111 @@ def nativo_instalar() -> None:
     else:
         raise ui.Fallo("Gestor de paquetes no soportado: use Docker (bd servidor docker-crear).")
 
+    _configurar_nativo()
+
+
+def _configurado() -> bool:
+    """¿mssql-conf setup ya se ejecuto alguna vez? (existe la base master)."""
+    return shell.run(shell.sudo(["test", "-f", "/var/opt/mssql/data/master.mdf"]), check=False,
+                     capturar=True, silencioso=True).returncode == 0
+
+
+def _esperar_puerto_libre(segundos: int = 20) -> str:
+    """Tras detener el servicio el puerto tarda unos segundos en liberarse."""
+    ocupante = ""
+    for _ in range(segundos):
+        ocupante = _ocupante_puerto()
+        if not ocupante:
+            return ""
+        time.sleep(1)
+    return ocupante
+
+
+def _arrancar() -> None:
+    shell.run(shell.sudo(["systemctl", "enable", "mssql-server"]), check=False, capturar=True, silencioso=True)
+    try:
+        shell.run(shell.sudo(["systemctl", "start", "mssql-server"]), check=False, timeout=180)
+    except ui.Fallo:
+        ui.warn("systemctl start tardo mas de 3 minutos.")
+
+
+def _conecta_con(cfg: dict[str, str], usuario: str, clave: str) -> bool:
+    prueba = dict(cfg, DB_SERVER="localhost", DB_AUTH="sql", DB_ADMIN_USER=usuario, DB_ADMIN_PASSWORD=clave)
+    sql.olvidar_alcance()
+    try:
+        r = shell.run(sql._args("master", prueba) + ["-Q", "SET NOCOUNT ON; SELECT 1"],
+                      check=False, capturar=True, silencioso=True, timeout=20)
+        return r.returncode == 0
+    except ui.Fallo:
+        return False
+
+
+def _configurar_nativo() -> None:
+    """Deja mssql-server configurado, escuchando en 127.0.0.1 y con la clave de 'sa' conocida por la CLI."""
     cfg = env.cargar()
-    # mssql-conf arranca SQL Server y espera a que conteste: si otro programa ocupa el puerto se queda colgado
+    # mssql-conf arranca SQL Server y espera a que conteste: si el puerto esta ocupado se queda colgado
     _detener_servicio()
-    ocupante = _ocupante_puerto()
+    ocupante = _esperar_puerto_libre()
     if ocupante:
         diagnostico()
-        raise ui.Fallo(f"El puerto 1433 ya esta en uso por '{ocupante}'; mssql-server no podria arrancar. "
+        raise ui.Fallo(f"El puerto 1433 sigue en uso por '{ocupante}'; mssql-server no podria arrancar. "
                        "Libere el puerto (p. ej. arquis bd servidor docker-eliminar) y reintente.")
-    clave = _clave_admin(cfg)
-    edicion = ui.elegir("Edicion", ["Express (gratis, hasta 10 GB por base)", "Developer (gratis, no produccion)"], 0)
-    ui.info("Configurando SQL Server (1-3 minutos; limite 6 minutos)...")
-    try:
-        shell.run(shell.sudo(["env", f"MSSQL_SA_PASSWORD={clave}", f"MSSQL_PID={'Express' if edicion == 0 else 'Developer'}",
-                              "ACCEPT_EULA=Y", "/opt/mssql/bin/mssql-conf", "-n", "setup"]),
-                  silencioso=True, timeout=360)
-    except ui.Fallo as e:
-        ui.error(f"mssql-conf setup no termino: {str(e).splitlines()[0]}")
-        diagnostico()
-        raise ui.Fallo("SQL Server no arranco. Revise el diagnostico de arriba; alternativa: "
-                       "arquis bd servidor instalar → Docker.")
     # Solo escuchar en la maquina (la app esta en el mismo servidor)
-    shell.run(shell.sudo(["/opt/mssql/bin/mssql-conf", "set", "network.ipaddress", "127.0.0.1"]), check=False, capturar=True)
-    shell.run(shell.sudo(["systemctl", "enable", "--now", "mssql-server"]), check=False)
-    shell.run(shell.sudo(["systemctl", "restart", "mssql-server"]), check=False)
+    shell.run(shell.sudo(["/opt/mssql/bin/mssql-conf", "set", "network.ipaddress", "127.0.0.1"]),
+              check=False, capturar=True, silencioso=True)
+    if _configurado():
+        ui.info("SQL Server ya estaba configurado: se arranca y se comprueba la cuenta 'sa'.")
+        _arrancar()
+        sql.olvidar_alcance()
+        _esperar_tcp()
+        clave_actual = cfg.get("DB_ADMIN_PASSWORD") if cfg.get("DB_ADMIN_USER", "sa") in ("", "sa") else ""
+        if clave_actual and _conecta_con(cfg, "sa", clave_actual):
+            clave = clave_actual
+        else:
+            ui.info("La clave de 'sa' no esta en el .env (o no coincide): se restablece.")
+            clave = _clave_admin(dict(cfg, DB_ADMIN_PASSWORD=""))
+            _detener_servicio()
+            _esperar_puerto_libre()
+            _mssql_conf(["set-sa-password"], clave, "Restableciendo la clave de 'sa' (1-2 minutos; limite 5)...")
+            _arrancar()
+    else:
+        clave = _clave_admin(cfg)
+        edicion = ui.elegir("Edicion", ["Express (gratis, hasta 10 GB por base)", "Developer (gratis, no produccion)"], 0)
+        _mssql_conf(["setup"], clave, "Configurando SQL Server (1-3 minutos; limite 6)...",
+                    {"MSSQL_PID": "Express" if edicion == 0 else "Developer"}, 360)
+        _detener_servicio()   # aplicar network.ipaddress
+        _arrancar()
     cfg["DB_SERVER"] = "localhost"
     _guardar_admin(cfg, clave)
-    ui.ok("SQL Server instalado (solo escucha en 127.0.0.1).")
+    sql.olvidar_alcance()
     _esperar()
+    if not sql.probar()[0]:
+        diagnostico()
+        raise ui.Fallo("SQL Server no contesta con la cuenta 'sa' configurada. Revise el diagnostico.")
+    ui.ok("SQL Server listo (solo escucha en 127.0.0.1).")
     _login_app()
+
+
+def _esperar_tcp(segundos: int = 90) -> None:
+    for _ in range(segundos):
+        if sql.alcanzable(usar_cache=False)[0]:
+            return
+        time.sleep(1)
+
+
+def _mssql_conf(accion: list[str], clave: str, mensaje: str, extra: dict[str, str] | None = None,
+                limite: int = 300) -> None:
+    ui.info(mensaje)
+    variables = [f"{k}={v}" for k, v in {"MSSQL_SA_PASSWORD": clave, "ACCEPT_EULA": "Y", **(extra or {})}.items()]
+    try:
+        shell.run(shell.sudo(["env", *variables, "/opt/mssql/bin/mssql-conf", "-n", *accion]),
+                  silencioso=True, timeout=limite)
+    except ui.Fallo as e:
+        ui.error(f"mssql-conf {accion[0]} no termino: {str(e).splitlines()[0]}")
+        _detener_servicio()
+        diagnostico()
+        raise ui.Fallo("SQL Server no quedo configurado. Revise el diagnostico de arriba; alternativa: "
+                       "arquis bd servidor instalar → Docker.")
 
 
 def instalar() -> None:
