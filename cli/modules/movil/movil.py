@@ -10,7 +10,7 @@ from pathlib import Path
 from cli.core import env, shell, ui
 from cli.core.paths import ARTIFACTS, MOVIL, asegurar, rel
 
-from ..entorno.sincronizar import MOVIL_ENV_ASSET, contenido_movil
+from ..entorno.sincronizar import MOVIL_ENV_ASSET, api_del_asset, contenido_movil
 
 
 def _flutter() -> str:
@@ -20,9 +20,14 @@ def _flutter() -> str:
 @contextlib.contextmanager
 def _env_temporal():
     """main.dart carga el asset '.env.example': se sustituye durante la compilacion y se restaura."""
+    contenido = contenido_movil()
+    if contenido is None:   # .env de desarrollo: se conserva la API de produccion del asset
+        ui.info(f"API para la app: {api_del_asset()}  (Movil/.env.example; otra: MOVIL_API_URL)")
+        yield
+        return
     original = MOVIL_ENV_ASSET.read_bytes() if MOVIL_ENV_ASSET.exists() else None
-    MOVIL_ENV_ASSET.write_text(contenido_movil(), encoding="utf-8")
-    ui.dim(f"API para la app: {env.url_api_movil()}")
+    MOVIL_ENV_ASSET.write_text(contenido, encoding="utf-8")
+    ui.dim(f"API para la app: {contenido.splitlines()[1].split('=', 1)[1]}")
     try:
         yield
     finally:
@@ -88,9 +93,14 @@ def instalar() -> None:
 def ejecutar() -> None:
     """flutter run en otra ventana (hot reload)."""
     # La consola nueva corre en paralelo: el asset no se puede restaurar automaticamente.
-    MOVIL_ENV_ASSET.write_text(contenido_movil(), encoding="utf-8")
+    contenido = contenido_movil()
+    if contenido is not None:
+        MOVIL_ENV_ASSET.write_text(contenido, encoding="utf-8")
     shell.nueva_consola([_flutter(), "run", *_dispositivo()], cwd=MOVIL, titulo="Arquis movil")
-    ui.warn("Movil/.env.example quedo con las URLs del .env; restaurelo con git checkout si no desea commitearlo.")
+    if contenido is not None:
+        ui.warn("Movil/.env.example quedo con las URLs del .env; restaurelo con git checkout si no desea commitearlo.")
+    else:
+        ui.info(f"API para la app: {api_del_asset()}")
 
 
 def limpiar() -> None:

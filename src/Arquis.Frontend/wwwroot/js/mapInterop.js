@@ -537,6 +537,17 @@ window.arquis = (() => {
             window.addEventListener('resize', () => {
                 if (map) map.invalidateSize();
             });
+
+            // Paneles y modales cambian el tamano del contenedor sin redimensionar la ventana:
+            // sin esto Leaflet sigue con el tamano viejo y el mapa queda en blanco o cortado.
+            const mapEl = $('map');
+            if (mapEl && typeof ResizeObserver === 'function') {
+                let pendiente = null;
+                new ResizeObserver(() => {
+                    if (pendiente) cancelAnimationFrame(pendiente);
+                    pendiente = requestAnimationFrame(() => { if (map) map.invalidateSize(false); });
+                }).observe(mapEl);
+            }
         }
 
         // Forzar cálculo de dimensiones de Leaflet para prevenir mapa en blanco
