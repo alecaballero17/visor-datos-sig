@@ -71,7 +71,7 @@ def crear() -> None:
     if env.ES_WINDOWS and not servidor and ui.confirmar("¿Usar LocalDB con su usuario de Windows?", True):
         v.update(DB_SERVER=r"(localdb)\MSSQLLocalDB", DB_AUTH="windows", DB_USER="", DB_PASSWORD="")
     else:
-        v["DB_SERVER"] = ui.preguntar("Servidor (host o host,puerto)", "localhost" if v["DB_SERVER"].startswith("(localdb)") else v["DB_SERVER"])
+        v["DB_SERVER"] = ui.preguntar("Servidor (host o host,puerto)", "127.0.0.1" if v["DB_SERVER"].startswith("(localdb)") else env.servidor_sql(v["DB_SERVER"]))
         v["DB_AUTH"] = "sql"
         if env.ES_WINDOWS and ui.confirmar("¿Autenticacion de Windows en lugar de usuario SQL?", False):
             v["DB_AUTH"] = "windows"

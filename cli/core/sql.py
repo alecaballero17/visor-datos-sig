@@ -110,7 +110,7 @@ def _resumir_error(texto: str) -> str:
 
 def _args(base: str | None, cfg: dict[str, str]) -> list[str]:
     asegurar_servidor(cfg)
-    args = [sqlcmd(), "-S", cfg["DB_SERVER"], "-b", "-I", "-l", "8", "-f", "i:65001,o:65001"]
+    args = [sqlcmd(), "-S", env.servidor_sql(cfg["DB_SERVER"]), "-b", "-I", "-l", "8", "-f", "i:65001,o:65001"]
     if base:
         args += ["-d", base]
     if cfg.get("DB_AUTH", "sql").lower() == "sql":
