@@ -1,9 +1,12 @@
 """Motor SQL Server: contenedor Docker (Linux/Windows) o servicio mssql-server (Linux)."""
 from __future__ import annotations
 
+import re
 import secrets
 import string
+import subprocess
 import time
+from pathlib import Path
 
 from cli.core import env, shell, sql, ui
 
@@ -125,19 +128,50 @@ def docker_eliminar() -> None:
 
 # ── SQL Server instalado como servicio en Linux ───────────────────────────────────
 def servicio_estado() -> None:
-    """systemctl status mssql-server."""
-    shell.run(["systemctl", "status", "mssql-server", "--no-pager", "-l"], check=False)
+    """systemctl status mssql-server + ultimas lineas legibles del log."""
+    shell.run(["systemctl", "status", "mssql-server", "--no-pager", "-l", "-n", "0"], check=False)
+    if _estado_servicio() in ("deactivating", "activating"):
+        ui.warn(f"mssql-server esta '{_estado_servicio()}' (atascado si dura mas de 1-2 minutos): "
+                "arquis bd servidor mssql-reiniciar lo fuerza.")
+    log = _leer_errorlog(15)
+    if log:
+        ui.seccion("Ultimas lineas del errorlog")
+        for l in log:
+            print("  " + l[:160])
+
+
+def _estado_servicio() -> str:
+    return shell.salida(["systemctl", "show", "-p", "ActiveState", "--value", "mssql-server"])
+
+
+def _detener_servicio() -> None:
+    """Detiene mssql-server; si se queda atascado ('deactivating') lo mata."""
+    try:
+        shell.run(shell.sudo(["systemctl", "stop", "mssql-server"]), check=False, capturar=True,
+                  silencioso=True, timeout=45)
+    except ui.Fallo:
+        pass
+    if _estado_servicio() not in ("inactive", "failed", ""):
+        ui.warn("mssql-server no se detuvo a tiempo; se fuerza (SIGKILL).")
+        shell.run(shell.sudo(["systemctl", "kill", "-s", "SIGKILL", "mssql-server"]), check=False, capturar=True)
+        for _ in range(10):
+            if _estado_servicio() in ("inactive", "failed", ""):
+                break
+            time.sleep(1)
+    shell.run(shell.sudo(["systemctl", "reset-failed", "mssql-server"]), check=False, capturar=True, silencioso=True)
 
 
 def servicio_reiniciar() -> None:
-    shell.run(shell.sudo(["systemctl", "restart", "mssql-server"]))
+    _detener_servicio()
+    shell.run(shell.sudo(["systemctl", "start", "mssql-server"]), check=False, timeout=180)
+    sql.olvidar_alcance()
     _esperar()
 
 
 def servicio_logs() -> None:
     """Log de SQL Server en vivo (journalctl)."""
     try:
-        shell.run(shell.sudo(["journalctl", "-u", "mssql-server", "-f", "-n", "50"]), check=False)
+        shell.run(shell.sudo(["journalctl", "-a", "-u", "mssql-server", "-f", "-n", "50"]), check=False)
     except KeyboardInterrupt:
         pass
 
@@ -151,6 +185,69 @@ def _memoria_mb() -> int:
     except OSError:
         pass
     return 0
+
+
+ERRORLOG = Path("/var/opt/mssql/log/errorlog")
+
+
+def _ocupante_puerto(puerto: int = 1433) -> str:
+    """Proceso que escucha en el puerto ('' si esta libre)."""
+    if not shell.which("ss"):
+        return ""
+    linea = shell.salida(shell.sudo(["ss", "-ltnpH", f"sport = :{puerto}"]))
+    if not linea.strip():
+        return ""
+    m = re.search(r'users:\(\("([^"]+)"', linea)
+    return m.group(1) if m else "desconocido"
+
+
+def _leer_errorlog(lineas: int = 25) -> list[str]:
+    """Ultimas lineas del errorlog de SQL Server (esta en UTF-16)."""
+    try:
+        datos = ERRORLOG.read_bytes()
+    except PermissionError:
+        p = subprocess.run(shell.sudo(["cat", str(ERRORLOG)]), capture_output=True)
+        datos = p.stdout
+    except OSError:
+        return []
+    texto = datos.decode("utf-16", errors="replace") if datos[:2] in (b"\xff\xfe", b"\xfe\xff") or b"\x00" in datos[:200] \
+        else datos.decode("utf-8", errors="replace")
+    return [l for l in texto.splitlines() if l.strip()][-lineas:]
+
+
+def diagnostico() -> None:
+    """Por que SQL Server no arranca o no contesta: RAM, puerto, servicio, contenedor y errorlog."""
+    if shell.ES_WINDOWS:
+        raise ui.Fallo("Diagnostico disponible en Linux; en Windows revise el servicio en services.msc.")
+    mem = _memoria_mb()
+    filas = [["RAM total", f"{mem} MB" + ("  ✖ SQL Server necesita 2 GB" if mem and mem < 2000 else "")]]
+    ocupante = _ocupante_puerto()
+    filas.append(["Puerto 1433", f"en uso por: {ocupante}" if ocupante else "libre"])
+    if shell.which("systemctl"):
+        estado = _estado_servicio() or "no instalado"
+        filas.append(["mssql-server", estado + ("  ✖ atascado: arquis bd servidor mssql-reiniciar"
+                                                 if estado in ("deactivating", "activating") else "")])
+        filas.append(["Reinicios", shell.salida(["systemctl", "show", "-p", "NRestarts", "--value", "mssql-server"]) or "-"])
+    if shell.which("docker"):
+        cont = shell.salida([*_docker(), "ps", "-a", "--filter", "publish=1433", "--format", "{{.Names}} ({{.Status}})"])
+        filas.append(["Docker en 1433", cont.replace("\n", ", ") or "ninguno"])
+    filas.append(["Configurado", "si" if Path("/var/opt/mssql/mssql.conf").exists() or Path("/var/opt/mssql/data/master.mdf").exists()
+                  else "no (falta mssql-conf setup)"])
+    ui.tabla(filas, ["Comprobacion", "Resultado"])
+    log = _leer_errorlog()
+    if log:
+        ui.seccion(f"Ultimas lineas de {ERRORLOG}")
+        for l in log:
+            print("  " + l[:160])
+    elif shell.which("journalctl"):
+        ui.seccion("journalctl -u mssql-server")
+        print(shell.salida(shell.sudo(["journalctl", "-a", "-u", "mssql-server", "-n", "25", "--no-pager"])))
+    if ocupante and ocupante not in ("sqlservr",):
+        ui.warn(f"El puerto 1433 lo ocupa '{ocupante}', no mssql-server. "
+                + ("Es el contenedor Docker: use docker-iniciar/docker-estado, o eliminelo si va a usar el nativo."
+                   if "docker" in ocupante else "Detenga ese programa o use otro puerto."))
+    if mem and mem < 2000:
+        ui.warn("Con menos de 2 GB de RAM SQL Server no arranca: amplie la RAM o use un SQL Server remoto.")
 
 
 def _url_existe(url: str) -> bool:
@@ -199,10 +296,25 @@ def nativo_instalar() -> None:
         raise ui.Fallo("Gestor de paquetes no soportado: use Docker (bd servidor docker-crear).")
 
     cfg = env.cargar()
+    # mssql-conf arranca SQL Server y espera a que conteste: si otro programa ocupa el puerto se queda colgado
+    _detener_servicio()
+    ocupante = _ocupante_puerto()
+    if ocupante:
+        diagnostico()
+        raise ui.Fallo(f"El puerto 1433 ya esta en uso por '{ocupante}'; mssql-server no podria arrancar. "
+                       "Libere el puerto (p. ej. arquis bd servidor docker-eliminar) y reintente.")
     clave = _clave_admin(cfg)
     edicion = ui.elegir("Edicion", ["Express (gratis, hasta 10 GB por base)", "Developer (gratis, no produccion)"], 0)
-    shell.run(shell.sudo(["env", f"MSSQL_SA_PASSWORD={clave}", f"MSSQL_PID={'Express' if edicion == 0 else 'Developer'}",
-                          "ACCEPT_EULA=Y", "/opt/mssql/bin/mssql-conf", "-n", "setup"]), silencioso=True)
+    ui.info("Configurando SQL Server (1-3 minutos; limite 6 minutos)...")
+    try:
+        shell.run(shell.sudo(["env", f"MSSQL_SA_PASSWORD={clave}", f"MSSQL_PID={'Express' if edicion == 0 else 'Developer'}",
+                              "ACCEPT_EULA=Y", "/opt/mssql/bin/mssql-conf", "-n", "setup"]),
+                  silencioso=True, timeout=360)
+    except ui.Fallo as e:
+        ui.error(f"mssql-conf setup no termino: {str(e).splitlines()[0]}")
+        diagnostico()
+        raise ui.Fallo("SQL Server no arranco. Revise el diagnostico de arriba; alternativa: "
+                       "arquis bd servidor instalar → Docker.")
     # Solo escuchar en la maquina (la app esta en el mismo servidor)
     shell.run(shell.sudo(["/opt/mssql/bin/mssql-conf", "set", "network.ipaddress", "127.0.0.1"]), check=False, capturar=True)
     shell.run(shell.sudo(["systemctl", "enable", "--now", "mssql-server"]), check=False)

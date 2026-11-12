@@ -93,12 +93,13 @@ def crear() -> None:
         web = ui.preguntar("Dominio del visor (_ = usar la IP del servidor)",
                            v["WEB_DOMAIN"] if v["WEB_DOMAIN"] != "_" else "").strip().lower() or "_"
         v["WEB_DOMAIN"] = web
+        api_anterior = v.get("API_DOMAIN", "")
         v["API_DOMAIN"] = ""
         v["HTTPS"] = "none"
         if web != "_":
             base = web.split(".", 1)[1] if web.count(".") >= 2 else web
             api = ui.preguntar("Subdominio de la API (vacio = API en el dominio del visor /api)",
-                               v.get("API_DOMAIN") or f"api.{base}").strip().lower()
+                               api_anterior or f"api.{base}").strip().lower()
             v["API_DOMAIN"] = "" if api == web else api
             from cli.modules.services.nginx.nginx import usa_cloudflare
             if usa_cloudflare(dict(v, HTTPS="")):
@@ -118,6 +119,8 @@ def crear() -> None:
     if servidor:
         ui.seccion("Instalacion")
         ui.info("Carpeta donde se instalan las versiones publicadas (NO la del codigo fuente).")
+        if _problema_deploy_dir(v["DEPLOY_DIR"]):
+            v["DEPLOY_DIR"] = r"C:\Arquis" if env.ES_WINDOWS else "/opt/arquis"
         while True:
             v["DEPLOY_DIR"] = ui.preguntar("Carpeta de instalacion", v["DEPLOY_DIR"]).rstrip("/\\") or v["DEPLOY_DIR"]
             problema = _problema_deploy_dir(v["DEPLOY_DIR"])

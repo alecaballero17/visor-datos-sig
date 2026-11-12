@@ -98,6 +98,12 @@ def _resumir_error(texto: str) -> str:
     if "certificate" in t or "certificado" in t:
         return "Certificado del servidor no confiable: DB_TRUST_CERT=true (arquis entorno set)"
     if "login timeout" in t or "tiempo de espera" in t or "0x2749" in t or "network-related" in t:
+        cfg = env.cargar()
+        abierto, donde = alcanzable(cfg, usar_cache=False)
+        if abierto and destino_tcp(cfg["DB_SERVER"]):
+            return (f"Algo escucha en {donde} pero no contesta como SQL Server "
+                    "(esta arrancando, se cae al iniciar u otro programa ocupa el puerto). "
+                    "Diagnostico: arquis bd servidor diagnostico")
         return "SQL Server no responde. " + ayuda_sin_servidor()
     return ""
 

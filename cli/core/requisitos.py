@@ -54,7 +54,10 @@ def _sql() -> tuple[bool, str]:
         return False, f"{cfg['DB_SERVER']}: {detalle}"
     if cfg.get("DB_AUTH", "sql") == "sql" and not env.credenciales(cfg, admin=True)[1]:
         return False, "falta la contrasena de SQL en el .env (DB_PASSWORD / DB_ADMIN_PASSWORD)"
-    return True, detalle
+    bien, version = sql.probar()
+    if not bien:
+        return False, " ".join(version.split())[:300]
+    return True, version
 
 
 def _base() -> tuple[bool, str]:
@@ -63,7 +66,7 @@ def _base() -> tuple[bool, str]:
     try:
         return (True, nombre) if sql.existe_base(nombre) else (False, f"la base '{nombre}' no existe")
     except ui.Fallo as e:
-        return False, str(e).splitlines()[0]
+        return False, " ".join(str(e).split())[:300]
 
 
 def _ef() -> tuple[bool, str]:

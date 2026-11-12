@@ -18,6 +18,7 @@ MENU.agregar("docker-logs", "SQL Server en Docker: logs en vivo", motor.docker_l
 MENU.agregar("docker-eliminar", "SQL Server en Docker: eliminar", motor.docker_eliminar, requiere=("docker",))
 if not shell.ES_WINDOWS:
     MENU.agregar("mssql-instalar", "mssql-server: instalar nativo", motor.nativo_instalar, requiere=("linux", "root"))
+    MENU.agregar("diagnostico", "Diagnosticar SQL Server  por que no arranca o no contesta", motor.diagnostico)
     MENU.agregar("mssql-estado", "mssql-server: estado", motor.servicio_estado)
     MENU.agregar("mssql-reiniciar", "mssql-server: reiniciar", motor.servicio_reiniciar, requiere=("root",))
     MENU.agregar("mssql-logs", "mssql-server: logs en vivo", motor.servicio_logs)
