@@ -40,8 +40,13 @@ def instalar(s: d.Servicio) -> None:
             ng.instalar_binarios()
             s = d.obtener("nginx")
         else:
-            raise ui.Fallo(f"No hay una version publicada en {s.carpeta}. Ejecute primero: arquis deploy completo "
-                           f"(o arquis deploy publicar)")
+            ui.warn(f"Todavia no hay una version publicada ({s.carpeta}).")
+            ui.info("Los servicios ejecutan la version publicada; el despliegue completo la publica,")
+            ui.info("migra la base, configura nginx e instala y arranca los servicios.")
+            if ui.confirmar("¿Ejecutar el despliegue completo ahora?", True):
+                from ..deploy import pipeline
+                pipeline.completo()
+            return
     if s.clave == "nginx":
         from .nginx import nginx as ng
         ng.escribir_config()

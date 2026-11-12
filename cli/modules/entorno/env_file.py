@@ -76,9 +76,7 @@ def crear() -> None:
         if env.ES_WINDOWS and ui.confirmar("¿Autenticacion de Windows en lugar de usuario SQL?", False):
             v["DB_AUTH"] = "windows"
         if v["DB_AUTH"] == "sql":
-            v["DB_USER"] = ui.preguntar("Usuario", v["DB_USER"] or "sa")
-            clave = ui.preguntar("Contrasena (Enter = conservar/generar)", secreto=True)
-            v["DB_PASSWORD"] = clave or v["DB_PASSWORD"] or _generar_clave()
+            _credenciales_sql(v, servidor)
     v["DB_NAME"] = ui.preguntar("Nombre de la base", v["DB_NAME"])
 
     ui.seccion("Puertos internos")
@@ -102,7 +100,13 @@ def crear() -> None:
             api = ui.preguntar("Subdominio de la API (vacio = API en el dominio del visor /api)",
                                v.get("API_DOMAIN") or f"api.{base}").strip().lower()
             v["API_DOMAIN"] = "" if api == web else api
-            if ui.confirmar("¿Activar HTTPS gratis con Let's Encrypt?", True):
+            from cli.modules.services.nginx.nginx import usa_cloudflare
+            if usa_cloudflare(dict(v, HTTPS="")):
+                ui.info("Sus dominios pasan por el proxy de Cloudflare: Let's Encrypt no funciona asi.")
+                ui.info("Se usara el certificado de origen de Cloudflare (se pega en el paso HTTPS).")
+                if ui.confirmar("¿Activar HTTPS con el certificado de origen de Cloudflare?", True):
+                    v["HTTPS"] = "cloudflare"
+            elif ui.confirmar("¿Activar HTTPS gratis con Let's Encrypt?", True):
                 v["HTTPS"] = "letsencrypt"
                 v["LETSENCRYPT_EMAIL"] = ui.preguntar("Correo para avisos de vencimiento", v.get("LETSENCRYPT_EMAIL") or "")
         v["BACKEND_PUBLIC_URL"] = ""
@@ -113,9 +117,19 @@ def crear() -> None:
 
     if servidor:
         ui.seccion("Instalacion")
-        v["DEPLOY_DIR"] = ui.preguntar("Carpeta de instalacion", v["DEPLOY_DIR"])
+        ui.info("Carpeta donde se instalan las versiones publicadas (NO la del codigo fuente).")
+        while True:
+            v["DEPLOY_DIR"] = ui.preguntar("Carpeta de instalacion", v["DEPLOY_DIR"]).rstrip("/\\") or v["DEPLOY_DIR"]
+            problema = _problema_deploy_dir(v["DEPLOY_DIR"])
+            if not problema:
+                break
+            ui.error(problema)
+            v["DEPLOY_DIR"] = env.defecto_linux(env.POR_NOMBRE["DEPLOY_DIR"]) if not env.ES_WINDOWS else r"C:\Arquis"
         if not env.ES_WINDOWS:
+            ui.info("Los servicios corren con un usuario de sistema sin privilegios (recomendado: arquis).")
             v["SERVICE_USER"] = ui.preguntar("Usuario de los servicios (se crea si no existe)", v["SERVICE_USER"] or "arquis")
+            if v["SERVICE_USER"] == "root":
+                ui.warn("Con root, una falla en la app compromete todo el servidor. Se recomienda 'arquis'.")
 
     env.escribir({k: val for k, val in v.items() if k not in env.OBSOLETAS})
     ui.ok(f"Creado {rel(ENV_FILE)}" + ("" if env.ES_WINDOWS else " (permisos 600)"))
@@ -124,6 +138,49 @@ def crear() -> None:
     if not ENV_EXAMPLE.exists():
         generar_ejemplo()
     validar()
+
+
+def _credenciales_sql(v: dict[str, str], servidor: bool) -> None:
+    """Usuario de la app y, si hace falta, cuenta administradora para la CLI."""
+    from cli.core import sql
+    alcanzable, _ = sql.alcanzable(v, usar_cache=False)
+    local = (sql.destino_tcp(v["DB_SERVER"]) or ("", 0))[0] in ("127.0.0.1", "localhost")
+    if not alcanzable and local:
+        ui.info("Todavia no hay SQL Server en este equipo. Se instalara en el paso 'SQL Server'")
+        ui.info("(Docker o nativo) con una cuenta administradora 'sa' de contrasena generada,")
+        ui.info("y la CLI creara el login de la app con el usuario y contrasena de aqui.")
+        v["DB_ADMIN_USER"] = v.get("DB_ADMIN_USER", "")
+        v["DB_USER"] = ui.preguntar("Usuario SQL de la app", v["DB_USER"] if v["DB_USER"] not in ("", "sa") else "arquis")
+        clave = ui.preguntar("Contrasena de la app (Enter = generar)", secreto=True)
+        v["DB_PASSWORD"] = clave or (v["DB_PASSWORD"] if v["DB_USER"] != "sa" else "") or _generar_clave()
+        return
+    if not alcanzable:
+        ui.warn(f"No responde {v['DB_SERVER']}; revise la direccion o el firewall. Se guarda igualmente.")
+    v["DB_USER"] = ui.preguntar("Usuario SQL de la app", v["DB_USER"] or ("arquis" if servidor else "sa"))
+    clave = ui.preguntar("Contrasena (Enter = conservar/generar)", secreto=True)
+    v["DB_PASSWORD"] = clave or v["DB_PASSWORD"] or _generar_clave()
+    if v["DB_USER"] != "sa" and ui.confirmar(
+            "¿Hay una cuenta administradora (p. ej. sa) para crear la base y el login de la app?", servidor):
+        v["DB_ADMIN_USER"] = ui.preguntar("Usuario administrador", v.get("DB_ADMIN_USER") or "sa")
+        v["DB_ADMIN_PASSWORD"] = (ui.preguntar("Contrasena del administrador (Enter = conservar)", secreto=True)
+                                  or v.get("DB_ADMIN_PASSWORD", ""))
+    else:
+        v["DB_ADMIN_USER"] = v["DB_ADMIN_PASSWORD"] = ""
+
+
+def _problema_deploy_dir(valor: str) -> str:
+    """Error si la carpeta de instalacion es la del codigo fuente o esta dentro de ella."""
+    from pathlib import Path
+    from cli.core.paths import ROOT
+    try:
+        destino = Path(valor).expanduser().resolve()
+    except OSError:
+        return ""
+    raiz = ROOT.resolve()
+    if destino == raiz or raiz in destino.parents:
+        return (f"DEPLOY_DIR ({valor}) no puede ser la carpeta del codigo ni estar dentro de ella: "
+                "ahi se crean releases/, logs/ y data/. Use p. ej. /opt/arquis")
+    return ""
 
 
 def _generar_clave() -> str:
@@ -209,13 +266,22 @@ def revisar(cfg: dict[str, str] | None = None) -> tuple[list[str], list[str]]:
             errores.append("NGINX_SSL_CERT y NGINX_SSL_KEY van juntos")
         if cfg["HTTPS"] == "manual" and not cfg["NGINX_SSL_CERT"]:
             errores.append("HTTPS=manual requiere NGINX_SSL_CERT y NGINX_SSL_KEY")
+        if cfg["HTTPS"] == "cloudflare" and not cfg["NGINX_SSL_CERT"]:
+            avisos.append("Falta instalar el certificado de origen de Cloudflare: arquis services nginx https")
         if cfg["HTTPS"] == "letsencrypt":
             if cfg["WEB_DOMAIN"] in ("", "_"):
                 errores.append("Let's Encrypt necesita un dominio real en WEB_DOMAIN (no funciona con IP)")
             elif not cfg["NGINX_SSL_CERT"]:
                 avisos.append("Certificado aun no emitido: arquis services nginx https")
         if cfg["HTTPS"] == "none" and cfg["ARQUIS_ENV"] == "Production" and cfg["WEB_DOMAIN"] not in ("", "_"):
-            avisos.append("Sin HTTPS: las contrasenas viajan en claro (HTTPS=letsencrypt)")
+            avisos.append("Sin HTTPS: las contrasenas viajan en claro (HTTPS=letsencrypt o cloudflare)")
+    problema = _problema_deploy_dir(cfg["DEPLOY_DIR"])
+    if problema:
+        errores.append(problema)
+    if cfg.get("DB_ADMIN_USER") and not cfg.get("DB_ADMIN_PASSWORD") and cfg["DB_AUTH"] == "sql":
+        errores.append("DB_ADMIN_USER requiere DB_ADMIN_PASSWORD")
+    if not env.ES_WINDOWS and cfg.get("SERVICE_USER") == "root" and cfg["ARQUIS_ENV"] == "Production":
+        avisos.append("SERVICE_USER=root: los servicios corren con todos los privilegios (recomendado: arquis)")
     if cfg["ARQUIS_ENV"] == "Production":
         if cfg["DB_SERVER"].lower().startswith("(localdb)"):
             errores.append("Produccion con LocalDB: LocalDB solo vive mientras el usuario tiene sesion")

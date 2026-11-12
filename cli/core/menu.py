@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from . import ui
+from . import requisitos, ui
 
 
 @dataclass
@@ -29,6 +29,7 @@ class Accion:
     titulo: str
     fn: Callable[[], object]
     descripcion: str = ""
+    requiere: tuple[str, ...] = ()
 
 
 @dataclass
@@ -37,12 +38,15 @@ class Menu:
     titulo: str
     descripcion: str = ""
     orden: int = 100
+    requiere: tuple[str, ...] = ()               # por defecto para sus acciones
     items: list = field(default_factory=list)   # Accion | Menu
     _paquete: str | None = None
 
     # -- registro -----------------------------------------------------------
-    def agregar(self, clave: str, titulo: str, fn: Callable[[], object], descripcion: str = "") -> "Menu":
-        self.items.append(Accion(clave, titulo, fn, descripcion))
+    def agregar(self, clave: str, titulo: str, fn: Callable[[], object], descripcion: str = "",
+                requiere: tuple[str, ...] | None = None) -> "Menu":
+        """`requiere`: claves de cli/core/requisitos.py; None = las del menu; () = ninguna."""
+        self.items.append(Accion(clave, titulo, fn, descripcion, self.requiere if requiere is None else tuple(requiere)))
         return self
 
     def accion(self, clave: str, titulo: str, descripcion: str = ""):
@@ -93,7 +97,8 @@ class Menu:
                 marca = ui.c("▸", ui.C.BLUE) if es_menu else ui.c("•", ui.C.GRAY)
                 nombre = ui.c(it.titulo, ui.C.BOLD) if es_menu else it.titulo
                 desc = ui.c(f"  {it.descripcion}", ui.C.GRAY) if it.descripcion else ""
-                print(f"  {ui.c(f'{i:>2}', ui.C.CYAN)}) {marca} {nombre}{desc}")
+                req = "" if es_menu or not it.requiere else ui.c(f"  [{requisitos.etiqueta(it.requiere)}]", ui.C.YELLOW)
+                print(f"  {ui.c(f'{i:>2}', ui.C.CYAN)}) {marca} {nombre}{desc}{req}")
             print(f"  {ui.c(' 0', ui.C.CYAN)}) {'Volver' if ruta else 'Salir'}")
             try:
                 r = input(ui.c("\n  › ", ui.C.CYAN)).strip()
@@ -126,13 +131,16 @@ class Menu:
                 it.arbol(ruta, nivel + 1)
             else:
                 print("  " * nivel + ui.c(ruta, ui.C.CYAN) + f"  {it.titulo}"
-                      + (ui.c(f" ({it.descripcion})", ui.C.GRAY) if it.descripcion else ""))
+                      + (ui.c(f" ({it.descripcion})", ui.C.GRAY) if it.descripcion else "")
+                      + (ui.c(f"  [{requisitos.etiqueta(it.requiere)}]", ui.C.YELLOW) if it.requiere else ""))
 
 
 def correr(accion: Accion) -> bool:
     """Ejecuta una accion capturando errores. Devuelve True si termino bien."""
     ui.seccion(accion.titulo)
     try:
+        if not requisitos.verificar(accion.requiere):
+            return False
         r = accion.fn()
         return r is not False
     except ui.Fallo as e:

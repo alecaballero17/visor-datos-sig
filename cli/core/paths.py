@@ -29,6 +29,14 @@ REQUIREMENTS = CLI_DIR / "requirements"
 VENV = ROOT / ".venv"
 
 
+def proyectos_dotnet() -> list[Path]:
+    """Lo que se restaura/compila. En Linux no se incluye el migrador WPF (net10.0-windows)."""
+    import os
+    if os.name == "nt":
+        return [SOLUTION]
+    return [p for p in (BACKEND, FRONTEND, TESTS / "Arquis.RoutingChecks") if p.exists()]
+
+
 def asegurar(*dirs: Path) -> None:
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)

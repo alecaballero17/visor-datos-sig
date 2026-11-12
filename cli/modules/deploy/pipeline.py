@@ -35,7 +35,8 @@ from . import releases
 
 def _verificaciones() -> None:
     from ..inicio import preparacion
-    if not preparacion.preparar(servicios=False):   # instala/configura lo que falte antes de desplegar
+    # instala/configura lo que falte; nginx y HTTPS se hacen en su propio paso (no bloquean)
+    if not preparacion.preparar(servicios=False, omitir=("nginx", "https")):
         raise ui.Fallo("Hay requisitos pendientes (arquis inicio revisar).")
     requerir_obligatorias()
     if not validar():
@@ -81,10 +82,13 @@ def _nginx() -> None:
         return
     nginx.instalar_binarios()
     cfg = env.cargar()
-    if cfg.get("HTTPS") == "letsencrypt" and not cfg.get("NGINX_SSL_CERT") and not shell.ES_WINDOWS:
-        nginx.certificado()          # emite el certificado y deja nginx en HTTPS
-    else:
-        nginx.escribir_config()
+    nginx.escribir_config()          # primero HTTP: el sitio queda accesible aunque HTTPS falle
+    if cfg.get("HTTPS") in ("letsencrypt", "cloudflare") and not cfg.get("NGINX_SSL_CERT"):
+        try:
+            nginx.https()
+        except ui.Fallo as e:
+            ui.warn(f"HTTPS no se pudo activar ({str(e).splitlines()[0]}); se continua en HTTP.")
+            ui.info("Reintente luego con: arquis services nginx https")
 
 
 def _servicios() -> None:

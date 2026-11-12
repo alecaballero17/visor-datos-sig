@@ -18,6 +18,7 @@ renovacion automatica de certbot) o certificados propios.
 from __future__ import annotations
 
 import io
+import os
 import re
 import shutil
 import socket
@@ -30,6 +31,39 @@ from cli.core import env, shell, ui
 from .. import definiciones as d
 
 CONF_LINUX = Path("/etc/nginx/conf.d/arquis.conf")
+SSL_DIR = Path("/etc/arquis/ssl")
+
+# https://www.cloudflare.com/ips/  (proxy "nube naranja")
+CLOUDFLARE = ["173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+              "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+              "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22",
+              "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32", "2405:b500::/32", "2405:8100::/32",
+              "2a06:98c0::/29", "2c0f:f248::/32"]
+
+
+def es_cloudflare(ip: str) -> bool:
+    import ipaddress
+    try:
+        direccion = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(direccion in ipaddress.ip_network(r) for r in CLOUDFLARE)
+
+
+def _resolver(nombre: str) -> list[str]:
+    try:
+        return sorted({i[4][0] for i in socket.getaddrinfo(nombre, 80, proto=socket.IPPROTO_TCP)})
+    except socket.gaierror:
+        return []
+
+
+def usa_cloudflare(cfg: dict[str, str] | None = None) -> bool:
+    """¿Algun dominio configurado resuelve a la red de Cloudflare (proxy activado)?"""
+    cfg = cfg or env.cargar()
+    if cfg.get("HTTPS") == "cloudflare":
+        return True
+    nombres = [n for n in (cfg.get("WEB_DOMAIN"), cfg.get("API_DOMAIN")) if n and es_dominio(n)]
+    return any(es_cloudflare(ip) for n in nombres for ip in _resolver(n))
 ACME_DIR = "/var/www/arquis-acme"
 CERT_NOMBRE = "arquis"
 LE_DIR = Path("/etc/letsencrypt/live") / CERT_NOMBRE
@@ -133,6 +167,10 @@ map $http_upgrade $connection_upgrade {{
 upstream arquis_backend  {{ server 127.0.0.1:{be}; keepalive 16; }}
 upstream arquis_frontend {{ server 127.0.0.1:{fe}; keepalive 16; }}
 """
+    if cfg.get("HTTPS") == "cloudflare":
+        texto += "\n# Detras de Cloudflare: registrar la IP real del visitante\n"
+        texto += "".join(f"set_real_ip_from {r};\n" for r in CLOUDFLARE)
+        texto += "real_ip_header CF-Connecting-IP;\n"
     if cert and clave:
         ssl = f"""
     ssl_certificate     {cert.replace(chr(92), '/')};
@@ -386,20 +424,23 @@ def comprobar_dns(cfg: dict[str, str] | None = None) -> bool:
     propias = _ips_servidor()
     bien = True
     filas = []
+    cloudflare = False
     for n in nombres:
-        try:
-            ips = sorted({i[4][0] for i in socket.getaddrinfo(n, 80, proto=socket.IPPROTO_TCP)})
-        except socket.gaierror:
-            ips = []
+        ips = _resolver(n)
         if not ips:
             estado, bien = ui.c("no resuelve", ui.C.RED), False
+        elif all(es_cloudflare(i) for i in ips):
+            estado, cloudflare = ui.c("Cloudflare (proxy)", ui.C.CYAN), True
         elif propias & set(ips):
             estado = ui.c("apunta aqui", ui.C.GREEN)
         else:
             estado = ui.c("otra IP (¿NAT/proxy?)", ui.C.YELLOW)
         filas.append([n, ", ".join(ips) or "-", estado])
-    ui.tabla(filas, ["Dominio", "Resuelve a", "Estado"])
+    ui.tabla([[f[0], f[1][:60], f[2]] for f in filas], ["Dominio", "Resuelve a", "Estado"])
     ui.dim("IPs de este servidor: " + ", ".join(sorted(propias)))
+    if cloudflare:
+        ui.info("El DNS pasa por Cloudflare: use HTTPS=cloudflare (certificado de origen). "
+                "Let's Encrypt por HTTP no funciona detras del proxy.")
     if not bien:
         ui.warn("Cree registros DNS tipo A apuntando a la IP publica del servidor y espere a que propaguen.")
     return bien
@@ -424,15 +465,24 @@ def dominios() -> None:
             api = ""
     https = "none"
     if web != "_":
-        opciones = ["Let's Encrypt (gratis, automatico)", "Certificado propio (rutas a .pem)", "Sin HTTPS"]
-        actual = {"letsencrypt": 0, "manual": 1, "none": 2}.get(cfg.get("HTTPS", "none"), 0)
-        https = ["letsencrypt", "manual", "none"][ui.elegir("HTTPS", opciones, actual if cfg.get("HTTPS") != "none" else 0)]
+        claves = ["letsencrypt", "cloudflare", "manual", "none"]
+        opciones = ["Let's Encrypt (gratis, automatico; DNS apuntando directo al servidor)",
+                    "Cloudflare: certificado de origen (si el DNS usa el proxy de Cloudflare)",
+                    "Certificado propio (rutas a .pem)", "Sin HTTPS"]
+        cf = usa_cloudflare(dict(cfg, WEB_DOMAIN=web, API_DOMAIN=api))
+        if cf:
+            ui.info("Sus dominios pasan por Cloudflare (proxy): se recomienda el certificado de origen.")
+        defecto = claves.index(cfg["HTTPS"]) if cfg.get("HTTPS") in claves and cfg["HTTPS"] != "none" else (1 if cf else 0)
+        https = claves[ui.elegir("HTTPS", opciones, defecto)]
     cfg.update(NGINX_ENABLED="true", WEB_DOMAIN=web, API_DOMAIN=api, HTTPS=https,
                BACKEND_HOST="127.0.0.1", FRONTEND_HOST="127.0.0.1", BACKEND_PUBLIC_URL="")
     if https == "letsencrypt":
         cfg["LETSENCRYPT_EMAIL"] = ui.preguntar("Correo para avisos de vencimiento", cfg.get("LETSENCRYPT_EMAIL") or "")
         if not (LE_DIR / "fullchain.pem").exists():
             cfg["NGINX_SSL_CERT"] = cfg["NGINX_SSL_KEY"] = ""   # hasta emitirlo
+    elif https == "cloudflare":
+        if not str(cfg.get("NGINX_SSL_CERT", "")).startswith(str(SSL_DIR)):
+            cfg["NGINX_SSL_CERT"] = cfg["NGINX_SSL_KEY"] = ""   # se completa al pegar el certificado
     elif https == "manual":
         cfg["NGINX_SSL_CERT"] = ui.preguntar("Ruta del certificado (fullchain.pem)", cfg.get("NGINX_SSL_CERT"))
         cfg["NGINX_SSL_KEY"] = ui.preguntar("Ruta de la clave privada (privkey.pem)", cfg.get("NGINX_SSL_KEY"))
@@ -461,8 +511,8 @@ def aplicar() -> None:
     from .. import control
     cfg = env.cargar()
     instalar_binarios()
-    if cfg.get("HTTPS") == "letsencrypt" and not shell.ES_WINDOWS:
-        certificado()
+    if cfg.get("HTTPS") in ("letsencrypt", "cloudflare") and not cfg.get("NGINX_SSL_CERT"):
+        https()
     else:
         escribir_config()
     for clave in ("backend", "frontend"):
@@ -503,6 +553,16 @@ def certificado() -> None:
         raise ui.Fallo("Let's Encrypt valida por el puerto 80: use NGINX_PORT=80.")
     if not comprobar_dns(cfg) and not ui.confirmar("Hay dominios que no resuelven. ¿Intentar igualmente?", False):
         return
+    if usa_cloudflare(cfg):
+        ui.warn("Los dominios pasan por el proxy de Cloudflare: Let's Encrypt (HTTP-01) fallara con 'redirect loop'.")
+        i = ui.elegir("¿Que hacer?", ["Usar el certificado de origen de Cloudflare (recomendado)",
+                                      "Intentar Let's Encrypt igualmente (desactive antes la nube naranja en Cloudflare)",
+                                      "Cancelar"], 0)
+        if i == 0:
+            cloudflare_origen()
+            return
+        if i == 2:
+            return
     certbot = _instalar_certbot()
     # 1) nginx solo HTTP (sirve /.well-known/acme-challenge)
     if not (LE_DIR / "fullchain.pem").exists():
@@ -523,6 +583,75 @@ def certificado() -> None:
     escribir_config(cfg)
     ui.ok("HTTPS activo para: " + ", ".join(nombres))
     _renovacion()
+
+
+def https() -> None:
+    """Activa HTTPS segun HTTPS del .env (Let's Encrypt o certificado de origen de Cloudflare)."""
+    cfg = env.cargar()
+    if cfg.get("HTTPS") == "cloudflare" or (cfg.get("HTTPS") != "manual" and usa_cloudflare(cfg)):
+        cloudflare_origen()
+    else:
+        certificado()
+
+
+def _leer_pem(titulo: str, marca: str) -> str:
+    """Pide una ruta a un archivo .pem o el contenido pegado (hasta la linea -----END ...-----)."""
+    ui.info(f"{titulo}: pegue el contenido completo (desde -----BEGIN hasta -----END) o escriba la ruta de un archivo.")
+    primera = input("  › ").strip()
+    if primera and not primera.startswith("-----BEGIN") and Path(primera).expanduser().is_file():
+        texto = Path(primera).expanduser().read_text(encoding="utf-8")
+    else:
+        lineas = [primera]
+        while not lineas[-1].startswith("-----END"):
+            try:
+                lineas.append(input().strip())
+            except EOFError:
+                break
+        texto = "\n".join(l for l in lineas if l) + "\n"
+    if marca not in texto or "-----END" not in texto:
+        raise ui.Fallo(f"No parece un {titulo.lower()} valido (falta '{marca}').")
+    return texto
+
+
+def cloudflare_origen() -> None:
+    """Instala el certificado de origen de Cloudflare (15 anios, sin renovaciones) y activa HTTPS."""
+    cfg = env.cargar()
+    ui.seccion("Certificado de origen de Cloudflare")
+    print("""  En el panel de Cloudflare de su dominio:
+    1. SSL/TLS → Origin Server → Create Certificate
+       (clave RSA, nombres: *.{dom} y {dom}, validez 15 anios) → Create
+    2. Deje esa pantalla abierta: copie 'Origin Certificate' y 'Private Key' aqui.
+    3. Luego: SSL/TLS → Overview → modo 'Full (strict)'.
+""".format(dom=(cfg.get("WEB_DOMAIN") or "midominio.com").split(".", 1)[-1]))
+    cert = _leer_pem("Certificado (Origin Certificate)", "BEGIN CERTIFICATE")
+    clave = _leer_pem("Clave privada (Private Key)", "PRIVATE KEY")
+    destino_cert, destino_clave = SSL_DIR / "cloudflare-origin.pem", SSL_DIR / "cloudflare-origin.key"
+    if shell.ES_WINDOWS:
+        destino_cert = d.dir_instalacion() / "ssl" / "cloudflare-origin.pem"
+        destino_clave = d.dir_instalacion() / "ssl" / "cloudflare-origin.key"
+        destino_cert.parent.mkdir(parents=True, exist_ok=True)
+        destino_cert.write_text(cert, encoding="utf-8")
+        destino_clave.write_text(clave, encoding="utf-8")
+    else:
+        _instalar_secreto(destino_cert, cert, "644")
+        _instalar_secreto(destino_clave, clave, "600")
+    cfg.update(HTTPS="cloudflare", NGINX_SSL_CERT=str(destino_cert), NGINX_SSL_KEY=str(destino_clave))
+    env.escribir(cfg)
+    escribir_config(cfg)
+    ui.ok("HTTPS activo con el certificado de origen de Cloudflare.")
+    ui.warn("En Cloudflare ponga SSL/TLS → modo 'Full (strict)' (con 'Flexible' habra bucles de redireccion).")
+
+
+def _instalar_secreto(ruta: Path, contenido: str, modo: str) -> None:
+    import tempfile
+    with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8", prefix="arquis-ssl-") as f:
+        f.write(contenido)
+        tmp = f.name
+    os.chmod(tmp, 0o600)
+    try:
+        shell.run(shell.sudo(["install", "-D", "-m", modo, "-o", "root", "-g", "root", tmp, str(ruta)]), silencioso=True)
+    finally:
+        os.unlink(tmp)
 
 
 def _renovacion() -> None:

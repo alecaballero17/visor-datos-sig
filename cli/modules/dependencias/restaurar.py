@@ -5,7 +5,7 @@ import json
 import venv
 
 from cli.core import shell, ui
-from cli.core.paths import MOVIL, REQUIREMENTS, ROOT, SOLUTION, VENV, rel
+from cli.core.paths import MOVIL, REQUIREMENTS, ROOT, VENV, proyectos_dotnet, rel
 
 # dotnet-ef como herramienta LOCAL del repositorio (.config/dotnet-tools.json):
 # funciona igual con cualquier usuario, tambien bajo sudo en el servidor.
@@ -14,8 +14,9 @@ DOTNET_TOOLS = {"dotnet-ef": "10.0.12"}
 
 
 def nuget() -> None:
-    """dotnet restore de toda la solucion."""
-    shell.run([shell.dotnet(), "restore", SOLUTION, "--nologo"], como_usuario=True)
+    """dotnet restore (en Linux: backend, frontend y pruebas; el migrador WPF es solo Windows)."""
+    for proyecto in proyectos_dotnet():
+        shell.run([shell.dotnet(), "restore", proyecto, "--nologo"], como_usuario=True)
     ui.ok("Paquetes NuGet restaurados.")
 
 
@@ -37,11 +38,28 @@ def herramientas_dotnet() -> None:
     ui.ok(f"Herramientas dotnet listas ({rel(MANIFIESTO)}).")
 
 
+def ef_rapido() -> tuple[bool, str]:
+    """Comprobacion sin ejecutar dotnet: manifiesto + paquete restaurado en la cache de NuGet."""
+    import os
+    from pathlib import Path
+    if not MANIFIESTO.exists():
+        return False, "falta .config/dotnet-tools.json"
+    usuario = shell.usuario_original()
+    home = Path(os.path.expanduser(f"~{usuario}")) if usuario else Path.home()
+    cache = Path(os.environ.get("NUGET_PACKAGES") or home / ".nuget" / "packages")
+    version = DOTNET_TOOLS["dotnet-ef"]
+    if not (cache / "dotnet-ef" / version).exists():
+        return False, f"dotnet-ef {version} sin restaurar"
+    return True, version
+
+
 def ef_disponible() -> bool:
+    if ef_rapido()[0]:
+        return True
     if not MANIFIESTO.exists():
         return False
     shell.run([shell.dotnet(), "tool", "restore"], cwd=ROOT, check=False, capturar=True, silencioso=True)
-    return bool(shell.salida([shell.dotnet(), "ef", "--version"], cwd=ROOT))
+    return ef_rapido()[0]
 
 
 def crear_venv() -> None:

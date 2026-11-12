@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 from cli.core import shell, ui
-from cli.core.paths import MOVIL, SOLUTION
+from cli.core.paths import MOVIL, proyectos_dotnet
 
 
 def nuget() -> None:
     """NuGet desactualizados."""
-    shell.run([shell.dotnet(), "list", SOLUTION, "package", "--outdated"], check=False)
+    for proyecto in proyectos_dotnet():
+        shell.run([shell.dotnet(), "list", proyecto, "package", "--outdated"], check=False)
 
 
 def pub() -> None:

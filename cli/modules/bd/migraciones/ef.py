@@ -16,13 +16,30 @@ def _env() -> dict[str, str]:
     return env.entorno_backend()
 
 
+def _desactualizado() -> bool:
+    """¿Hay codigo del backend mas nuevo que el ultimo build? (evita 'dotnet build' innecesarios)."""
+    dll = BACKEND / "bin" / "Debug" / "net10.0" / "Arquis.Backend.dll"
+    if not dll.exists():
+        return True
+    limite = dll.stat().st_mtime
+    for patron in ("*.cs", "*.csproj", "*.json"):
+        for f in BACKEND.rglob(patron):
+            if "bin" in f.parts or "obj" in f.parts:
+                continue
+            if f.stat().st_mtime > limite:
+                return True
+    return False
+
+
 def _compilar() -> None:
     global _COMPILADO
     if not _COMPILADO:
         from ...dependencias.restaurar import ef_disponible, herramientas_dotnet
         if not ef_disponible():
             herramientas_dotnet()
-        shell.run([shell.dotnet(), "build", BACKEND, "--nologo", "-v", "q"], env=_env(), como_usuario=True)
+        if _desactualizado():
+            ui.info("Compilando el backend (hubo cambios en el codigo)...")
+            shell.run([shell.dotnet(), "build", BACKEND, "--nologo", "-v", "q"], env=_env(), como_usuario=True)
         _COMPILADO = True
 
 
@@ -30,7 +47,7 @@ def _ef(*args: str, capturar: bool = False, conexion: bool = False, check: bool 
     _compilar()
     cmd = [shell.dotnet(), "ef", *args, *PROYECTO, "--no-build"]
     if conexion:
-        cmd += ["--connection", env.cadena_conexion()]
+        cmd += ["--connection", env.cadena_conexion(admin=True)]
     return shell.run(cmd, env=_env(), capturar=capturar, check=check, como_usuario=True,
                      silencioso=conexion)  # no mostrar la cadena de conexion
 
@@ -49,9 +66,24 @@ def lista() -> list[dict]:
     return json.loads(datos)
 
 
+def lista_rapida() -> list[dict]:
+    """Migraciones del codigo vs __EFMigrationsHistory, sin ejecutar dotnet (instantaneo)."""
+    from cli.core import sql
+    archivos = sorted(f.stem for f in (BACKEND / "Migrations").glob("*.cs")
+                      if not f.name.endswith(".Designer.cs") and f.stem[:14].isdigit())
+    filas = sql.filas("IF OBJECT_ID('dbo.__EFMigrationsHistory') IS NOT NULL "
+                      "SELECT MigrationId FROM dbo.__EFMigrationsHistory")
+    aplicadas = {f[0] for f in filas}
+    ids = sorted(set(archivos) | aplicadas)
+    return [{"id": i, "name": i[15:], "applied": i in aplicadas, "huerfana": i not in archivos} for i in ids]
+
+
 def estado() -> list[dict]:
     """Migraciones aplicadas y pendientes."""
-    migs = lista()
+    migs = lista_rapida()
+    for m in migs:
+        if m["huerfana"]:
+            ui.warn(f"{m['id']} esta aplicada en la base pero no existe en el codigo.")
     filas = []
     for m in migs:
         aplicada = m.get("applied")

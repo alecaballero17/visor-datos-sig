@@ -20,6 +20,13 @@ DOTNET_EXTRAS = ([r"C:\Program Files\dotnet\dotnet.exe"] if ES_WINDOWS
 LOCALDB_EXTRAS = [rf"C:\Program Files\Microsoft SQL Server\{v}\Tools\Binn\SqlLocalDB.exe" for v in (170, 160, 150)]
 
 
+# Silencia el banner de bienvenida de .NET y no genera certificados HTTPS de desarrollo
+DOTNET_ENV = {"DOTNET_NOLOGO": "1", "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+              "DOTNET_SKIP_FIRST_TIME_EXPERIENCE": "1", "DOTNET_GENERATE_ASPNET_CERTIFICATE": "false"}
+for _k, _v in DOTNET_ENV.items():
+    os.environ.setdefault(_k, _v)
+
+
 def which(nombre: str, extras: Sequence[str] = ()) -> str | None:
     """Busca un ejecutable en PATH y luego en rutas conocidas."""
     r = shutil.which(nombre)
@@ -113,7 +120,7 @@ def run(cmd: Sequence[str], cwd: Path | str | None = None, env: Mapping[str, str
         _mostrar(cmd)
     usuario = usuario_original() if como_usuario else None
     if usuario:
-        extra = [f"{k}={v}" for k, v in (env or {}).items()]
+        extra = [f"{k}={v}" for k, v in {**DOTNET_ENV, **(env or {})}.items()]
         cmd = ["sudo", "-u", usuario, "-H", "env", *extra, *cmd]
     try:
         p = subprocess.run(

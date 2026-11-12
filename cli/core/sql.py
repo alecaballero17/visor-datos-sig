@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import socket
+import time
 from pathlib import Path
 
 from . import env, shell, ui
@@ -25,12 +27,89 @@ def sqlcmd() -> str:
                           "Instalelo con: arquis deps instalar  (Linux: paquete mssql-tools18)")
 
 
+# -- alcance rapido ----------------------------------------------------------------
+# sqlcmd tarda lo que diga -l (antes 30 s) en rendirse si no hay servidor. Antes de
+# llamarlo se prueba el puerto TCP (1.5 s) y se falla al instante con un mensaje util.
+_ALCANZABLE: dict[str, tuple[bool, str]] = {}
+
+
+def destino_tcp(servidor: str) -> tuple[str, int] | None:
+    """(host, puerto) del servidor; None si es LocalDB / instancia con nombre (puerto dinamico)."""
+    servidor = servidor.strip()
+    if servidor.lower().startswith(("(localdb)", "np:", "lpc:")) or "\\" in servidor:
+        return None
+    host, _, puerto = re.sub(r"^tcp:", "", servidor, flags=re.I).partition(",")
+    host = "127.0.0.1" if host.lower() in (".", "(local)", "localhost") else host
+    return host, int(puerto or 1433)
+
+
+def alcanzable(cfg: dict[str, str] | None = None, usar_cache: bool = True) -> tuple[bool, str]:
+    """¿Hay algo escuchando en el servidor SQL configurado? (no valida usuario/clave)."""
+    cfg = cfg or env.cargar()
+    servidor = cfg["DB_SERVER"]
+    if usar_cache and servidor in _ALCANZABLE:
+        return _ALCANZABLE[servidor]
+    destino = destino_tcp(servidor)
+    if destino is None:
+        r = (True, servidor)
+    else:
+        try:
+            with socket.create_connection(destino, timeout=1.5):
+                r = (True, f"{destino[0]}:{destino[1]}")
+        except OSError:
+            r = (False, f"nada responde en {destino[0]}:{destino[1]}")
+    _ALCANZABLE[servidor] = r
+    return r
+
+
+def olvidar_alcance() -> None:
+    _ALCANZABLE.clear()
+
+
+def ayuda_sin_servidor(cfg: dict[str, str] | None = None) -> str:
+    cfg = cfg or env.cargar()
+    if cfg["DB_SERVER"].lower().startswith("(localdb)"):
+        return "Inicie LocalDB: arquis bd servidor localdb-iniciar"
+    opciones = ["arquis bd servidor instalar        (instalar SQL Server: Docker o nativo)"]
+    if shell.which("docker"):
+        opciones.insert(0, "arquis bd servidor docker-iniciar  (si ya creo el contenedor)")
+    if not shell.ES_WINDOWS and shell.which("systemctl") and shell.salida(["systemctl", "list-unit-files", "mssql-server.service"]):
+        opciones.insert(0, "arquis bd servidor mssql-reiniciar (servicio instalado pero detenido)")
+    opciones.append("arquis entorno editar               (si el servidor es otro: DB_SERVER)")
+    return "Opciones:\n    " + "\n    ".join(opciones)
+
+
+def asegurar_servidor(cfg: dict[str, str] | None = None) -> None:
+    """Falla al instante, con indicaciones, si SQL Server no responde."""
+    cfg = cfg or env.cargar()
+    bien, detalle = alcanzable(cfg)
+    if not bien:
+        raise ui.Fallo(f"SQL Server no esta disponible ({cfg['DB_SERVER']}): {detalle}.\n  {ayuda_sin_servidor(cfg)}")
+
+
+def _resumir_error(texto: str) -> str:
+    """Traduce los errores tipicos de sqlcmd a algo accionable."""
+    t = texto.lower()
+    if "login failed" in t or "error de inicio de sesi" in t:
+        cuenta = "DB_ADMIN_USER / DB_ADMIN_PASSWORD" if env.get("DB_ADMIN_USER") else "DB_USER / DB_PASSWORD"
+        return f"Usuario o contrasena incorrectos ({cuenta}). Corrija con: arquis entorno editar"
+    if "cannot open database" in t or "no se puede abrir la base" in t:
+        return f"La base {env.get('DB_NAME')} no existe. Creela con: arquis bd crear"
+    if "certificate" in t or "certificado" in t:
+        return "Certificado del servidor no confiable: DB_TRUST_CERT=true (arquis entorno set)"
+    if "login timeout" in t or "tiempo de espera" in t or "0x2749" in t or "network-related" in t:
+        return "SQL Server no responde. " + ayuda_sin_servidor()
+    return ""
+
+
 def _args(base: str | None, cfg: dict[str, str]) -> list[str]:
-    args = [sqlcmd(), "-S", cfg["DB_SERVER"], "-b", "-I", "-l", "30", "-f", "i:65001,o:65001"]
+    asegurar_servidor(cfg)
+    args = [sqlcmd(), "-S", cfg["DB_SERVER"], "-b", "-I", "-l", "8", "-f", "i:65001,o:65001"]
     if base:
         args += ["-d", base]
     if cfg.get("DB_AUTH", "sql").lower() == "sql":
-        args += ["-U", cfg.get("DB_USER", ""), "-P", cfg.get("DB_PASSWORD", "")]
+        usuario, clave = env.credenciales(cfg, admin=True)
+        args += ["-U", usuario, "-P", clave]
     else:
         args.append("-E")
     if env.es_verdad("DB_TRUST_CERT", cfg) and _soporta_C():
@@ -59,7 +138,7 @@ def ejecutar(consulta: str, base: str | None = "__default__", mostrar: bool = Tr
     if mostrar and texto:
         print(texto)
     if check and p.returncode != 0:
-        raise ui.Fallo("Error SQL:\n" + texto[-2000:])
+        raise ui.Fallo(_resumir_error(texto) or ("Error SQL:\n" + texto[-2000:]))
     return texto
 
 
@@ -86,7 +165,8 @@ def filas(consulta: str, base: str | None = "__default__") -> list[list[str]]:
     args = _args(base, cfg) + ["-Q", q, "-h", "-1", "-W", "-s", SEP, "-w", "65535"]
     p = shell.run(args, capturar=True, silencioso=True, check=False)
     if p.returncode != 0:
-        raise ui.Fallo("Error SQL:\n" + ((p.stdout or "") + (p.stderr or "")).strip()[-2000:])
+        texto = ((p.stdout or "") + (p.stderr or "")).strip()
+        raise ui.Fallo(_resumir_error(texto) or ("Error SQL:\n" + texto[-2000:]))
     res = []
     for linea in (p.stdout or "").splitlines():
         if not linea.strip():
