@@ -63,7 +63,7 @@ ESQUEMA: list[Variable] = [
     Variable("LOG_LEVEL", "Information", "Nivel de log", "Aplicacion", avanzada=True,
              opciones=("Trace", "Debug", "Information", "Warning", "Error"), usa="Logging:LogLevel:Default"),
     # ── Base de datos ───────────────────────────────────────────────────────
-    Variable("DB_SERVER", _por_so("localhost", r"(localdb)\MSSQLLocalDB"), "Servidor SQL Server (host[,puerto])",
+    Variable("DB_SERVER", _por_so("127.0.0.1", r"(localdb)\MSSQLLocalDB"), "Servidor SQL Server (host[,puerto])",
              "Base de datos", usa="ConnectionStrings:DefaultConnection"),
     Variable("DB_NAME", "VisorDatosSIG", "Nombre de la base", "Base de datos", usa="ConnectionStrings:DefaultConnection"),
     Variable("DB_AUTH", _por_so("sql", "windows"), "Autenticacion", "Base de datos", opciones=("sql", "windows"),
@@ -234,9 +234,16 @@ def credenciales(cfg: dict[str, str] | None = None, admin: bool = False) -> tupl
     return cfg.get("DB_USER", ""), cfg.get("DB_PASSWORD", "")
 
 
+def servidor_sql(servidor: str) -> str:
+    """En Linux 'localhost' resuelve primero a ::1 y SQL Server solo escucha en IPv4: usar 127.0.0.1."""
+    if ES_WINDOWS:
+        return servidor
+    return re.sub(r"^(tcp:)?localhost(?=$|[,\\])", r"\g<1>127.0.0.1", servidor.strip(), flags=re.I)
+
+
 def cadena_conexion(cfg: dict[str, str] | None = None, base: str | None = None, admin: bool = False) -> str:
     cfg = cfg or cargar()
-    partes = [f"Server={cfg['DB_SERVER']}", f"Database={base or cfg['DB_NAME']}"]
+    partes = [f"Server={servidor_sql(cfg['DB_SERVER'])}", f"Database={base or cfg['DB_NAME']}"]
     if cfg.get("DB_AUTH", "sql").lower() == "sql":
         usuario, clave = credenciales(cfg, admin)
         partes += [f"User Id={usuario}", f"Password={clave}"]

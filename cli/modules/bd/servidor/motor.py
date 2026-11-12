@@ -46,7 +46,7 @@ def docker_crear() -> None:
                "-e", f"MSSQL_MEMORY_LIMIT_MB={memoria}",
                "-p", f"127.0.0.1:{puerto}:1433", "-v", f"{VOLUMEN}:/var/opt/mssql", IMAGEN], silencioso=True)
     ui.info(f"Contenedor {CONTENEDOR} creado (solo escucha en 127.0.0.1:{puerto}).")
-    cfg["DB_SERVER"] = f"localhost,{puerto}" if puerto != "1433" else "localhost"
+    cfg["DB_SERVER"] = f"127.0.0.1,{puerto}" if puerto != "1433" else "127.0.0.1"
     _guardar_admin(cfg, clave)
     _esperar()
     _login_app()
@@ -83,15 +83,33 @@ def _login_app() -> None:
         ui.warn(f"No se pudo crear el login de la app todavia: {e}")
 
 
-def _esperar(segundos: int = 90) -> None:
-    ui.info("Esperando a que SQL Server acepte conexiones...")
-    for _ in range(segundos // 3):
-        bien, detalle = sql.probar()
-        if bien:
-            ui.ok(f"SQL Server listo: {detalle}")
-            return
-        time.sleep(3)
-    ui.warn("SQL Server aun no responde; revise: arquis bd servidor docker-logs")
+def _esperar(segundos: int = 120) -> bool:
+    """Espera a que SQL Server conteste a una consulta real, mostrando el avance."""
+    import sys
+    sql.olvidar_alcance()
+    inicio = time.monotonic()
+    ultimo = ""
+    while (t := int(time.monotonic() - inicio)) < segundos:
+        if sql.alcanzable(usar_cache=False)[0]:
+            bien, detalle = sql.probar()
+            if bien:
+                if sys.stdout.isatty():
+                    print()
+                ui.ok(f"SQL Server listo ({t} s): {detalle}")
+                return True
+            ultimo = " ".join(detalle.split())
+            if "contrasena incorrect" in ultimo.lower():
+                break                       # no es cuestion de esperar
+            estado = "puerto abierto, aun no contesta"
+        else:
+            estado = "puerto cerrado"
+        _linea_temporal(f"· Esperando a SQL Server... {t:>3} s  ({estado})")
+        time.sleep(2)
+    if sys.stdout.isatty():
+        print()
+    ui.warn(f"SQL Server no contesto en {segundos} s. {ultimo[:200]}")
+    ui.dim("    Diagnostico: arquis bd servidor diagnostico")
+    return False
 
 
 def docker_iniciar() -> None:
@@ -352,7 +370,7 @@ def _arrancar(limite: int = 180) -> bool:
 
 
 def _conecta_con(cfg: dict[str, str], usuario: str, clave: str) -> bool:
-    prueba = dict(cfg, DB_SERVER="localhost", DB_AUTH="sql", DB_ADMIN_USER=usuario, DB_ADMIN_PASSWORD=clave)
+    prueba = dict(cfg, DB_SERVER="127.0.0.1", DB_AUTH="sql", DB_ADMIN_USER=usuario, DB_ADMIN_PASSWORD=clave)
     sql.olvidar_alcance()
     try:
         r = shell.run(sql._args("master", prueba) + ["-Q", "SET NOCOUNT ON; SELECT 1"],
@@ -396,7 +414,7 @@ def _configurar_nativo() -> None:
                     {"MSSQL_PID": "Express" if edicion == 0 else "Developer"}, 360)
         _detener_servicio()   # aplicar network.ipaddress
         _arrancar()
-    cfg["DB_SERVER"] = "localhost"
+    cfg["DB_SERVER"] = "127.0.0.1"
     _guardar_admin(cfg, clave)
     sql.olvidar_alcance()
     _esperar()
