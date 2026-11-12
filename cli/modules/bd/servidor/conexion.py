@@ -90,6 +90,46 @@ def info_servidor() -> None:
     ui.tabla(filas, ["Propiedad", "Valor"])
 
 
+def _crear_login(login: str, clave: str, base: str) -> None:
+    sql.ejecutar(f"""
+        IF SUSER_ID(N'{sql.lit(login)}') IS NULL
+            CREATE LOGIN {sql.ident(login)} WITH PASSWORD = N'{sql.lit(clave)}', CHECK_POLICY = ON, DEFAULT_DATABASE = {sql.ident(base)};
+        ELSE ALTER LOGIN {sql.ident(login)} WITH PASSWORD = N'{sql.lit(clave)}';""", base="master", mostrar=False)
+    # db_owner SOLO en su base: el backend aplica las migraciones al arrancar (Database.Migrate)
+    sql.ejecutar(f"""
+        IF USER_ID(N'{sql.lit(login)}') IS NULL CREATE USER {sql.ident(login)} FOR LOGIN {sql.ident(login)};
+        ALTER ROLE db_owner ADD MEMBER {sql.ident(login)};""", base=base, mostrar=False)
+
+
+def estado_login_app() -> tuple[bool, str]:
+    """¿El usuario de la app (DB_USER) existe y tiene acceso a la base?"""
+    cfg = env.cargar()
+    usuario = cfg.get("DB_USER", "")
+    admin = cfg.get("DB_ADMIN_USER", "")
+    if cfg.get("DB_AUTH") != "sql" or not admin or usuario in ("", admin):
+        return True, f"la app usa la misma cuenta ({usuario or 'Windows'})"
+    existe = sql.escalar(f"SELECT CASE WHEN SUSER_ID(N'{sql.lit(usuario)}') IS NULL THEN 0 ELSE 1 END", base="master")
+    if existe != "1":
+        return False, f"el login '{usuario}' no existe"
+    acceso = sql.escalar(f"SELECT CASE WHEN USER_ID(N'{sql.lit(usuario)}') IS NULL THEN 0 ELSE 1 END")
+    if acceso != "1":
+        return False, f"'{usuario}' no tiene acceso a la base {cfg['DB_NAME']}"
+    return True, usuario
+
+
+def asegurar_login_app() -> None:
+    """Crea (o actualiza la contrasena de) el login de la app con los datos del .env."""
+    cfg = env.cargar()
+    usuario, admin = cfg.get("DB_USER", ""), cfg.get("DB_ADMIN_USER", "")
+    if cfg.get("DB_AUTH") != "sql" or not admin or usuario in ("", admin):
+        ui.info("La app usa la cuenta administradora; no hace falta un login aparte.")
+        return
+    from cli.modules.bd import admin as bd_admin
+    bd_admin.crear()
+    _crear_login(usuario, cfg["DB_PASSWORD"], cfg["DB_NAME"])
+    ui.ok(f"Login '{usuario}' listo con acceso a {cfg['DB_NAME']} (contrasena del .env).")
+
+
 def crear_login_app() -> None:
     """Crea un login SQL con permisos minimos (db_datareader/writer/ddladmin) para produccion."""
     cfg = env.cargar()
@@ -98,18 +138,12 @@ def crear_login_app() -> None:
     if len(clave) < 8:
         raise ui.Fallo("Contrasena demasiado corta.")
     base = cfg["DB_NAME"]
-    sql.ejecutar(f"""
-        IF SUSER_ID(N'{sql.lit(login)}') IS NULL
-            CREATE LOGIN {sql.ident(login)} WITH PASSWORD = N'{sql.lit(clave)}', CHECK_POLICY = ON;
-        ELSE ALTER LOGIN {sql.ident(login)} WITH PASSWORD = N'{sql.lit(clave)}';""", base="master", mostrar=False)
-    sql.ejecutar(f"""
-        IF USER_ID(N'{sql.lit(login)}') IS NULL CREATE USER {sql.ident(login)} FOR LOGIN {sql.ident(login)};
-        ALTER ROLE db_datareader ADD MEMBER {sql.ident(login)};
-        ALTER ROLE db_datawriter ADD MEMBER {sql.ident(login)};
-        ALTER ROLE db_ddladmin ADD MEMBER {sql.ident(login)};
-        GRANT EXECUTE TO {sql.ident(login)};""", base=base, mostrar=False)
+    _crear_login(login, clave, base)
     ui.ok(f"Login '{login}' con acceso a {base}.")
     if ui.confirmar("¿Guardar en .env como credencial de la aplicacion (DB_AUTH=sql)?"):
+        if not cfg.get("DB_ADMIN_USER") and cfg.get("DB_USER") and cfg["DB_USER"] != login:
+            # la cuenta anterior pasa a ser la administradora de la CLI
+            cfg.update(DB_ADMIN_USER=cfg["DB_USER"], DB_ADMIN_PASSWORD=cfg.get("DB_PASSWORD", ""))
         cfg.update(DB_AUTH="sql", DB_USER=login, DB_PASSWORD=clave)
         env.escribir(cfg)
         ui.ok(".env actualizado.")

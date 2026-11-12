@@ -35,7 +35,7 @@ def docker_crear() -> None:
         docker_iniciar()
         return
     cfg = env.cargar()
-    clave = cfg["DB_PASSWORD"] if cfg["DB_USER"] == "sa" and cfg["DB_PASSWORD"] else _clave_sa()
+    clave = _clave_admin(cfg)
     puerto = ui.preguntar("Puerto en el host", "1433")
     memoria = ui.preguntar("Limite de memoria de SQL Server (MB)", "2048")
     shell.run([*d, "run", "-d", "--name", CONTENEDOR, "--restart", "unless-stopped",
@@ -43,11 +43,41 @@ def docker_crear() -> None:
                "-e", f"MSSQL_MEMORY_LIMIT_MB={memoria}",
                "-p", f"127.0.0.1:{puerto}:1433", "-v", f"{VOLUMEN}:/var/opt/mssql", IMAGEN], silencioso=True)
     ui.info(f"Contenedor {CONTENEDOR} creado (solo escucha en 127.0.0.1:{puerto}).")
-    cfg.update(DB_SERVER=f"localhost,{puerto}" if puerto != "1433" else "localhost", DB_AUTH="sql",
-               DB_USER="sa", DB_PASSWORD=clave, DB_TRUST_CERT="true")
-    env.escribir({k: v for k, v in cfg.items() if k in env.leer() or k.startswith("DB_")})
-    ui.ok(".env actualizado con la conexion al contenedor.")
+    cfg["DB_SERVER"] = f"localhost,{puerto}" if puerto != "1433" else "localhost"
+    _guardar_admin(cfg, clave)
     _esperar()
+    _login_app()
+
+
+def _clave_admin(cfg: dict[str, str]) -> str:
+    """Reutiliza la contrasena de 'sa' si ya esta en el .env; si no, genera una."""
+    if cfg.get("DB_ADMIN_USER") == "sa" and cfg.get("DB_ADMIN_PASSWORD"):
+        return cfg["DB_ADMIN_PASSWORD"]
+    if cfg.get("DB_USER") == "sa" and cfg.get("DB_PASSWORD"):
+        return cfg["DB_PASSWORD"]
+    return _clave_sa()
+
+
+def _guardar_admin(cfg: dict[str, str], clave: str) -> None:
+    """'sa' queda como cuenta administradora de la CLI; la app conserva su propio usuario."""
+    cfg.update(DB_AUTH="sql", DB_TRUST_CERT="true", DB_ADMIN_USER="sa", DB_ADMIN_PASSWORD=clave)
+    if not cfg.get("DB_USER") or cfg["DB_USER"] == "sa":
+        cfg.update(DB_USER="sa", DB_PASSWORD=clave)
+    elif not cfg.get("DB_PASSWORD"):
+        from cli.modules.entorno.env_file import _generar_clave
+        cfg["DB_PASSWORD"] = _generar_clave()
+    env.escribir(cfg)
+    ui.ok("Conexion guardada en el .env (administradora: sa" +
+          (f"; la app usara '{cfg['DB_USER']}')." if cfg["DB_USER"] != "sa" else ")."))
+
+
+def _login_app() -> None:
+    """Crea la base y el login de la app si la app no usa 'sa'."""
+    from . import conexion
+    try:
+        conexion.asegurar_login_app()
+    except ui.Fallo as e:
+        ui.warn(f"No se pudo crear el login de la app todavia: {e}")
 
 
 def _esperar(segundos: int = 90) -> None:
@@ -169,7 +199,7 @@ def nativo_instalar() -> None:
         raise ui.Fallo("Gestor de paquetes no soportado: use Docker (bd servidor docker-crear).")
 
     cfg = env.cargar()
-    clave = cfg["DB_PASSWORD"] if cfg["DB_USER"] == "sa" and cfg["DB_PASSWORD"] else _clave_sa()
+    clave = _clave_admin(cfg)
     edicion = ui.elegir("Edicion", ["Express (gratis, hasta 10 GB por base)", "Developer (gratis, no produccion)"], 0)
     shell.run(shell.sudo(["env", f"MSSQL_SA_PASSWORD={clave}", f"MSSQL_PID={'Express' if edicion == 0 else 'Developer'}",
                           "ACCEPT_EULA=Y", "/opt/mssql/bin/mssql-conf", "-n", "setup"]), silencioso=True)
@@ -177,10 +207,11 @@ def nativo_instalar() -> None:
     shell.run(shell.sudo(["/opt/mssql/bin/mssql-conf", "set", "network.ipaddress", "127.0.0.1"]), check=False, capturar=True)
     shell.run(shell.sudo(["systemctl", "enable", "--now", "mssql-server"]), check=False)
     shell.run(shell.sudo(["systemctl", "restart", "mssql-server"]), check=False)
-    cfg.update(DB_SERVER="localhost", DB_AUTH="sql", DB_USER="sa", DB_PASSWORD=clave, DB_TRUST_CERT="true")
-    env.escribir(cfg)
-    ui.ok("SQL Server instalado (solo escucha en 127.0.0.1). Conexion guardada en el .env.")
+    cfg["DB_SERVER"] = "localhost"
+    _guardar_admin(cfg, clave)
+    ui.ok("SQL Server instalado (solo escucha en 127.0.0.1).")
     _esperar()
+    _login_app()
 
 
 def instalar() -> None:

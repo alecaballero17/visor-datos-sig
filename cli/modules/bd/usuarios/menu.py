@@ -2,7 +2,7 @@ from cli.core.menu import Menu
 
 from . import usuarios
 
-MENU = Menu("usuarios", "Usuarios y roles", "Cuentas del sistema (PBKDF2 como el backend)", orden=60)
+MENU = Menu("usuarios", "Usuarios y roles", "Cuentas del sistema (PBKDF2 como el backend)", orden=60, requiere=("base",))
 MENU.agregar("listar", "Listar usuarios", usuarios.listar)
 MENU.agregar("crear", "Crear usuario", usuarios.crear)
 MENU.agregar("clave", "Restablecer contrasena", usuarios.cambiar_clave)

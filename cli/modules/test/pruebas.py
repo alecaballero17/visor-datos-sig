@@ -27,8 +27,9 @@ def realtime() -> bool:
 
 def compilacion() -> bool:
     """La solucion compila en Release."""
-    from cli.core.paths import SOLUTION
-    return shell.run([shell.dotnet(), "build", SOLUTION, "-c", "Release", "--nologo", "-v", "q"], check=False).returncode == 0
+    from cli.core.paths import proyectos_dotnet
+    return all(shell.run([shell.dotnet(), "build", p, "-c", "Release", "--nologo", "-v", "q"], check=False,
+                         como_usuario=True).returncode == 0 for p in proyectos_dotnet())
 
 
 def flutter_test() -> bool:

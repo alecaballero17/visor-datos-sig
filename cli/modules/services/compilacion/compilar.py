@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from cli.core import shell, ui
-from cli.core.paths import ARTIFACTS, BACKEND, FRONTEND, MIGRADOR, ROOT, SOLUTION, rel
+from cli.core.paths import ARTIFACTS, BACKEND, FRONTEND, MIGRADOR, ROOT, proyectos_dotnet, rel
 
 PROYECTOS = {"backend": BACKEND, "frontend": FRONTEND}
 
@@ -16,7 +16,9 @@ def _config() -> str:
 
 def solucion() -> None:
     """dotnet build de toda la solucion."""
-    shell.run([shell.dotnet(), "build", SOLUTION, "-c", _config(), "--nologo"], como_usuario=True)
+    config = _config()
+    for proyecto in proyectos_dotnet():
+        shell.run([shell.dotnet(), "build", proyecto, "-c", config, "--nologo"], como_usuario=True)
     ui.ok("Solucion compilada.")
 
 
@@ -75,7 +77,8 @@ def migrador() -> None:
 
 def limpiar() -> None:
     """dotnet clean y borra carpetas bin/ y obj/."""
-    shell.run([shell.dotnet(), "clean", SOLUTION, "--nologo", "-v", "q"], check=False)
+    for proyecto in proyectos_dotnet():
+        shell.run([shell.dotnet(), "clean", proyecto, "--nologo", "-v", "q"], check=False, como_usuario=True)
     n = 0
     for carpeta in list((ROOT / "src").rglob("bin")) + list((ROOT / "src").rglob("obj")) + list((ROOT / "tests").rglob("bin")) + list((ROOT / "tests").rglob("obj")):
         if carpeta.is_dir():
@@ -87,7 +90,7 @@ def limpiar() -> None:
 def formato() -> None:
     """dotnet format (verificar o aplicar)."""
     aplicar = ui.elegir("Accion", ["Solo verificar", "Aplicar formato"]) == 1
-    cmd = [shell.dotnet(), "format", SOLUTION]
+    cmd = [shell.dotnet(), "format", proyectos_dotnet()[0]]
     if not aplicar:
         cmd.append("--verify-no-changes")
     r = shell.run(cmd, check=False)
@@ -96,9 +99,9 @@ def formato() -> None:
 
 def paquetes_obsoletos() -> None:
     """dotnet list package --outdated."""
-    shell.run([shell.dotnet(), "list", SOLUTION, "package", "--outdated"], check=False)
+    [shell.run([shell.dotnet(), "list", p_, "package", "--outdated"], check=False) for p_ in proyectos_dotnet()]
 
 
 def vulnerabilidades() -> None:
     """dotnet list package --vulnerable --include-transitive."""
-    shell.run([shell.dotnet(), "list", SOLUTION, "package", "--vulnerable", "--include-transitive"], check=False)
+    [shell.run([shell.dotnet(), "list", p_, "package", "--vulnerable", "--include-transitive"], check=False) for p_ in proyectos_dotnet()]

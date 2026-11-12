@@ -71,6 +71,10 @@ ESQUEMA: list[Variable] = [
     Variable("DB_USER", _por_so("sa", ""), "Usuario SQL (DB_AUTH=sql)", "Base de datos", usa="ConnectionStrings:DefaultConnection"),
     Variable("DB_PASSWORD", "", "Contrasena SQL (DB_AUTH=sql)", "Base de datos", secreto=True,
              usa="ConnectionStrings:DefaultConnection"),
+    Variable("DB_ADMIN_USER", "", "Cuenta administradora que usa la CLI (crear base, migrar, respaldar); vacio = DB_USER",
+             "Base de datos", avanzada=True),
+    Variable("DB_ADMIN_PASSWORD", "", "Contrasena de la cuenta administradora", "Base de datos", secreto=True,
+             avanzada=True),
     Variable("DB_TRUST_CERT", "true", "Aceptar certificado autofirmado del servidor", "Base de datos",
              opciones=("true", "false"), avanzada=True, usa="TrustServerCertificate"),
     # ── Backend ─────────────────────────────────────────────────────────────
@@ -95,7 +99,8 @@ ESQUEMA: list[Variable] = [
     Variable("WEB_DOMAIN", "_", "Dominio del visor (ej. sig.midominio.com; _ = cualquiera / IP)", "Publicacion"),
     Variable("API_DOMAIN", "", "Subdominio de la API para la app movil (ej. api.midominio.com; vacio = solo WEB_DOMAIN/api)",
              "Publicacion"),
-    Variable("HTTPS", "none", "Certificado HTTPS", "Publicacion", opciones=("none", "letsencrypt", "manual")),
+    Variable("HTTPS", "none", "Certificado HTTPS (cloudflare = certificado de origen, si el DNS pasa por Cloudflare)",
+             "Publicacion", opciones=("none", "letsencrypt", "cloudflare", "manual")),
     Variable("LETSENCRYPT_EMAIL", "", "Correo para avisos de Let's Encrypt (HTTPS=letsencrypt)", "Publicacion"),
     Variable("NGINX_SSL_CERT", "", "Certificado (fullchain.pem); lo completa Let's Encrypt", "Publicacion", avanzada=True),
     Variable("NGINX_SSL_KEY", "", "Clave privada (privkey.pem); la completa Let's Encrypt", "Publicacion", avanzada=True),
@@ -221,11 +226,20 @@ def ruta_proyecto(valor: str) -> Path:
 
 
 # -- traducciones a .NET ----------------------------------------------------------
-def cadena_conexion(cfg: dict[str, str] | None = None, base: str | None = None) -> str:
+def credenciales(cfg: dict[str, str] | None = None, admin: bool = False) -> tuple[str, str]:
+    """(usuario, contrasena). Con admin=True usa DB_ADMIN_* si estan definidas (tareas de la CLI)."""
+    cfg = cfg or cargar()
+    if admin and cfg.get("DB_ADMIN_USER"):
+        return cfg["DB_ADMIN_USER"], cfg.get("DB_ADMIN_PASSWORD", "")
+    return cfg.get("DB_USER", ""), cfg.get("DB_PASSWORD", "")
+
+
+def cadena_conexion(cfg: dict[str, str] | None = None, base: str | None = None, admin: bool = False) -> str:
     cfg = cfg or cargar()
     partes = [f"Server={cfg['DB_SERVER']}", f"Database={base or cfg['DB_NAME']}"]
     if cfg.get("DB_AUTH", "sql").lower() == "sql":
-        partes += [f"User Id={cfg.get('DB_USER', '')}", f"Password={cfg.get('DB_PASSWORD', '')}"]
+        usuario, clave = credenciales(cfg, admin)
+        partes += [f"User Id={usuario}", f"Password={clave}"]
     else:
         partes.append("Trusted_Connection=True")
     partes.append(f"TrustServerCertificate={'True' if es_verdad('DB_TRUST_CERT', cfg) else 'False'}")

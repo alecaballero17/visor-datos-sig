@@ -145,6 +145,19 @@ def _p_base() -> tuple[str, str]:
     return (OK, nombre) if sql.existe_base() else (FALTA, f"la base {nombre} no existe")
 
 
+def _p_login() -> tuple[str, str]:
+    if _p_base()[0] != OK:
+        return NA, "la base no existe"
+    from cli.modules.bd.servidor.conexion import estado_login_app
+    bien, detalle = estado_login_app()
+    return (OK if bien else FALTA), detalle
+
+
+def _a_login() -> None:
+    from cli.modules.bd.servidor.conexion import asegurar_login_app
+    asegurar_login_app()
+
+
 def _migraciones_codigo() -> list[str]:
     carpeta = BACKEND / "Migrations"
     return sorted(p.stem for p in carpeta.glob("*.cs")
@@ -259,7 +272,7 @@ def _a_nginx() -> None:
 
 def _a_https() -> None:
     from cli.modules.services.nginx import nginx
-    nginx.certificado()
+    nginx.https()
 
 
 def _a_servicios() -> None:
@@ -294,6 +307,7 @@ CHEQUEOS: list[Chequeo] = [
     Chequeo("ef", "dotnet-ef (migraciones)", _p_ef, _a_ef, "arquis deps ef"),
     Chequeo("sql", "SQL Server", _p_sql_rapido, _a_sql, "arquis bd servidor instalar"),
     Chequeo("base", "Base de datos", _p_base, _a_base, "arquis bd crear", rapido=False),
+    Chequeo("login", "Login SQL de la app", _p_login, _a_login, "arquis bd servidor login", rapido=False),
     Chequeo("migraciones", "Migraciones", _p_migraciones, _a_migraciones, "arquis bd migraciones aplicar", rapido=False),
     Chequeo("capas", "Capas SIG", _p_capas, _a_capas, "arquis bd capas importar", rapido=False),
     Chequeo("nginx", "nginx", _p_nginx, _a_nginx, "arquis services nginx dominios", solo_servidor=True),
@@ -309,13 +323,29 @@ def _aplicables(rapido: bool = False, servicios: bool = True) -> list[Chequeo]:
             if (servidor or not c.solo_servidor) and (c.rapido or not rapido) and (servicios or c.clave != "servicios")]
 
 
+def _progreso(texto: str = "") -> None:
+    """Linea temporal 'Revisando ...' (solo en terminal) para que nunca parezca colgado."""
+    import sys
+    if not sys.stdout.isatty():
+        return
+    inicio_linea = chr(13)
+    if texto:
+        sys.stdout.write(inicio_linea + "  " + ui.c(texto.ljust(70), ui.C.GRAY))
+    else:
+        sys.stdout.write(inicio_linea + " " * 90 + inicio_linea)
+    sys.stdout.flush()
+
+
 def _ejecutar(c: Chequeo) -> tuple[str, str]:
+    _progreso(f"· Revisando {c.titulo}...")
     try:
         return c.probar()
     except ui.Fallo as e:
         return FALTA, str(e).splitlines()[0][:120]
     except Exception as e:  # noqa: BLE001  (un chequeo nunca debe tumbar la CLI)
         return AVISO, f"no se pudo comprobar: {e}"[:120]
+    finally:
+        _progreso()
 
 
 _COLOR = {OK: ui.C.GREEN, FALTA: ui.C.RED, AVISO: ui.C.YELLOW, NA: ui.C.GRAY}
@@ -339,9 +369,9 @@ def revisar() -> bool:
     return True
 
 
-def preparar(servicios: bool = True) -> bool:
+def preparar(servicios: bool = True, omitir: tuple[str, ...] = ()) -> bool:
     """Arregla, en orden, todo lo que falte (pregunta antes de cada paso)."""
-    lista = _aplicables(servicios=servicios)
+    lista = [c for c in _aplicables(servicios=servicios) if c.clave not in omitir]
     arreglados, fallidos = [], []
     for i, c in enumerate(lista, 1):
         estado, detalle = _ejecutar(c)

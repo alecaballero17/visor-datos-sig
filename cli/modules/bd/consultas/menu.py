@@ -2,7 +2,7 @@ from cli.core.menu import Menu
 
 from . import consultas
 
-MENU = Menu("consultas", "Consultas y datos", "Consola SQL, conteos y exportacion", orden=50)
+MENU = Menu("consultas", "Consultas y datos", "Consola SQL, conteos y exportacion", orden=50, requiere=("base",))
 MENU.agregar("conteos", "Filas por tabla", consultas.conteos)
 MENU.agregar("tamanos", "Espacio por tabla", consultas.tamanos)
 MENU.agregar("consola", "Consola SQL interactiva", consultas.consola)

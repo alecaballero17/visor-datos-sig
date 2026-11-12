@@ -72,6 +72,7 @@ if [ -z "$PY" ]; then
   [ -n "$PY" ] || falla "No se pudo instalar Python 3.10 o superior."
 fi
 
+
 # ── 2. Entorno virtual ───────────────────────────────────────────────────────
 crear_venv() {
   rm -rf "$VENV"

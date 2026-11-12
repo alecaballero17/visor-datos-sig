@@ -88,7 +88,7 @@ def instalar() -> None:
     bundle = next(destino.glob("efbundle*"))
     if not shell.ES_WINDOWS:
         bundle.chmod(0o755)   # unzip no siempre conserva el bit de ejecucion
-    shell.run([str(bundle), "--connection", env.cadena_conexion()], silencioso=True)
+    shell.run([str(bundle), "--connection", env.cadena_conexion(admin=True)], silencioso=True)
     ui.ok("Migraciones aplicadas.")
     from ..bd.capas import importar
     if carpeta_shp().exists():
