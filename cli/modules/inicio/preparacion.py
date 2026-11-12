@@ -114,6 +114,9 @@ def _destino_sql(cfg: dict[str, str]) -> tuple[str, int] | None:
     return host, int(puerto or 1433)
 
 
+_SOLO_PUERTO = False   # True solo en el aviso al abrir el menu
+
+
 def _p_sql_rapido() -> tuple[str, str]:
     if not ENV_FILE.exists():
         return NA, "configure el .env primero"
@@ -123,9 +126,12 @@ def _p_sql_rapido() -> tuple[str, str]:
         return _p_sql()
     try:
         with socket.create_connection(destino, timeout=1.5):
-            return OK, f"{destino[0]}:{destino[1]} responde"
+            pass
     except OSError:
         return FALTA, f"nada escucha en {destino[0]}:{destino[1]}"
+    if _SOLO_PUERTO:
+        return OK, f"{destino[0]}:{destino[1]} responde"
+    return _p_sql()
 
 
 def _p_sql() -> tuple[str, str]:
@@ -135,7 +141,7 @@ def _p_sql() -> tuple[str, str]:
         bien, detalle = sql.probar()
     except ui.Fallo as e:
         return FALTA, str(e)[:120]
-    return (OK, detalle) if bien else (FALTA, (detalle.strip().splitlines() or ["sin conexion"])[-1][:120])
+    return (OK, detalle) if bien else (FALTA, " ".join(detalle.split())[:200] or "sin conexion")
 
 
 def _p_base() -> tuple[str, str]:
@@ -406,6 +412,8 @@ def preparar(servicios: bool = True, omitir: tuple[str, ...] = ()) -> bool:
 
 def aviso_inicial() -> None:
     """Chequeo rapido al abrir el menu (no consulta la base ni compila)."""
+    global _SOLO_PUERTO
+    _SOLO_PUERTO = True
     pendientes = [c.titulo for c in _aplicables(rapido=True) if _ejecutar(c)[0] == FALTA]
     if pendientes:
         ui.warn("Falta preparar: " + ", ".join(pendientes))
