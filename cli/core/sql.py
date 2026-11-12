@@ -130,7 +130,7 @@ def _soporta_C() -> bool:
     global _C_CACHE
     if _C_CACHE is None:
         ayuda = shell.salida([sqlcmd(), "-?"])
-        _C_CACHE = bool(re.search(r"(^|\s)-C\b", ayuda))
+        _C_CACHE = bool(re.search(r"(^|[\s\[])-C\b", ayuda))   # Linux: "[-C Trust Server Certificate]"
     return _C_CACHE
 
 
