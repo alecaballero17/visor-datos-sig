@@ -110,9 +110,27 @@ def puerto_abierto(puerto: int, host: str = "127.0.0.1") -> bool:
         return False
 
 
+def _peticion_salud(s: Servicio) -> tuple[urllib.request.Request, object]:
+    """nginx con HTTPS redirige el puerto 80 a https://<dominio>: se prueba directamente
+    https://127.0.0.1 con el Host del visor (certificado local, sin verificar: es la misma maquina)."""
+    if s.clave != "nginx":
+        return urllib.request.Request(s.url), None
+    cfg = env.cargar()
+    dominio = cfg.get("WEB_DOMAIN", "")
+    cabeceras = {"Host": dominio} if dominio and dominio != "_" else {}
+    if cfg.get("NGINX_SSL_CERT") and cfg.get("HTTPS", "none") != "none":
+        import ssl
+        contexto = ssl.create_default_context()
+        contexto.check_hostname = False
+        contexto.verify_mode = ssl.CERT_NONE
+        return urllib.request.Request("https://127.0.0.1" + s.salud, headers=cabeceras), contexto
+    return urllib.request.Request(s.url, headers=cabeceras), None
+
+
 def salud(s: Servicio, timeout: float = 3) -> tuple[bool, str]:
     try:
-        with urllib.request.urlopen(s.url, timeout=timeout) as r:
+        peticion, contexto = _peticion_salud(s)
+        with urllib.request.urlopen(peticion, timeout=timeout, context=contexto) as r:
             cuerpo = r.read(4096).decode("utf-8", "replace")
             ok = r.status == 200 and s.texto_salud in cuerpo
             return ok, f"HTTP {r.status}" + ("" if ok else " (respuesta inesperada)")
