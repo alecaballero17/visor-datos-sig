@@ -146,9 +146,12 @@ def _estado_servicio() -> str:
 
 def _detener_servicio() -> None:
     """Detiene mssql-server; si se queda atascado ('deactivating') lo mata."""
+    if _estado_servicio() in ("inactive", "failed", ""):
+        return
     try:
+        ui.info("Deteniendo mssql-server (si tarda mas de 30 s se fuerza)...")
         shell.run(shell.sudo(["systemctl", "stop", "mssql-server"]), check=False, capturar=True,
-                  silencioso=True, timeout=45)
+                  silencioso=True, timeout=30)
     except ui.Fallo:
         pass
     if _estado_servicio() not in ("inactive", "failed", ""):
@@ -163,9 +166,8 @@ def _detener_servicio() -> None:
 
 def servicio_reiniciar() -> None:
     _detener_servicio()
-    shell.run(shell.sudo(["systemctl", "start", "mssql-server"]), check=False, timeout=180)
-    sql.olvidar_alcance()
-    _esperar()
+    if _arrancar():
+        _esperar()
 
 
 def servicio_logs() -> None:
@@ -315,12 +317,38 @@ def _esperar_puerto_libre(segundos: int = 20) -> str:
     return ocupante
 
 
-def _arrancar() -> None:
+def _linea_temporal(texto: str) -> None:
+    import sys
+    if sys.stdout.isatty():
+        sys.stdout.write(chr(13) + "  " + texto[:110].ljust(110))
+        sys.stdout.flush()
+
+
+def _arrancar(limite: int = 180) -> bool:
+    """Arranca mssql-server SIN esperar a systemd (SQL Server 2025 puede no avisarle nunca que esta listo)
+    y comprueba el mismo si ya acepta conexiones, mostrando el avance."""
+    import sys
     shell.run(shell.sudo(["systemctl", "enable", "mssql-server"]), check=False, capturar=True, silencioso=True)
-    try:
-        shell.run(shell.sudo(["systemctl", "start", "mssql-server"]), check=False, timeout=180)
-    except ui.Fallo:
-        ui.warn("systemctl start tardo mas de 3 minutos.")
+    shell.run(shell.sudo(["systemctl", "start", "--no-block", "mssql-server"]), check=False)
+    sql.olvidar_alcance()
+    inicio = time.monotonic()
+    while (transcurrido := int(time.monotonic() - inicio)) < limite:
+        if sql.alcanzable(usar_cache=False)[0]:
+            if sys.stdout.isatty():
+                print()
+            ui.ok(f"SQL Server acepta conexiones ({transcurrido} s).")
+            return True
+        estado = _estado_servicio()
+        if estado == "failed":
+            break
+        ultima = (_leer_errorlog(1) or [""])[-1]
+        _linea_temporal(f"· Arrancando SQL Server... {transcurrido:>3} s  [{estado}]  {ultima[23:]}")
+        time.sleep(1)
+    if sys.stdout.isatty():
+        print()
+    ui.error(f"SQL Server no acepto conexiones en {limite} s (estado: {_estado_servicio()}).")
+    diagnostico()
+    return False
 
 
 def _conecta_con(cfg: dict[str, str], usuario: str, clave: str) -> bool:
@@ -349,9 +377,8 @@ def _configurar_nativo() -> None:
               check=False, capturar=True, silencioso=True)
     if _configurado():
         ui.info("SQL Server ya estaba configurado: se arranca y se comprueba la cuenta 'sa'.")
-        _arrancar()
-        sql.olvidar_alcance()
-        _esperar_tcp()
+        if not _arrancar():
+            raise ui.Fallo("SQL Server no arranco: revise el diagnostico de arriba.")
         clave_actual = cfg.get("DB_ADMIN_PASSWORD") if cfg.get("DB_ADMIN_USER", "sa") in ("", "sa") else ""
         if clave_actual and _conecta_con(cfg, "sa", clave_actual):
             clave = clave_actual
@@ -378,13 +405,6 @@ def _configurar_nativo() -> None:
         raise ui.Fallo("SQL Server no contesta con la cuenta 'sa' configurada. Revise el diagnostico.")
     ui.ok("SQL Server listo (solo escucha en 127.0.0.1).")
     _login_app()
-
-
-def _esperar_tcp(segundos: int = 90) -> None:
-    for _ in range(segundos):
-        if sql.alcanzable(usar_cache=False)[0]:
-            return
-        time.sleep(1)
 
 
 def _mssql_conf(accion: list[str], clave: str, mensaje: str, extra: dict[str, str] | None = None,
