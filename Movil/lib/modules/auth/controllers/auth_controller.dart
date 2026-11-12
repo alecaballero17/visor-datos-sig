@@ -31,6 +31,7 @@ class AuthController {
 
     try {
       await _authService.login(email, password);
+      passwordCtrl.clear();
       actualizar(() {
         isCargando = false;
         errorMessage = null;

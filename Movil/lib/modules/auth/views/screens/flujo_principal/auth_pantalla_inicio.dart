@@ -4,7 +4,7 @@ import '../../../../../shared/utils/ui_engine/string_modifiers.dart';
 import '../../../../../shared/utils/ui_engine/icon_modifiers.dart';
 
 import '../../../controllers/auth_controller.dart';
-import '../../../../mapa/views/screens/flujo_principal/mapa_pantalla_inicio.dart';
+import '../../../../mapa/views/screens/flujo_principal/bandeja_rutas_pantalla.dart';
 
 class AuthPantallaInicio extends StatefulWidget {
   const AuthPantallaInicio({super.key});
@@ -14,7 +14,13 @@ class AuthPantallaInicio extends StatefulWidget {
 }
 
 class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
-  static final AuthController controlador = AuthController();
+  final AuthController controlador = AuthController();
+
+  @override
+  void dispose() {
+    controlador.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,7 +103,7 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                             const Icon(Icons.badge_outlined, color: Color(0xFF1A73E8), size: 18),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: "Esta cuenta se registrará con perfil de Operador de Campo para uso exclusivo en la app móvil."
+                              child: "El registro no habilita el trabajo de campo. Un administrador debe asignar el perfil correspondiente."
                                   .texto(color: const Color(0xFF1F1F1F), size: 12),
                             ),
                           ],
@@ -147,10 +153,10 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                         if (controlador.isLogin) {
                           final success = await controlador.login(actualizar);
                           if (!context.mounted) return;
-                          if (success) {
+                          if (success && mounted) {
                             Navigator.pushReplacement(
                               context,
-                              MaterialPageRoute(builder: (context) => const MapaPantallaInicio()),
+                              MaterialPageRoute(builder: (context) => const BandejaRutasPantalla()),
                             );
                           }
                         } else {

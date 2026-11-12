@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/network/api_provider.dart';
-import '../screens/flujo_principal/navegacion_campo_pantalla.dart';
+import '../../services/navegacion_externa_service.dart';
 
 class VisorDatosBottomSheet extends StatefulWidget {
   final Map<String, dynamic> feature;
@@ -219,22 +219,15 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
                     icon: Icons.directions,
                     label: 'Cómo llegar',
                     color: const Color(0xFF1A73E8),
-                    onTap: () {
-                      if (lat != null && lng != null) {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => NavegacionCampoPantalla(
-                              rutaInicial: {
-                                'latitud': lat,
-                                'longitud': lng,
-                                'titulo': '$codigoFijo · $titular',
-                                'direccion': 'UV $uv - MZA $mza - Lote $nroLote',
-                              },
-                            ),
-                          ),
-                        );
+                    onTap: () async {
+                      if (lat == null || lng == null) return;
+                      try {
+                        await NavegacionExternaService().navegar(lat, lng);
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(e.toString())));
+                        }
                       }
                     },
                   ),

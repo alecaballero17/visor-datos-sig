@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:geolocator/geolocator.dart';
 import '../../../../../shared/utils/ui_engine/widget_modifiers.dart';
 
 import '../../../controllers/mapa_controller.dart';
 import '../../../services/tracking_gps_service.dart';
 import '../../widgets/visor_datos_bottom_sheet.dart';
-import 'navegacion_campo_pantalla.dart';
+import 'bandeja_rutas_pantalla.dart';
+import '../../../../auth/models/sesion_usuario.dart';
 import '../../../../busqueda/views/screens/flujo_principal/busqueda_pantalla_inicio.dart';
 import '../../../../auth/services/auth_service.dart';
-import '../../../../auth/views/screens/flujo_principal/auth_pantalla_inicio.dart';
 
 class MapaPantallaInicio extends StatefulWidget {
   const MapaPantallaInicio({super.key});
@@ -20,14 +19,13 @@ class MapaPantallaInicio extends StatefulWidget {
 }
 
 class _MapaPantallaInicioState extends State<MapaPantallaInicio> {
-  static final MapaController controlador = MapaController();
+  final MapaController controlador = MapaController();
   final MapController mapController = MapController();
 
   @override
   void initState() {
     super.initState();
     // 1. Iniciar transmisión telemática y solicitar permisos de GPS
-    TrackingGpsService().solicitarPermisosUbicacion();
     TrackingGpsService().iniciarTransmision();
 
     // 2. Cargar capas iniciales de San Ignacio de Velasco
@@ -43,28 +41,15 @@ class _MapaPantallaInicioState extends State<MapaPantallaInicio> {
   }
 
   Future<void> centrarEnMiUbicacion() async {
-    final concedido = await TrackingGpsService().solicitarPermisosUbicacion();
-    if (concedido) {
-      try {
-        final pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 4),
-          ),
-        );
-        mapController.move(LatLng(pos.latitude, pos.longitude), 17.0);
-      } catch (_) {
-        mapController.move(LatLng(TrackingGpsService().latitud, TrackingGpsService().longitud), 17.0);
-      }
+    final tracking = TrackingGpsService();
+    final exito = await tracking.solicitarPermisosUbicacion();
+    if (!mounted) return;
+    if (exito) {
+      mapController.move(LatLng(tracking.latitud, tracking.longitud), 17);
     } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Se requieren permisos de ubicación para centrar el mapa en tu posición.'),
-            backgroundColor: Color(0xFFD93025),
-          ),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(tracking.ultimoError ?? 'No se pudo obtener la ubicación. Reintente.'),
+      ));
     }
   }
 
@@ -182,23 +167,17 @@ class _MapaPantallaInicioState extends State<MapaPantallaInicio> {
                               color: Color(0xFF1A73E8),
                               shape: BoxShape.circle,
                             ),
-                            child: const Center(
+                            child: Center(
                               child: Text(
-                                "O",
+                                (SesionUsuario.actual.value?.nombre ?? "U").substring(0, 1),
                                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                               ),
                             ),
                           ),
                           onSelected: (val) async {
                             if (val == 'logout') {
-                              await AuthService().logout();
-                              if (context.mounted) {
-                                Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const AuthPantallaInicio()),
-                                  (route) => false,
-                                );
-                              }
+                              TrackingGpsService().limpiarSesion();
+                              try { await AuthService().logout(); } catch (_) {}
                             } else if (val == 'catastro') {
                               centrarEnCentroCatastral();
                             }
@@ -358,7 +337,7 @@ class _MapaPantallaInicioState extends State<MapaPantallaInicio> {
                           onTap: () {
                             Navigator.push(
                               context, 
-                              MaterialPageRoute(builder: (context) => const NavegacionCampoPantalla()),
+                              MaterialPageRoute(builder: (context) => const BandejaRutasPantalla()),
                             );
                           },
                         ),

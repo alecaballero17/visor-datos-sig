@@ -1,30 +1,43 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:movil/main.dart';
+import 'package:movil/modules/mapa/models/secuencia_atencion.dart';
+import 'package:movil/modules/auth/models/sesion_usuario.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  test('Respeta orden asignado aunque la lista llegue desordenada', () {
+    final puntos = [
+      {'id': 3, 'orden': 3, 'estado': 'Pendiente'},
+      {'id': 1, 'orden': 1, 'estado': 'Observado'},
+      {'id': 2, 'orden': 2, 'estado': 'Pendiente'},
+    ];
+    expect(siguientePunto(puntos)?['id'], 2);
+    expect(puntos.first['id'], 3); // No altera la respuesta original.
+  });
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  test('Al observar el objetivo se avanza sin volver a seleccionarlo', () {
+    final puntos = <Map<String, dynamic>>[
+      {'id': 1, 'orden': 1, 'estado': 'Pendiente'},
+      {'id': 2, 'orden': 2, 'estado': 'Pendiente'},
+    ];
+    siguientePunto(puntos)!['estado'] = 'Observado';
+    expect(siguientePunto(puntos)?['id'], 2);
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  test('Todos los estados terminales permiten avanzar', () {
+    final puntos = [
+      for (final estado in ['Completado', 'Ejecutado', 'Observado', 'Omitido'])
+        {'orden': 1, 'estado': estado},
+    ];
+    expect(puntos.every(puntoAtendido), isTrue);
+    expect(siguientePunto(puntos), isNull);
+    expect(siguientePunto([]), isNull);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  test('Identidad exige usuario real y conserva roles', () {
+    expect(() => SesionUsuario.fromJson({'nombre': 'Sin login'}), throwsFormatException);
+    final sesion = SesionUsuario.fromJson({
+      'usuario': 'empleado', 'nombre': 'Empleado de prueba', 'roles': ['Cortador'],
+    });
+    expect(sesion.usuario, 'empleado');
+    expect(sesion.roles, ['Cortador']);
   });
 }

@@ -1,6 +1,6 @@
 @inject HttpClient Http
 @inject IJSRuntime JS
-@implements IDisposable
+<RealtimeUpdates OnUpdate="CargarOperariosSilencioso" />
 
 <div class="drawer-view-container">
     <div class="d-flex justify-content-between align-items-center mb-3">
@@ -262,7 +262,7 @@
 
     private List<OperarioItemDto> operarios = new();
     private List<TrackingPosicionItemDto> operariosActivos = new();
-    private System.Threading.Timer? refreshTimer;
+
 
     private int TotalCortadores => operarios.Count(o => string.Equals(o.Rol, "Cortador", StringComparison.OrdinalIgnoreCase));
     private int TotalReconectores => operarios.Count(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase));
@@ -302,10 +302,7 @@
     protected override async Task OnInitializedAsync()
     {
         await CargarOperarios();
-        refreshTimer = new System.Threading.Timer(async _ =>
-        {
-            await InvokeAsync(CargarOperariosSilencioso);
-        }, null, 5000, 5000);
+
     }
 
     public async Task CargarOperarios()
@@ -390,10 +387,7 @@
         await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 18);
     }
 
-    public void Dispose()
-    {
-        refreshTimer?.Dispose();
-    }
+
 
     public class OperarioItemDto
     {

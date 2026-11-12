@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../../../modules/auth/models/sesion_usuario.dart';
 
 class AuthInterceptor extends Interceptor {
   // Almacenamiento en memoria del cookie de sesión (para pruebas simples)
@@ -37,6 +38,7 @@ class AuthInterceptor extends Interceptor {
     if (err.response?.statusCode == 401) {
       // Usuario no autorizado, borrar cookie
       sessionCookie = null;
+      SesionUsuario.actual.value = null;
     }
     super.onError(err, handler);
   }

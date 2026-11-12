@@ -35,6 +35,8 @@ artifacts/
 **/build/
 lib/generated_plugin_registrant.dart
 
+# AI generated files
+AGENTS.md
 
 app.*.symbols
 

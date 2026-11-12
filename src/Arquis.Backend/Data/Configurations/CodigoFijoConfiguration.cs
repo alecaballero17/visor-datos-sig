@@ -13,7 +13,7 @@ namespace Arquis.Backend.Data.Configurations {
             builder.Property(x => x.EstadoVerificado).HasDefaultValue(false);
             builder.HasIndex(x => x.IdLote);
             builder.HasOne(x => x.Lote).WithMany(l => l.CodigosFijos).HasForeignKey(x => x.IdLote);
-            builder.ToTable(t => t.HasCheckConstraint("CK_CodigosFijos_Estado", "Estado BETWEEN 1 AND 5"));
+            builder.ToTable(t => t.HasCheckConstraint("CK_CodigosFijos_Estado", "Estado BETWEEN 0 AND 5"));
         }
     }
 }

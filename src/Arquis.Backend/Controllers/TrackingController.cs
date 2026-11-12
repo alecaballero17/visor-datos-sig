@@ -73,7 +73,7 @@ namespace Arquis.Backend.Controllers
                         .OrderByDescending(p => p.Timestamp)
                         .FirstOrDefaultAsync();
 
-                    if (last != null)
+                    if (last != null && last.EnLinea && last.Timestamp >= DateTime.UtcNow.AddMinutes(-30))
                     {
                         _cache.ActualizarPosicion(last);
                         activos.Add(last);

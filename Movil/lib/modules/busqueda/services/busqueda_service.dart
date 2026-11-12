@@ -1,4 +1,4 @@
-import '../../../../core/network/api_provider.dart';
+import '../../../core/network/api_provider.dart';
 
 class BusquedaService {
   final ApiProvider _api = ApiProvider();
