@@ -294,7 +294,7 @@ window.arquis = (() => {
                 if (Array.isArray(feature.bbox) && feature.bbox.length >= 4) {
                     flyToBbox(feature.bbox);
                 } else if (centerLatLng) {
-                    map.flyTo(centerLatLng, Math.max(map.getZoom(), 18), { animate: true, duration: 1.0 });
+                    safeFlyTo(centerLatLng, Math.max(map.getZoom(), 18), { animate: true, duration: 1.0 });
                 }
             }
         } catch (e) {
@@ -320,6 +320,55 @@ window.arquis = (() => {
         document.querySelectorAll('.result-item').forEach(x => x.classList.toggle('active', x.dataset.layer === key && String(x.dataset.id) === String(feature.id)));
     }
 
+    // Leaflet 1.9: flyTo hacia el mismo centro en que ya esta el mapa (p. ej. "Centrar" dos veces)
+    // divide por cero y lanza "Invalid LatLng (NaN, NaN)" en cada cuadro de la animacion.
+    // Tambien falla si el contenedor mide 0 px. Estas funciones lo evitan.
+    function mapaListo() {
+        if (!map) return false;
+        try { map.invalidateSize(false); } catch (_) {}
+        const size = map.getSize();
+        return size.x > 0 && size.y > 0;
+    }
+
+    function safeFlyTo(latlng, zoom, opts) {
+        if (!map) return;
+        let destino;
+        try { destino = L.latLng(latlng); } catch (_) { return; }
+        if (!destino || !Number.isFinite(destino.lat) || !Number.isFinite(destino.lng) || Math.abs(destino.lat) > 90) return;
+        const z = Number.isFinite(zoom) ? Math.min(zoom, map.getMaxZoom() || 22) : map.getZoom();
+        try {
+            if (!mapaListo()) { map.setView(destino, z, { animate: false }); return; }
+            const pxActual = map.project(map.getCenter(), map.getZoom());
+            const pxDestino = map.project(destino, map.getZoom());
+            if (pxActual.distanceTo(pxDestino) < 2) {
+                if (z !== map.getZoom()) map.setView(destino, z, { animate: true });
+                return;
+            }
+            map.flyTo(destino, z, opts || { animate: true, duration: 1.0 });
+        } catch (e) {
+            console.warn('flyTo fallo, se usa setView:', e);
+            try { map.setView(destino, z, { animate: false }); } catch (_) {}
+        }
+    }
+
+    function safeFlyToBounds(bounds, opts) {
+        if (!map) return;
+        let b;
+        try { b = L.latLngBounds(bounds); } catch (_) { return; }
+        if (!b || !b.isValid()) return;
+        const o = opts || {};
+        const pad = Array.isArray(o.padding) ? o.padding : [0, 0];
+        try {
+            if (!mapaListo()) { map.fitBounds(b, { padding: pad, maxZoom: o.maxZoom, animate: false }); return; }
+            let zoom = map.getBoundsZoom(b, false, L.point(pad[0] * 2, pad[1] * 2));
+            if (Number.isFinite(o.maxZoom)) zoom = Math.min(zoom, o.maxZoom);
+            safeFlyTo(b.getCenter(), zoom, { animate: true, duration: o.duration || 1.0 });
+        } catch (e) {
+            console.warn('flyToBounds fallo, se usa fitBounds:', e);
+            try { map.fitBounds(b, { padding: pad, maxZoom: o.maxZoom, animate: false }); } catch (_) {}
+        }
+    }
+
     function flyToBbox(bbox) {
         if (!map || !Array.isArray(bbox) || bbox.length < 4) return;
         const minX = Number(bbox[0]);
@@ -333,13 +382,13 @@ window.arquis = (() => {
         // Si es un punto o bbox plano (minX == maxX)
         const isPoint = Math.abs(minX - maxX) < 0.0000001 && Math.abs(minY - maxY) < 0.0000001;
         if (isPoint) {
-            map.flyTo([minY, minX], Math.max(map.getZoom(), 18), { animate: true, duration: 1.0 });
+            safeFlyTo([minY, minX], Math.max(map.getZoom(), 18), { animate: true, duration: 1.0 });
         } else {
             const south = Math.min(minY, maxY);
             const north = Math.max(minY, maxY);
             const west = Math.min(minX, maxX);
             const east = Math.max(minX, maxX);
-            map.flyToBounds([[south, west], [north, east]], { padding: [50, 50], maxZoom: 19, animate: true, duration: 1.0 });
+            safeFlyToBounds([[south, west], [north, east]], { padding: [50, 50], maxZoom: 19, duration: 1.0 });
         }
     }
 
@@ -432,7 +481,7 @@ window.arquis = (() => {
         const latN = Number(lat);
         const lonN = Number(lon);
         if (map && Number.isFinite(latN) && Number.isFinite(lonN) && Math.abs(latN) <= 90) {
-            map.flyTo([latN, lonN], zoom, { animate: true, duration: 1.0 });
+            safeFlyTo([latN, lonN], zoom, { animate: true, duration: 1.0 });
         }
     }
 
@@ -823,7 +872,7 @@ window.arquis = (() => {
 
         departureMarker = L.marker([lat, lng], { icon, zIndexOffset: 950 }).addTo(map);
         departureMarker.bindTooltip(label, { permanent: false, direction: 'top' });
-        map.flyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.8 });
+        safeFlyTo([lat, lng], Math.max(map.getZoom(), 16), { animate: true, duration: 0.8 });
     }
 
     // RF-WEB-05: Renderizado de Ruta Topológica Optimizada con Dijkstra sobre Ejes Viales

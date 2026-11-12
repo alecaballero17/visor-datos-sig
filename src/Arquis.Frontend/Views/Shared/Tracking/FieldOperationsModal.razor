@@ -563,7 +563,7 @@
             // Dibujar marcadores en mapa
             foreach (var op in operariosActivos)
             {
-                await JS.InvokeVoidAsync("arquis.updateOperarioMarker", op);
+                await JS.MapaAsync("arquis.updateOperarioMarker", op);
             }
         }
         catch (Exception ex)
@@ -738,26 +738,26 @@
 
     private async Task CentrarEnOperario(TrackingPosicionDto op)
     {
-        await JS.InvokeVoidAsync("arquis.updateOperarioMarker", op);
-        await JS.InvokeVoidAsync("arquis.centerOnCoords", op.Latitud, op.Longitud, 18);
+        await JS.MapaAsync("arquis.updateOperarioMarker", op);
+        await JS.MapaAsync("arquis.centerOnCoords", op.Latitud, op.Longitud, 18);
         await Close();
     }
 
     private async Task ReproducirAnimacionRuta(bool conAnimacion)
     {
         if (puntosHistorial.Count == 0) return;
-        await JS.InvokeVoidAsync("arquis.showRouteHistory", puntosHistorial, conAnimacion);
+        await JS.MapaAsync("arquis.showRouteHistory", puntosHistorial, conAnimacion);
         await Close();
     }
 
     private async Task LimpiarRutaMapa()
     {
-        await JS.InvokeVoidAsync("arquis.clearRouteHistory");
+        await JS.MapaAsync("arquis.clearRouteHistory");
     }
 
     private async Task VerRutaEnMapa(RutaTrabajoDto ruta)
     {
-        await JS.InvokeVoidAsync("arquis.showRutaTrabajo", ruta);
+        await JS.MapaAsync("arquis.showRutaTrabajo", ruta);
         await Close();
     }
 
@@ -788,7 +788,7 @@
 
             await Http.PostAsJsonAsync("/api/tracking/posicion", nuevoPunto);
             await CargarOperariosActivos();
-            await JS.InvokeVoidAsync("arquis.updateOperarioMarker", nuevoPunto);
+            await JS.MapaAsync("arquis.updateOperarioMarker", nuevoPunto);
         }
         catch (Exception ex)
         {

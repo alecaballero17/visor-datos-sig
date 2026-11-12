@@ -383,8 +383,8 @@
             rumbo = rumbo,
             bateria = bat
         };
-        await JS.InvokeVoidAsync("arquis.updateOperarioMarker", obj);
-        await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 18);
+        await JS.MapaAsync("arquis.updateOperarioMarker", obj);
+        await JS.MapaAsync("arquis.centerOnCoords", lat, lng, 18);
     }
 
 

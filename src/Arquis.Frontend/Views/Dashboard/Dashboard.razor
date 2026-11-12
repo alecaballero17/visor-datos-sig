@@ -191,7 +191,7 @@
         if (firstRender)
         {
             dotNetRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("arquis.init", dotNetRef);
+            await JS.MapaAsync("arquis.init", dotNetRef);
         }
     }
 
@@ -256,14 +256,14 @@
         hasSelectedProperty = true;
 
         // Vuela suavemente a la entidad y enciende el resplandor / iluminación en el mapa
-        await JS.InvokeVoidAsync("arquis.highlightFeature", item.Layer, item.Id, true);
+        await JS.MapaAsync("arquis.highlightFeature", item.Layer, item.Id, true);
         StateHasChanged();
     }
 
     private async Task HandleSearchCleared()
     {
         hasSelectedProperty = false;
-        await JS.InvokeVoidAsync("arquis.clearHighlight");
+        await JS.MapaAsync("arquis.clearHighlight");
         StateHasChanged();
     }
 
@@ -271,31 +271,31 @@
     private async Task HandleWaterFilterChanged(WaterFilterMode mode)
     {
         currentWaterFilter = mode;
-        await JS.InvokeVoidAsync("arquis.setWaterFilter", mode.ToString());
+        await JS.MapaAsync("arquis.setWaterFilter", mode.ToString());
     }
 
     private async Task HandleShowLotesChanged(bool visible)
     {
         showLotes = visible;
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "lotes", visible);
+        await JS.MapaAsync("arquis.setLayerVisibility", "lotes", visible);
     }
 
     private async Task HandleShowCodigosChanged(bool visible)
     {
         showCodigos = visible;
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "codigosfijos", visible);
+        await JS.MapaAsync("arquis.setLayerVisibility", "codigosfijos", visible);
     }
 
     private async Task HandleShowManzanasChanged(bool visible)
     {
         showManzanas = visible;
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "manzanas", visible);
+        await JS.MapaAsync("arquis.setLayerVisibility", "manzanas", visible);
     }
 
     private async Task HandleShowViasChanged(bool visible)
     {
         showVias = visible;
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "vias", visible);
+        await JS.MapaAsync("arquis.setLayerVisibility", "vias", visible);
     }
 
     private void OpenMetricsModal()
@@ -306,7 +306,7 @@
     private async Task CloseDetailCard()
     {
         hasSelectedProperty = false;
-        await JS.InvokeVoidAsync("arquis.clearHighlight");
+        await JS.MapaAsync("arquis.clearHighlight");
         StateHasChanged();
     }
 
@@ -314,27 +314,27 @@
     {
         if (selectedBbox != null && selectedBbox.Length == 4)
         {
-            await JS.InvokeVoidAsync("arquis.flyToBbox", (object)selectedBbox);
+            await JS.MapaAsync("arquis.flyToBbox", (object)selectedBbox);
         }
         else if (selectedProperties.TryGetValue("AguaLatitud", out var latVal) &&
                  selectedProperties.TryGetValue("AguaLongitud", out var lonVal) &&
                  double.TryParse(latVal?.ToString(), out var lat) &&
                  double.TryParse(lonVal?.ToString(), out var lon))
         {
-            await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lon, 18);
+            await JS.MapaAsync("arquis.centerOnCoords", lat, lon, 18);
         }
         else if (selectedProperties.TryGetValue("Latitud", out var latVal2) &&
                  selectedProperties.TryGetValue("Longitud", out var lonVal2) &&
                  double.TryParse(latVal2?.ToString(), out var lat2) &&
                  double.TryParse(lonVal2?.ToString(), out var lon2))
         {
-            await JS.InvokeVoidAsync("arquis.centerOnCoords", lat2, lon2, 18);
+            await JS.MapaAsync("arquis.centerOnCoords", lat2, lon2, 18);
         }
     }
 
     private async Task LocateWaterCode(int codigoId)
     {
-        await JS.InvokeVoidAsync("arquis.highlightFeature", "codigosfijos", codigoId, true);
+        await JS.MapaAsync("arquis.highlightFeature", "codigosfijos", codigoId, true);
     }
 
 
@@ -344,7 +344,7 @@
         Navigation.NavigateTo("/login");
     }
 
-    private async Task ActualizarCapasOperativas() => await JS.InvokeVoidAsync("arquis.refreshVisibleLayers");
+    private async Task ActualizarCapasOperativas() => await JS.MapaAsync("arquis.refreshVisibleLayers");
 
     public void Dispose()
     {
