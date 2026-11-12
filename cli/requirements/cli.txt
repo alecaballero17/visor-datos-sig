@@ -1,0 +1,2 @@
+# Dependencias de la CLI de Arquis (la CLI funciona sin ellas; el importador SHP usa pyshp)
+pyshp>=2.3,<3

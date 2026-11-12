@@ -1,6 +1,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject HttpClient Http
+@inject IConfiguration Config
 
 @if (connectionError)
 {
@@ -19,7 +20,9 @@
     {
         if (!firstRender) return;
         reference = DotNetObjectReference.Create(this);
-        subscription = await JS.InvokeAsync<string>("arquisRealtime.subscribe", Http.BaseAddress!.GetLeftPart(UriPartial.Authority), reference, Events);
+        // PublicApiUrl: URL de la API vista por el navegador ("/" = mismo origen detras de nginx).
+        var hubBase = Config["PublicApiUrl"] ?? Http.BaseAddress!.GetLeftPart(UriPartial.Authority);
+        subscription = await JS.InvokeAsync<string>("arquisRealtime.subscribe", hubBase, reference, Events);
         if (disposed) await JS.InvokeVoidAsync("arquisRealtime.unsubscribe", subscription);
     }
 

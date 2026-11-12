@@ -22,7 +22,7 @@ __pycache__/
 *.pyc
 TestResults/
 artifacts/
-
+/.venv/
 # Flutter/Dart/Pub related
 **/doc/api/
 **/ios/Flutter/.last_build_id
@@ -61,3 +61,4 @@ app.*.map.json
 **/ios/Flutter/app.zip
 **/ios/Flutter/flutter_export_environment.sh
 **/ios/Flutter/flutter_assets/
+

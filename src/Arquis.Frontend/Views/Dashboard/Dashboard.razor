@@ -162,7 +162,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        apiBase = Config["BackendBaseUrl"] ?? Config["ApiBaseUrl"] ?? Http.BaseAddress?.ToString().TrimEnd('/') ?? "http://localhost:5080";
+        // PublicApiUrl: URL de la API para el JavaScript del navegador ("/" = mismo origen detras de nginx);
+        // BackendBaseUrl la usa el servidor del frontend (puede ser 127.0.0.1).
+        apiBase = (Config["PublicApiUrl"] ?? Config["BackendBaseUrl"] ?? Config["ApiBaseUrl"] ?? Http.BaseAddress?.ToString() ?? "http://localhost:5080").TrimEnd('/');
 
         try
         {
