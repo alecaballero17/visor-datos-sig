@@ -496,8 +496,8 @@
 
     private async Task CentrarEnOperario(TrackingPosicionLiveDto op)
     {
-        await JS.InvokeVoidAsync("arquis.centerOnCoords", op.Latitud, op.Longitud, 17);
-        await JS.InvokeVoidAsync("arquis.updateOperarioMarker", new
+        await JS.MapaAsync("arquis.centerOnCoords", op.Latitud, op.Longitud, 17);
+        await JS.MapaAsync("arquis.updateOperarioMarker", new
         {
             operarioId = op.OperarioId,
             nombreOperario = op.NombreOperario,
@@ -512,30 +512,30 @@
 
     private async Task CentrarEnPunto(double lat, double lng)
     {
-        await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 18);
+        await JS.MapaAsync("arquis.centerOnCoords", lat, lng, 18);
     }
 
     private async Task VerRutaEnMapa()
     {
         if (rutaActiva == null) return;
-        await JS.InvokeVoidAsync("arquis.showRutaTrabajo", rutaActiva);
+        await JS.MapaAsync("arquis.showRutaTrabajo", rutaActiva);
     }
 
     private async Task ReproducirAnimacion(bool conAnimacion)
     {
         if (puntosHistorial.Count == 0) return;
-        await JS.InvokeVoidAsync("arquis.showRouteHistory", puntosHistorial, conAnimacion);
+        await JS.MapaAsync("arquis.showRouteHistory", puntosHistorial, conAnimacion);
     }
 
     private async Task LimpiarRutaMapa()
     {
-        await JS.InvokeVoidAsync("arquis.clearRutaTrabajo");
+        await JS.MapaAsync("arquis.clearRutaTrabajo");
     }
 
     private async Task LimpiarTodoMapa()
     {
-        await JS.InvokeVoidAsync("arquis.clearRouteHistory");
-        await JS.InvokeVoidAsync("arquis.clearRutaTrabajo");
+        await JS.MapaAsync("arquis.clearRouteHistory");
+        await JS.MapaAsync("arquis.clearRutaTrabajo");
     }
 
     private async Task SimularMovimientoDemo()
@@ -566,7 +566,7 @@
             });
 
             await CargarOperariosActivos();
-            await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 17);
+            await JS.MapaAsync("arquis.centerOnCoords", lat, lng, 17);
         }
         catch (Exception ex)
         {
@@ -581,7 +581,7 @@
         {
             await CargarOperariosActivos();
             foreach (var op in operariosActivos)
-                await JS.InvokeVoidAsync("arquis.updateOperarioMarker", op);
+                await JS.MapaAsync("arquis.updateOperarioMarker", op);
         }
         await CargarHojaDeRutaAsignada();
     }

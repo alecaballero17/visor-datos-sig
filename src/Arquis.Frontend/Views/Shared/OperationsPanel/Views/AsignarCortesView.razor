@@ -515,13 +515,13 @@
         if (isPickingPartidaOnMap)
         {
             isPickingPartidaOnMap = false;
-            await JS.InvokeVoidAsync("arquis.cancelDeparturePointSelection");
+            await JS.MapaAsync("arquis.cancelDeparturePointSelection");
         }
         else
         {
             isPickingPartidaOnMap = true;
             dotNetRef ??= DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("arquis.enableDeparturePointSelection", dotNetRef);
+            await JS.MapaAsync("arquis.enableDeparturePointSelection", dotNetRef);
         }
     }
 
@@ -532,8 +532,8 @@
         partidaNombre = "Primera parada seleccionada";
         isCustomPartida = false;
         isPickingPartidaOnMap = false;
-        await JS.InvokeVoidAsync("arquis.cancelDeparturePointSelection");
-        await JS.InvokeVoidAsync("arquis.clearOptimizedRoute");
+        await JS.MapaAsync("arquis.cancelDeparturePointSelection");
+        await JS.MapaAsync("arquis.clearOptimizedRoute");
         resultadoDijkstra = null;
     }
 
@@ -574,14 +574,14 @@
                 resultadoDijkstra = await res.Content.ReadFromJsonAsync<ResultadoDijkstraDto>();
                 if (resultadoDijkstra != null)
                 {
-                    await JS.InvokeVoidAsync("arquis.renderOptimizedDijkstraRoute", resultadoDijkstra.GeometriaGeoJson, resultadoDijkstra.PuntosOrdenados);
+                    await JS.MapaAsync("arquis.renderOptimizedDijkstraRoute", resultadoDijkstra.GeometriaGeoJson, resultadoDijkstra.PuntosOrdenados);
                 }
                 mensajeError = null;
             }
             else
             {
                 resultadoDijkstra = null;
-                await JS.InvokeVoidAsync("arquis.clearOptimizedRoute");
+                await JS.MapaAsync("arquis.clearOptimizedRoute");
                 var error = await res.Content.ReadFromJsonAsync<ErrorDto>();
                 mensajeError = error?.Error ?? "No se pudo calcular una ruta por las vías disponibles.";
             }
@@ -720,7 +720,7 @@
 
     private async Task CentrarEnMapa(double lat, double lng)
     {
-        await JS.InvokeVoidAsync("arquis.centerOnCoords", lat, lng, 18);
+        await JS.MapaAsync("arquis.centerOnCoords", lat, lng, 18);
     }
 
     private async Task CrearTicket()
@@ -860,9 +860,9 @@
     {
         if (tk.Puntos != null && tk.Puntos.Count > 0)
         {
-            await JS.InvokeVoidAsync("arquis.renderRutaTrabajo", tk);
+            await JS.MapaAsync("arquis.renderRutaTrabajo", tk);
             var primerPunto = tk.Puntos.First();
-            await JS.InvokeVoidAsync("arquis.centerOnCoords", primerPunto.Latitud, primerPunto.Longitud, 16);
+            await JS.MapaAsync("arquis.centerOnCoords", primerPunto.Latitud, primerPunto.Longitud, 16);
             await OnVerRutaEnMapa.InvokeAsync(tk);
         }
     }

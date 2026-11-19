@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../../core/network/api_provider.dart';
+import '../../../agua_potable/models/agua_potable_model.dart';
 import '../../services/navegacion_externa_service.dart';
 
 class VisorDatosBottomSheet extends StatefulWidget {
@@ -32,7 +33,7 @@ class VisorDatosBottomSheet extends StatefulWidget {
 class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
   final ApiProvider _api = ApiProvider();
   bool _cargandoFicha = false;
-  Map<String, dynamic>? _fichaAgua;
+  FichaAgua? _fichaAgua;
 
   @override
   void initState() {
@@ -51,12 +52,12 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
       if (layer == 'codigosfijos' || widget.feature['properties']?['IdCodigo'] != null) {
         final res = await _api.get('/agua-potable/codigos/$id');
         if (res is Map<String, dynamic> && mounted) {
-          setState(() => _fichaAgua = res);
+          setState(() => _fichaAgua = FichaAgua.fromJson(res));
         }
       } else if (layer == 'lotes' || widget.feature['properties']?['IdLote'] != null) {
         final res = await _api.get('/agua-potable/lotes/$id');
         if (res is Map<String, dynamic> && mounted) {
-          setState(() => _fichaAgua = res);
+          setState(() => _fichaAgua = FichaAgua.fromJson(res));
         }
       }
     } catch (_) {
@@ -71,19 +72,33 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
     final props = widget.feature['properties'] as Map<String, dynamic>? ?? {};
     final layer = (widget.feature['layer'] ?? widget.feature['capa'] ?? 'Predio').toString().toLowerCase();
     
-    // Extracción de datos normalizada
-    final rawTitular = _fichaAgua?['nombreRegistrado'] ?? props['Titular'] ?? props['Dueno'] ?? props['Nombre'];
-    final titular = (rawTitular != null && rawTitular.toString().trim().isNotEmpty && rawTitular != 'Sin titular vinculado')
-        ? rawTitular.toString()
-        : 'Sin titular registrado';
-    final codigoFijo = _fichaAgua?['codigoFijo'] ?? props['CodFijo'] ?? props['CodF_SIG'] ?? props['CodigoSuministro'] ?? 'S/N';
-    final codigoSig = _fichaAgua?['codigoSig'] ?? props['CodF_SIG'] ?? '';
-    final uv = _fichaAgua?['uv'] ?? props['UV'] ?? props['uv'] ?? 'S/N';
-    final mza = _fichaAgua?['manzana'] ?? props['MZA'] ?? props['mza'] ?? 'S/N';
-    final nroLote = _fichaAgua?['numeroLote'] ?? props['NroLote'] ?? props['nroLote'] ?? props['Lote'] ?? 'S/N';
-    
-    final tieneAgua = _fichaAgua?['tieneAgua'] ?? props['TieneAgua'] == true || props['Estado'] == 1;
-    final estadoTexto = tieneAgua ? 'Servicio Activo' : 'Corte / Suspendido';
+    // Datos de la API (FichaAgua: los del medidor vienen en registros[]); si no llego, las
+    // propiedades de la capa (GeoDataService envia Nombre/Titular/Dueno, CodFijo, UV, MZA...).
+    final registro = _fichaAgua?.principal;
+    String? deProps(List<String> claves) {
+      for (final k in claves) {
+        final v = props[k]?.toString().trim();
+        if (v != null && v.isNotEmpty && v != 'Sin titular vinculado') return v;
+      }
+      return null;
+    }
+
+    final titular = _fichaAgua?.titularResumen ??
+        deProps(['Titular', 'Dueno', 'Nombre', 'nombreRegistrado']) ??
+        'Sin titular registrado';
+    final codigoFijo = registro?.codigoFijo ?? deProps(['CodFijo', 'CodF_SIG', 'CodigoSuministro']) ?? 'S/N';
+    final codigoSig = registro?.codigoSig ?? deProps(['CodF_SIG']) ?? '';
+    final uv = registro?.uv ?? deProps(['UV', 'uv']) ?? 'S/N';
+    final mza = registro?.manzana ?? deProps(['MZA', 'mza']) ?? 'S/N';
+    final nroLote = registro?.numeroLote ?? deProps(['NroLote', 'nroLote', 'Lote']) ?? 'S/N';
+
+    final bool tieneAgua = _fichaAgua?.tieneAgua ?? (props['TieneAgua'] == true || props['Estado'] == 1);
+    final String estadoTexto;
+    if (registro != null && registro.estadoVerificado && registro.estadoServicio != null) {
+      estadoTexto = registro.estadoTexto;
+    } else {
+      estadoTexto = tieneAgua ? 'Con agua potable' : 'Sin conexión de agua';
+    }
 
     double? lat, lng;
     final geom = widget.feature['geometry'] as Map<String, dynamic>?;
@@ -94,8 +109,8 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
         lat = (c[1] as num).toDouble();
       }
     }
-    lat ??= (_fichaAgua?['latitud'] ?? props['Latitud'] ?? props['AguaLatitud'] as num?)?.toDouble();
-    lng ??= (_fichaAgua?['longitud'] ?? props['Longitud'] ?? props['AguaLongitud'] as num?)?.toDouble();
+    lat ??= registro?.latitud ?? (props['Latitud'] ?? props['AguaLatitud'] as num?)?.toDouble();
+    lng ??= registro?.longitud ?? (props['Longitud'] ?? props['AguaLongitud'] as num?)?.toDouble();
 
     return Container(
       constraints: BoxConstraints(

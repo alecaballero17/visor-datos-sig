@@ -98,36 +98,36 @@
     private async Task CambiarBasemap(string modo)
     {
         basemapSeleccionado = modo;
-        await JS.InvokeVoidAsync("arquis.setBasemap", modo);
+        await JS.MapaAsync("arquis.setBasemap", modo);
     }
 
     private async Task Toggle3D()
     {
-        await JS.InvokeVoidAsync("arquis.toggle3DTilt");
+        await JS.MapaAsync("arquis.toggle3DTilt");
     }
 
     private async Task ActualizarCapas()
     {
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "lotes", showLotes);
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "codigosfijos", showCodigos);
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "manzanas", showManzanas);
-        await JS.InvokeVoidAsync("arquis.setLayerVisibility", "vias", showVias);
+        await JS.MapaAsync("arquis.setLayerVisibility", "lotes", showLotes);
+        await JS.MapaAsync("arquis.setLayerVisibility", "codigosfijos", showCodigos);
+        await JS.MapaAsync("arquis.setLayerVisibility", "manzanas", showManzanas);
+        await JS.MapaAsync("arquis.setLayerVisibility", "vias", showVias);
     }
 
     private async Task SetFiltroAgua(string modo)
     {
         filtroAgua = modo;
-        await JS.InvokeVoidAsync("arquis.setWaterFilter", modo);
+        await JS.MapaAsync("arquis.setWaterFilter", modo);
     }
 
     private async Task RecentrarMapa()
     {
-        await JS.InvokeVoidAsync("arquis.centerOnCoords", -17.78180, -63.18190, 16);
+        await JS.MapaAsync("arquis.centerOnCoords", -17.78180, -63.18190, 16);
     }
 
     private async Task LimpiarCapasTemporales()
     {
-        await JS.InvokeVoidAsync("arquis.clearRouteHistory");
-        await JS.InvokeVoidAsync("arquis.clearRutaTrabajo");
+        await JS.MapaAsync("arquis.clearRouteHistory");
+        await JS.MapaAsync("arquis.clearRutaTrabajo");
     }
 }

@@ -46,7 +46,8 @@ public sealed class AuthController(AuthService authService) : ControllerBase
             r.Equals("Cortador", StringComparison.OrdinalIgnoreCase) ||
             r.Equals("Lecturador", StringComparison.OrdinalIgnoreCase) ||
             r.Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
-            r.Equals("Reconexion", StringComparison.OrdinalIgnoreCase));
+            r.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ||
+            r.Equals("Reponedor", StringComparison.OrdinalIgnoreCase));
 
         bool esAdmin = session.Roles.Any(r => r.Equals("Administrador", StringComparison.OrdinalIgnoreCase));
 

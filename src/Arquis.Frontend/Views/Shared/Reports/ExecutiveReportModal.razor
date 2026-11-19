@@ -406,7 +406,7 @@
             var pdfBytes = await Http.GetByteArrayAsync(pdfUrl);
             var base64 = Convert.ToBase64String(pdfBytes);
 
-            await JS.InvokeVoidAsync("arquis.downloadFile", filename, base64, "application/pdf");
+            await JS.MapaAsync("arquis.downloadFile", filename, base64, "application/pdf");
         }
         catch (Exception ex)
         {

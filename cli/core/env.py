@@ -107,6 +107,9 @@ ESQUEMA: list[Variable] = [
     Variable("NGINX_PORT", "80", "Puerto HTTP publico", "Publicacion", avanzada=True),
     Variable("BACKEND_PUBLIC_URL", "", "URL publica de la API (vacio = automatica desde los dominios)", "Publicacion",
              avanzada=True, usa="Movil API_BASE_URL"),
+    Variable("MOVIL_API_URL", "", "API que usa la app movil al compilarla (vacio = la publica de este .env; "
+             "si es de desarrollo, se conserva la de Movil/.env.example)", "Publicacion", avanzada=True,
+             usa="Movil/.env.example"),
     # ── Avanzadas de despliegue ─────────────────────────────────────────────
     Variable("DEPLOY_KEEP_RELEASES", "5", "Versiones anteriores a conservar", "Despliegue", avanzada=True),
     Variable("DEPLOY_RUN_TESTS", "true", "Ejecutar pruebas antes de desplegar", "Despliegue",
