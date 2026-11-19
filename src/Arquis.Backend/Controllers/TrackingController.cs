@@ -115,7 +115,7 @@ namespace Arquis.Backend.Controllers
         [HttpGet("operarios")]
         public async Task<IActionResult> ObtenerOperarios()
         {
-            var operarioRoles = new[] { "Operador", "Cortador", "Lecturador", "Reconexion" };
+            var operarioRoles = new[] { "Operador", "Cortador", "Lecturador", "Reconexion", "Reconector", "Reponedor", "Reposicion" };
 
             // 1. Usuarios con rol de operador o creados desde el móvil
             var usuarios = await _context.Usuarios
@@ -173,11 +173,33 @@ namespace Arquis.Backend.Controllers
 
             string NormalizarRol(string r, string opId)
             {
+                // Si el rol ya está explícitamente asignado, respetarlo siempre
+                if (string.Equals(r, "Cortador", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(r, "Corte", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Cortador";
+                }
+
                 if (string.Equals(r, "Reconector", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(r, "Reconexion", StringComparison.OrdinalIgnoreCase) ||
-                    opId.Contains("recon", StringComparison.OrdinalIgnoreCase) ||
-                    opId.Equals("Juan", StringComparison.OrdinalIgnoreCase) ||
-                    opId.Equals("Carlos", StringComparison.OrdinalIgnoreCase))
+                    string.Equals(r, "Reponedor", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(r, "Reposicion", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "Reconector";
+                }
+
+                // Si en memoria cache ya tiene un rol actualizado, usarlo
+                var posCache = _cache.ObtenerPorOperario(opId);
+                if (posCache != null && !string.IsNullOrWhiteSpace(posCache.Rol))
+                {
+                    if (string.Equals(posCache.Rol, "Cortador", StringComparison.OrdinalIgnoreCase)) return "Cortador";
+                    if (string.Equals(posCache.Rol, "Reconector", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(posCache.Rol, "Reponedor", StringComparison.OrdinalIgnoreCase)) return "Reconector";
+                }
+
+                // Fallback heurístico solo si el rol era genérico ("Operador" / "Lecturador") o no definido
+                if (opId.Contains("recon", StringComparison.OrdinalIgnoreCase) ||
+                    opId.Contains("repon", StringComparison.OrdinalIgnoreCase))
                 {
                     return "Reconector";
                 }
@@ -220,7 +242,7 @@ namespace Arquis.Backend.Controllers
 
         public class ActualizarRolDto
         {
-            public string Rol { get; set; } = string.Empty; // "Cortador" o "Reconector"
+            public string Rol { get; set; } = string.Empty; // "Cortador" o "Reconector" / "Reponedor"
         }
 
         [HttpPut("operarios/{operarioId}/rol")]
@@ -228,12 +250,16 @@ namespace Arquis.Backend.Controllers
         {
             if (string.IsNullOrWhiteSpace(dto?.Rol))
             {
-                return BadRequest(new { error = "Debe especificar el nuevo rol del trabajador ('Cortador' o 'Reconector')." });
+                return BadRequest(new { error = "Debe especificar el nuevo rol del trabajador ('Cortador', 'Reconector' o 'Reponedor')." });
             }
 
-            var rolNormalizado = dto.Rol.Trim().Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
-                                 dto.Rol.Trim().Equals("Reconexion", StringComparison.OrdinalIgnoreCase)
-                                 ? "Reconector" : "Cortador";
+            var rolTrim = dto.Rol.Trim();
+            var esReconector = rolTrim.Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
+                               rolTrim.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ||
+                               rolTrim.Equals("Reponedor", StringComparison.OrdinalIgnoreCase) ||
+                               rolTrim.Equals("Reposicion", StringComparison.OrdinalIgnoreCase);
+
+            var rolNormalizado = esReconector ? "Reconector" : "Cortador";
 
             // 1. Asegurar que el rol existe en la BD
             var rolEntity = await _context.Roles.FirstOrDefaultAsync(r => r.NombreRol == rolNormalizado);
@@ -242,7 +268,7 @@ namespace Arquis.Backend.Controllers
                 rolEntity = new Rol 
                 { 
                     NombreRol = rolNormalizado, 
-                    Descripcion = rolNormalizado == "Cortador" ? "Rol para corte de servicios de agua" : "Rol para reconexión de servicios de agua", 
+                    Descripcion = rolNormalizado == "Cortador" ? "Rol para corte de servicios de agua" : "Rol para reconexión y reposición de servicios de agua", 
                     Estado = true 
                 };
                 _context.Roles.Add(rolEntity);
@@ -263,6 +289,7 @@ namespace Arquis.Backend.Controllers
                     ur.Rol.NombreRol == "Cortador" || 
                     ur.Rol.NombreRol == "Reconector" || 
                     ur.Rol.NombreRol == "Reconexion" || 
+                    ur.Rol.NombreRol == "Reponedor" || 
                     ur.Rol.NombreRol == "Operador" || 
                     ur.Rol.NombreRol == "Lecturador").ToList();
 

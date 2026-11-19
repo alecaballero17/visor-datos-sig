@@ -184,7 +184,10 @@ namespace Arquis.Backend.Controllers
             var totalOperarios = dto.OperariosAsignados.Count;
             var rutasCreadas = new List<RutaTrabajo>();
             var baseCount = await _context.RutasTrabajo.CountAsync();
-            var prefijo = dto.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ? "RR" : "RC";
+            var prefijo = (dto.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ||
+                           dto.Tipo.Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
+                           dto.Tipo.Equals("Reponedor", StringComparison.OrdinalIgnoreCase) ||
+                           dto.Tipo.Equals("Reposicion", StringComparison.OrdinalIgnoreCase)) ? "RR" : "RC";
 
             var partidaBase = new DijkstraRoutingService.PuntoPartidaDto
             {
@@ -621,7 +624,9 @@ namespace Arquis.Backend.Controllers
                     .Where(c => dto.IdsCodigosFijos.Contains(c.IdCodigo) && c.Latitud != null && c.Longitud != null)
                     .ToListAsync();
 
-                var estadoRequerido = string.Equals(dto.Tipo, "Corte", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
+                var esCorte = string.Equals(dto.Tipo, "Corte", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(dto.Tipo, "Cortador", StringComparison.OrdinalIgnoreCase);
+                var estadoRequerido = esCorte ? 2 : 0;
                 if (codigos.Count != dto.IdsCodigosFijos.Distinct().Count() || codigos.Any(c => c.Estado != estadoRequerido))
                     return Conflict(new { error = "La selección contiene suministros no disponibles para esta operación. Actualice la lista." });
 
@@ -675,7 +680,11 @@ namespace Arquis.Backend.Controllers
             var optRes = await _routingService.OptimizarRutaAsync(partida, puntosDijkstra);
 
             var baseCount = await _context.RutasTrabajo.CountAsync() + 1;
-            var prefijo = string.Equals(dto.Tipo, "Reconexion", StringComparison.OrdinalIgnoreCase) ? "TK-REC" : "TK-COR";
+            var esReconexion = string.Equals(dto.Tipo, "Reconexion", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(dto.Tipo, "Reconector", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(dto.Tipo, "Reponedor", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(dto.Tipo, "Reposicion", StringComparison.OrdinalIgnoreCase);
+            var prefijo = esReconexion ? "TK-REC" : "TK-COR";
             var codigo = $"{prefijo}-{DateTime.UtcNow.Year}-{baseCount:D4}";
 
             var nuevaRuta = new RutaTrabajo

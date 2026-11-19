@@ -71,10 +71,10 @@
                                   CurrentUserName="@userName" />
 
             <!-- Modal de Dashboard Operativo y KPIs (RF-WEB-02) -->
-            <DashboardKpiModal @bind-IsOpen="isKpiModalOpen" />
+            <DashboardKpiModal @bind-IsOpen="isKpiModalOpen" @bind-IsOpen:after="OnKpiModalClosed" />
 
             <!-- 6. Panel Retráctil Modular de Operaciones, Rutas, Cuadrillas y Configuración -->
-            <OperationsDrawer @ref="operationsDrawer" @bind-IsOpen="isOperationsDrawerOpen" />
+            <OperationsDrawer @ref="operationsDrawer" @bind-IsOpen="isOperationsDrawerOpen" @bind-IsOpen:after="OnDrawerClosed" />
         </main>
     </div>
 </div>
@@ -107,12 +107,22 @@
     private string? reportUV = null;
     private string? reportMZA = null;
 
-    // Estado del modal de Dashboard de KPIs Operativos (RF-WEB-02)
-    private bool isKpiModalOpen = true;
+    // Estado del modal de Dashboard de KPIs Operativos (RF-WEB-02) - Cerrado por defecto para no tapar el mapa
+    private bool isKpiModalOpen = false;
 
-    private void OpenDashboardKpisModal()
+    private async Task OpenDashboardKpisModal()
     {
         isKpiModalOpen = true;
+    }
+
+    private async Task OnKpiModalClosed()
+    {
+        await JS.MapaAsync("arquis.invalidateSize");
+    }
+
+    private async Task OnDrawerClosed()
+    {
+        await JS.MapaAsync("arquis.invalidateSize");
     }
 
     // Estado del Panel Retráctil de Operaciones y Opciones
@@ -349,6 +359,7 @@
     public void Dispose()
     {
         dotNetRef?.Dispose();
+        _ = JS.MapaAsync("arquis.destroy");
     }
 
     private class SessionData

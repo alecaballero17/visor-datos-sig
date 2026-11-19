@@ -491,8 +491,39 @@ window.arquis = (() => {
         const appEl = $('app');
         api = (appEl?.dataset?.api || '').replace(/\/$/, '');
 
+        const mapContainer = $('map');
+        if (!mapContainer) return;
+
+        // Si ya existía un mapa previo en memoria, verificar si su contenedor fue desprendido del DOM
+        if (map) {
+            try {
+                const prevContainer = map.getContainer ? map.getContainer() : null;
+                if (!prevContainer || prevContainer !== mapContainer || !document.body.contains(prevContainer)) {
+                    map.remove();
+                    map = null;
+                }
+            } catch (err) {
+                console.warn('Limpiando mapa huérfano:', err);
+                map = null;
+            }
+        }
+
+        // Si el elemento en el DOM tiene _leaflet_id previo (quedó de un render anterior)
+        if (mapContainer._leaflet_id && !map) {
+            try { delete mapContainer._leaflet_id; } catch (_) { mapContainer._leaflet_id = undefined; }
+        }
+
         if (!map) {
-            map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([-16.400, -60.960], 15);
+            layerState.clear();
+            operariosLayer = null;
+            routeHistoryLayer = null;
+            rutasTrabajoLayer = null;
+            operarioMarkers.clear();
+            departureMarker = null;
+            currentDijkstraLayer = null;
+            routeStopMarkers = [];
+
+            map = L.map(mapContainer, { zoomControl: false, preferCanvas: true }).setView([-16.400, -60.960], 15);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             map.createPane('selectionPane').style.zIndex = 650;
             
@@ -540,13 +571,12 @@ window.arquis = (() => {
 
             // Paneles y modales cambian el tamano del contenedor sin redimensionar la ventana:
             // sin esto Leaflet sigue con el tamano viejo y el mapa queda en blanco o cortado.
-            const mapEl = $('map');
-            if (mapEl && typeof ResizeObserver === 'function') {
+            if (typeof ResizeObserver === 'function') {
                 let pendiente = null;
                 new ResizeObserver(() => {
                     if (pendiente) cancelAnimationFrame(pendiente);
                     pendiente = requestAnimationFrame(() => { if (map) map.invalidateSize(false); });
-                }).observe(mapEl);
+                }).observe(mapContainer);
             }
         }
 
@@ -955,9 +985,38 @@ window.arquis = (() => {
         return is3DTiltActive;
     }
 
+    // Destrucción limpia del mapa para navegación entre componentes SPA
+    function destroy() {
+        if (map) {
+            try {
+                map.remove();
+            } catch (_) {}
+            map = null;
+        }
+        layerState.clear();
+        operariosLayer = null;
+        routeHistoryLayer = null;
+        rutasTrabajoLayer = null;
+        operarioMarkers.clear();
+        departureMarker = null;
+        currentDijkstraLayer = null;
+        routeStopMarkers = [];
+    }
+
+    function invalidateSize() {
+        if (!map) return;
+        try {
+            map.invalidateSize(false);
+            setTimeout(() => { if (map) map.invalidateSize(); }, 60);
+            setTimeout(() => { if (map) map.invalidateSize(); }, 200);
+        } catch (_) {}
+    }
+
     return {
         refreshVisibleLayers,
         init,
+        destroy,
+        invalidateSize,
         highlightFeature,
         clearHighlight: clearSelectionGraphics,
         flyToBbox,
