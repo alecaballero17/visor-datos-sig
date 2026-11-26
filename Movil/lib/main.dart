@@ -7,7 +7,11 @@ import 'modules/auth/views/screens/flujo_principal/auth_pantalla_inicio.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env.example");
+  try {
+    await dotenv.load(fileName: ".env");
+  } catch (_) {
+    await dotenv.load(fileName: ".env.example");
+  }
   TrackingGpsService();
   SesionUsuario.actual.addListener(() {
     if (SesionUsuario.actual.value == null) {

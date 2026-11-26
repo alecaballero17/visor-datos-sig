@@ -328,3 +328,184 @@ public sealed class BitacoraItemModel
     [JsonPropertyName("detalle")]
     public string? Detalle { get; set; }
 }
+
+public sealed class ReporteOperacionesRutasModel
+{
+    [JsonPropertyName("codigoReporte")] public string CodigoReporte { get; set; } = string.Empty;
+    [JsonPropertyName("fechaEmision")] public DateTime FechaEmision { get; set; }
+    [JsonPropertyName("usuarioEmisor")] public string UsuarioEmisor { get; set; } = "Usuario SIG";
+    [JsonPropertyName("titulo")] public string Titulo { get; set; } = string.Empty;
+    [JsonPropertyName("subtitulo")] public string Subtitulo { get; set; } = string.Empty;
+    [JsonPropertyName("filtroAplicado")] public string FiltroAplicado { get; set; } = string.Empty;
+    [JsonPropertyName("totalRutas")] public int TotalRutas { get; set; }
+    [JsonPropertyName("rutasCompletadas")] public int RutasCompletadas { get; set; }
+    [JsonPropertyName("rutasEnProgreso")] public int RutasEnProgreso { get; set; }
+    [JsonPropertyName("rutasPendientes")] public int RutasPendientes { get; set; }
+    [JsonPropertyName("totalParadas")] public int TotalParadas { get; set; }
+    [JsonPropertyName("paradasCompletadas")] public int ParadasCompletadas { get; set; }
+    [JsonPropertyName("paradasObservadas")] public int ParadasObservadas { get; set; }
+    [JsonPropertyName("paradasPendientes")] public int ParadasPendientes { get; set; }
+    [JsonPropertyName("porcentajeAvance")] public double PorcentajeAvance { get; set; }
+    [JsonPropertyName("distanciaTotalKm")] public double DistanciaTotalKm { get; set; }
+    [JsonPropertyName("montoTotalDeudaBs")] public decimal MontoTotalDeudaBs { get; set; }
+    [JsonPropertyName("validacionesGpsTotales")] public int ValidacionesGpsTotales { get; set; }
+    [JsonPropertyName("validacionesAntifraudeOk")] public int ValidacionesAntifraudeOk { get; set; }
+    [JsonPropertyName("resumenEjecutivo")] public string ResumenEjecutivo { get; set; } = string.Empty;
+    [JsonPropertyName("recomendaciones")] public List<string> Recomendaciones { get; set; } = new();
+    [JsonPropertyName("rutas")] public List<RutaReporteItemModel> Rutas { get; set; } = new();
+    [JsonPropertyName("detalleParadas")] public List<ParadaAuditoriaItemModel> DetalleParadas { get; set; } = new();
+}
+
+public sealed class RutaReporteItemModel
+{
+    [JsonPropertyName("id")] public int Id { get; set; }
+    [JsonPropertyName("codigo")] public string Codigo { get; set; } = string.Empty;
+    [JsonPropertyName("titulo")] public string Titulo { get; set; } = string.Empty;
+    [JsonPropertyName("tipo")] public string Tipo { get; set; } = string.Empty;
+    [JsonPropertyName("estado")] public string Estado { get; set; } = string.Empty;
+    [JsonPropertyName("prioridad")] public string Prioridad { get; set; } = string.Empty;
+    [JsonPropertyName("operarioAsignado")] public string OperarioAsignado { get; set; } = string.Empty;
+    [JsonPropertyName("fechaCreacion")] public DateTime FechaCreacion { get; set; }
+    [JsonPropertyName("distanciaKm")] public double DistanciaKm { get; set; }
+    [JsonPropertyName("tiempoEstimadoMinutos")] public int TiempoEstimadoMinutos { get; set; }
+    [JsonPropertyName("totalPuntos")] public int TotalPuntos { get; set; }
+    [JsonPropertyName("puntosCompletados")] public int PuntosCompletados { get; set; }
+    [JsonPropertyName("puntosObservados")] public int PuntosObservados { get; set; }
+    [JsonPropertyName("montoDeudaTotalBs")] public decimal MontoDeudaTotalBs { get; set; }
+}
+
+public sealed class ParadaAuditoriaItemModel
+{
+    [JsonPropertyName("codigoRuta")] public string CodigoRuta { get; set; } = string.Empty;
+    [JsonPropertyName("operario")] public string Operario { get; set; } = string.Empty;
+    [JsonPropertyName("tipoRuta")] public string TipoRuta { get; set; } = string.Empty;
+    [JsonPropertyName("orden")] public int Orden { get; set; }
+    [JsonPropertyName("codigoSuministro")] public string CodigoSuministro { get; set; } = string.Empty;
+    [JsonPropertyName("titular")] public string Titular { get; set; } = string.Empty;
+    [JsonPropertyName("direccion")] public string Direccion { get; set; } = string.Empty;
+    [JsonPropertyName("estado")] public string Estado { get; set; } = string.Empty;
+    [JsonPropertyName("estadoFinal")] public string? EstadoFinal { get; set; }
+    [JsonPropertyName("distanciaAntifraudeMetros")] public double? DistanciaAntifraudeMetros { get; set; }
+    [JsonPropertyName("montoDeuda")] public decimal? MontoDeuda { get; set; }
+    [JsonPropertyName("fechaEjecucion")] public DateTime? FechaEjecucion { get; set; }
+}
+
+public sealed class ReporteDesempenoCuadrillasModel
+{
+    [JsonPropertyName("codigoReporte")] public string CodigoReporte { get; set; } = string.Empty;
+    [JsonPropertyName("fechaEmision")] public DateTime FechaEmision { get; set; }
+    [JsonPropertyName("usuarioEmisor")] public string UsuarioEmisor { get; set; } = "Usuario SIG";
+    [JsonPropertyName("titulo")] public string Titulo { get; set; } = string.Empty;
+    [JsonPropertyName("subtitulo")] public string Subtitulo { get; set; } = string.Empty;
+    [JsonPropertyName("filtroAplicado")] public string FiltroAplicado { get; set; } = string.Empty;
+    [JsonPropertyName("totalOperarios")] public int TotalOperarios { get; set; }
+    [JsonPropertyName("totalCortadores")] public int TotalCortadores { get; set; }
+    [JsonPropertyName("totalReconectores")] public int TotalReconectores { get; set; }
+    [JsonPropertyName("totalRutasAsignadas")] public int TotalRutasAsignadas { get; set; }
+    [JsonPropertyName("totalParadasAsignadas")] public int TotalParadasAsignadas { get; set; }
+    [JsonPropertyName("totalEjecutadas")] public int TotalEjecutadas { get; set; }
+    [JsonPropertyName("totalObservadas")] public int TotalObservadas { get; set; }
+    [JsonPropertyName("totalPendientes")] public int TotalPendientes { get; set; }
+    [JsonPropertyName("cumplimientoPromedioPct")] public double CumplimientoPromedioPct { get; set; }
+    [JsonPropertyName("distanciaTotalKm")] public double DistanciaTotalKm { get; set; }
+    [JsonPropertyName("resumenEjecutivo")] public string ResumenEjecutivo { get; set; } = string.Empty;
+    [JsonPropertyName("recomendaciones")] public List<string> Recomendaciones { get; set; } = new();
+    [JsonPropertyName("cuadrillas")] public List<CuadrillaDesempenoItemModel> Cuadrillas { get; set; } = new();
+}
+
+public sealed class CuadrillaDesempenoItemModel
+{
+    [JsonPropertyName("operarioId")] public string OperarioId { get; set; } = string.Empty;
+    [JsonPropertyName("nombreOperario")] public string NombreOperario { get; set; } = string.Empty;
+    [JsonPropertyName("rol")] public string Rol { get; set; } = string.Empty;
+    [JsonPropertyName("rutasAsignadas")] public int RutasAsignadas { get; set; }
+    [JsonPropertyName("rutasCompletadas")] public int RutasCompletadas { get; set; }
+    [JsonPropertyName("paradasTotales")] public int ParadasTotales { get; set; }
+    [JsonPropertyName("ejecutadas")] public int Ejecutadas { get; set; }
+    [JsonPropertyName("observadas")] public int Observadas { get; set; }
+    [JsonPropertyName("pendientes")] public int Pendientes { get; set; }
+    [JsonPropertyName("porcentajeCumplimiento")] public double PorcentajeCumplimiento { get; set; }
+    [JsonPropertyName("distanciaTotalKm")] public double DistanciaTotalKm { get; set; }
+    [JsonPropertyName("precisionGpsPromedioMetros")] public double? PrecisionGpsPromedioMetros { get; set; }
+    [JsonPropertyName("montoGestionadoBs")] public decimal MontoGestionadoBs { get; set; }
+    [JsonPropertyName("ultimaActividad")] public DateTime? UltimaActividad { get; set; }
+}
+
+public sealed class ReporteEstadoSuministrosModel
+{
+    [JsonPropertyName("codigoReporte")] public string CodigoReporte { get; set; } = string.Empty;
+    [JsonPropertyName("fechaEmision")] public DateTime FechaEmision { get; set; }
+    [JsonPropertyName("usuarioEmisor")] public string UsuarioEmisor { get; set; } = "Usuario SIG";
+    [JsonPropertyName("titulo")] public string Titulo { get; set; } = string.Empty;
+    [JsonPropertyName("subtitulo")] public string Subtitulo { get; set; } = string.Empty;
+    [JsonPropertyName("filtroAplicado")] public string FiltroAplicado { get; set; } = string.Empty;
+    [JsonPropertyName("totalSuministros")] public int TotalSuministros { get; set; }
+    [JsonPropertyName("normal")] public int Normal { get; set; }
+    [JsonPropertyName("paraCorte")] public int ParaCorte { get; set; }
+    [JsonPropertyName("paraReconexion")] public int ParaReconexion { get; set; }
+    [JsonPropertyName("cortado")] public int Cortado { get; set; }
+    [JsonPropertyName("bajaParcial")] public int BajaParcial { get; set; }
+    [JsonPropertyName("bajaTotal")] public int BajaTotal { get; set; }
+    [JsonPropertyName("verificados")] public int Verificados { get; set; }
+    [JsonPropertyName("sinVerificar")] public int SinVerificar { get; set; }
+    [JsonPropertyName("resumenEjecutivo")] public string ResumenEjecutivo { get; set; } = string.Empty;
+    [JsonPropertyName("recomendaciones")] public List<string> Recomendaciones { get; set; } = new();
+    [JsonPropertyName("suministros")] public List<SuministroEstadoItemModel> Suministros { get; set; } = new();
+}
+
+public sealed class SuministroEstadoItemModel
+{
+    [JsonPropertyName("idCodigo")] public int IdCodigo { get; set; }
+    [JsonPropertyName("codigoFijo")] public string CodigoFijo { get; set; } = string.Empty;
+    [JsonPropertyName("codigoSig")] public string CodigoSig { get; set; } = string.Empty;
+    [JsonPropertyName("titular")] public string Titular { get; set; } = string.Empty;
+    [JsonPropertyName("estadoCodigo")] public int EstadoCodigo { get; set; }
+    [JsonPropertyName("estadoTexto")] public string EstadoTexto { get; set; } = string.Empty;
+    [JsonPropertyName("estadoVerificado")] public bool EstadoVerificado { get; set; }
+    [JsonPropertyName("unidadVecinal")] public string UnidadVecinal { get; set; } = string.Empty;
+    [JsonPropertyName("manzana")] public string Manzana { get; set; } = string.Empty;
+    [JsonPropertyName("numeroLote")] public string NumeroLote { get; set; } = string.Empty;
+    [JsonPropertyName("fechaCambioEstado")] public DateTime FechaCambioEstado { get; set; }
+}
+
+public sealed class ReporteEjecutivoGlobalModel
+{
+    [JsonPropertyName("codigoReporte")] public string CodigoReporte { get; set; } = string.Empty;
+    [JsonPropertyName("fechaEmision")] public DateTime FechaEmision { get; set; }
+    [JsonPropertyName("usuarioEmisor")] public string UsuarioEmisor { get; set; } = "Usuario SIG";
+    [JsonPropertyName("titulo")] public string Titulo { get; set; } = string.Empty;
+    [JsonPropertyName("subtitulo")] public string Subtitulo { get; set; } = string.Empty;
+    [JsonPropertyName("totalManzanas")] public int TotalManzanas { get; set; }
+    [JsonPropertyName("totalLotes")] public int TotalLotes { get; set; }
+    [JsonPropertyName("totalVias")] public int TotalVias { get; set; }
+    [JsonPropertyName("longitudRedVialKm")] public double LongitudRedVialKm { get; set; }
+    [JsonPropertyName("totalCodigosFijos")] public int TotalCodigosFijos { get; set; }
+    [JsonPropertyName("lotesConServicio")] public int LotesConServicio { get; set; }
+    [JsonPropertyName("lotesSinServicio")] public int LotesSinServicio { get; set; }
+    [JsonPropertyName("coberturaGlobalPct")] public double CoberturaGlobalPct { get; set; }
+    [JsonPropertyName("normal")] public int Normal { get; set; }
+    [JsonPropertyName("paraCorte")] public int ParaCorte { get; set; }
+    [JsonPropertyName("paraReconexion")] public int ParaReconexion { get; set; }
+    [JsonPropertyName("cortado")] public int Cortado { get; set; }
+    [JsonPropertyName("bajaParcial")] public int BajaParcial { get; set; }
+    [JsonPropertyName("bajaTotal")] public int BajaTotal { get; set; }
+    [JsonPropertyName("totalRutasHistoricas")] public int TotalRutasHistoricas { get; set; }
+    [JsonPropertyName("totalIntervencionesCampo")] public int TotalIntervencionesCampo { get; set; }
+    [JsonPropertyName("intervencionesCompletadas")] public int IntervencionesCompletadas { get; set; }
+    [JsonPropertyName("tasaEfectividadCampoPct")] public double TasaEfectividadCampoPct { get; set; }
+    [JsonPropertyName("resumenEjecutivo")] public string ResumenEjecutivo { get; set; } = string.Empty;
+    [JsonPropertyName("recomendaciones")] public List<string> Recomendaciones { get; set; } = new();
+    [JsonPropertyName("resumenPorUv")] public List<ResumenUvItemModel> ResumenPorUv { get; set; } = new();
+}
+
+public sealed class ResumenUvItemModel
+{
+    [JsonPropertyName("unidadVecinal")] public string UnidadVecinal { get; set; } = string.Empty;
+    [JsonPropertyName("totalManzanas")] public int TotalManzanas { get; set; }
+    [JsonPropertyName("totalLotes")] public int TotalLotes { get; set; }
+    [JsonPropertyName("lotesConAgua")] public int LotesConAgua { get; set; }
+    [JsonPropertyName("coberturaPct")] public double CoberturaPct { get; set; }
+    [JsonPropertyName("cuentasParaCorte")] public int CuentasParaCorte { get; set; }
+    [JsonPropertyName("cuentasCortadas")] public int CuentasCortadas { get; set; }
+    [JsonPropertyName("cuentasParaReconexion")] public int CuentasParaReconexion { get; set; }
+}

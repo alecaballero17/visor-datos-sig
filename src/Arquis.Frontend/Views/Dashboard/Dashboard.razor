@@ -13,8 +13,8 @@
 <div id="app" class="app-shell" data-api="@apiBase">
     <Header UserName="@userName" OnLogout="Logout" OnOpenReports="OpenGeneralReports" OnOpenTracking="OpenTrackingModal" OnOpenOperationsDrawer="OpenOperationsDrawer" OnOpenDashboardKpis="OpenDashboardKpisModal" />
 
-    <div class="app-body position-relative flex-grow-1 w-100 h-100">
-        <main class="map-wrap position-relative flex-grow-1 w-100 h-100" role="main" aria-label="Visor territorial interactivo">
+    <div class="app-body position-relative flex-grow-1 w-100">
+        <main class="map-wrap position-relative flex-grow-1 w-100" role="main" aria-label="Visor territorial interactivo">
             <!-- Sistema de Alertas y Notificaciones Amigables -->
             <UserFriendlyAlert />
 
@@ -58,25 +58,22 @@
                                     OnLocateWaterCode="LocateWaterCode"
                                     OnRequestFormalReport="OpenReportForLote" />
             }
-
-            <!-- 4. Modal de Diagnóstico y Métricas Urbanas del Sector -->
-            <UrbanMetricsWidget @bind-IsOpen="isMetricsModalOpen"
-                                OnRequestSectorReport="OpenReportForSector" />
-
-            <!-- 5. Modal de Informe Técnico Ejecutivo y Bitácora de Auditoría -->
-            <ExecutiveReportModal @bind-IsOpen="isReportModalOpen"
-                                  SelectedLoteId="reportLoteId"
-                                  SelectedUV="reportUV"
-                                  SelectedMZA="reportMZA"
-                                  CurrentUserName="@userName" />
-
-            <!-- Modal de Dashboard Operativo y KPIs (RF-WEB-02) -->
-            <DashboardKpiModal @bind-IsOpen="isKpiModalOpen" @bind-IsOpen:after="OnKpiModalClosed" />
-
-            <!-- 6. Panel Retráctil Modular de Operaciones, Rutas, Cuadrillas y Configuración -->
-            <OperationsDrawer @ref="operationsDrawer" @bind-IsOpen="isOperationsDrawerOpen" @bind-IsOpen:after="OnDrawerClosed" />
         </main>
     </div>
+
+    <!-- Modales y Paneles Retráctiles fuera de .map-wrap (con overflow: hidden) para evitar ocultamiento por contexto de apilamiento -->
+    <UrbanMetricsWidget @bind-IsOpen="isMetricsModalOpen"
+                        OnRequestSectorReport="OpenReportForSector" />
+
+    <ExecutiveReportModal @bind-IsOpen="isReportModalOpen"
+                          SelectedLoteId="reportLoteId"
+                          SelectedUV="reportUV"
+                          SelectedMZA="reportMZA"
+                          CurrentUserName="@userName" />
+
+    <DashboardKpiModal @bind-IsOpen="isKpiModalOpen" @bind-IsOpen:after="OnKpiModalClosed" />
+
+    <OperationsDrawer @ref="operationsDrawer" @bind-IsOpen="isOperationsDrawerOpen" @bind-IsOpen:after="OnDrawerClosed" />
 </div>
 
 @code {
@@ -148,9 +145,24 @@
 
     private void OpenGeneralReports()
     {
-        reportLoteId = hasSelectedProperty ? selectedId : null;
-        reportUV = reportLoteId.HasValue ? null : "Central";
-        reportMZA = null;
+        if (hasSelectedProperty && string.Equals(selectedLayer, "lotes", StringComparison.OrdinalIgnoreCase))
+        {
+            reportLoteId = selectedId;
+            reportUV = null;
+            reportMZA = null;
+        }
+        else if (hasSelectedProperty && string.Equals(selectedLayer, "manzanas", StringComparison.OrdinalIgnoreCase))
+        {
+            reportLoteId = null;
+            reportUV = selectedProperties.TryGetValue("UV", out var uvVal) ? uvVal?.ToString() : null;
+            reportMZA = selectedProperties.TryGetValue("MZA", out var mzaVal) ? mzaVal?.ToString() : null;
+        }
+        else
+        {
+            reportLoteId = null;
+            reportUV = null;
+            reportMZA = null;
+        }
         isReportModalOpen = true;
     }
 

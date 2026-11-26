@@ -89,12 +89,12 @@ namespace Arquis.Backend.Controllers
         public async Task<IActionResult> ObtenerAsignadas([FromQuery] string? operario)
         {
             var op = !string.IsNullOrWhiteSpace(operario)
-                ? operario
-                : (User.Identity?.IsAuthenticated == true ? User.Identity.Name : "Pedro");
+                ? operario.Trim()
+                : (User.Identity?.IsAuthenticated == true ? User.Identity.Name! : "Pedro");
 
             var rutas = await _context.RutasTrabajo
-                .Include(r => r.Puntos)
-                .Where(r => (r.OperarioAsignado == op || r.OperarioId == op) && r.Estado != "Cancelada")
+                .Include(r => r.Puntos.OrderBy(p => p.Orden))
+                .Where(r => (r.OperarioAsignado == op || r.OperarioId == op || (r.OperarioAsignado != null && r.OperarioAsignado.ToLower() == op.ToLower())) && r.Estado != "Cancelada")
                 .OrderByDescending(r => r.FechaCreacion)
                 .ToListAsync();
 

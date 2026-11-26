@@ -17,9 +17,7 @@ class PuntoTrabajo {
   PuntoTrabajo.fromJson(Map<String, dynamic> json)
     : id = _id(json['id']),
       rutaTrabajoId = _entero(json['rutaTrabajoId']) ?? 0,
-      orden =
-          _entero(json['orden']) ??
-          (throw const FormatException('Parada sin orden')),
+      orden = _entero(json['orden']) ?? 0,
       idCodigoFijo = _entero(json['idCodigoFijo']),
       idLote = _entero(json['idLote']),
       codigoSuministro = json['codigoSuministro'] as String?,
@@ -177,11 +175,10 @@ List<PuntoTrabajo> _puntos(dynamic value) {
   final puntos = value
       .map((p) => PuntoTrabajo.fromJson(Map<String, dynamic>.from(p as Map)))
       .toList();
-  if (puntos.any((p) => p.orden <= 0) ||
-      puntos.map((p) => p.id).toSet().length != puntos.length ||
-      puntos.map((p) => p.orden).toSet().length != puntos.length) {
-    throw const FormatException('Secuencia de paradas inválida o duplicada');
-  }
-  puntos.sort((a, b) => a.orden.compareTo(b.orden));
+  puntos.sort((a, b) {
+    final comp = a.orden.compareTo(b.orden);
+    if (comp != 0) return comp;
+    return a.id.compareTo(b.id);
+  });
   return List.unmodifiable(puntos);
 }

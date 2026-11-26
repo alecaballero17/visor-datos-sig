@@ -247,6 +247,140 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
     }
   }
 
+  void _centrarEnParada(PuntoTrabajo punto) {
+    if (punto.tieneCoordenadas) {
+      _map.move(LatLng(punto.latitud!, punto.longitud!), 18);
+    }
+  }
+
+  void _mostrarListaCasas() {
+    final ruta = _ruta;
+    if (ruta == null) return;
+    final puntos = ruta.puntos;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          minChildSize: 0.3,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[400],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Ruta Óptima · ${ruta.codigo}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          Text(
+                            '${ruta.atendidos}/${puntos.length} atendidos · Recorrido secuencial Dijkstra',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: puntos.isEmpty
+                      ? const Center(child: Text('No hay paradas asignadas'))
+                      : ListView.separated(
+                          controller: scrollController,
+                          itemCount: puntos.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (_, index) {
+                            final p = puntos[index];
+                            final esObjetivo = p.id == _objetivo?.id;
+                            final colorBadge = p.atendido
+                                ? Colors.green
+                                : esObjetivo
+                                    ? Colors.red
+                                    : Colors.blueGrey;
+                            return ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: colorBadge,
+                                child: Text('${p.orden}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '${p.orden}. ${p.titular ?? "Cliente"}',
+                                      style: TextStyle(
+                                        fontWeight: esObjetivo ? FontWeight.bold : FontWeight.normal,
+                                        color: esObjetivo ? Colors.red[900] : null,
+                                      ),
+                                    ),
+                                  ),
+                                  if (p.montoDeuda != null && p.montoDeuda! > 0)
+                                    Text(
+                                      'Bs. ${p.montoDeuda!.toStringAsFixed(2)}',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 12),
+                                    ),
+                                ],
+                              ),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(p.direccion ?? 'Sin dirección', style: const TextStyle(fontSize: 12)),
+                                  Text(
+                                    'Suministro: ${p.codigoSuministro ?? "N/A"} · Estado: ${p.estado}',
+                                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                              trailing: p.tieneCoordenadas
+                                  ? IconButton(
+                                      icon: const Icon(Icons.my_location, size: 20),
+                                      tooltip: 'Centrar en mapa',
+                                      onPressed: () {
+                                        Navigator.pop(ctx);
+                                        _centrarEnParada(p);
+                                      },
+                                    )
+                                  : const Icon(Icons.location_off, color: Colors.grey, size: 20),
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                _centrarEnParada(p);
+                              },
+                            );
+                          },
+                        ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final punto = _objetivo;
@@ -264,6 +398,13 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
           _ensayo ? 'ENSAYO · sin registro operativo' : 'Atención en secuencia',
         ),
         actions: [
+          IconButton(
+            tooltip: 'Lista de casas en ruta',
+            onPressed: _cargando || _ruta == null
+                ? null
+                : _mostrarListaCasas,
+            icon: const Icon(Icons.format_list_numbered),
+          ),
           IconButton(
             tooltip: 'Ver recorrido asignado',
             onPressed: _cargando || _error != null || _recorrido.isEmpty
@@ -418,8 +559,26 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Text(
-                          '${_ruta?.codigo} · ${_ruta?.atendidos ?? 0}/${_ruta?.puntos.length ?? 0} atendidos',
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${_ruta?.codigo} · ${_ruta?.atendidos ?? 0}/${_ruta?.puntos.length ?? 0} atendidos',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero,
+                              ),
+                              onPressed: _ruta == null ? null : _mostrarListaCasas,
+                              icon: const Icon(Icons.list_alt, size: 16),
+                              label: const Text(
+                                'Ver todas las casas',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                            ),
+                          ],
                         ),
                         if (_ruta != null)
                           LinearProgressIndicator(

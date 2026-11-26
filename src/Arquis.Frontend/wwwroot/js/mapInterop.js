@@ -7,6 +7,7 @@ window.arquis = (() => {
     let selectedLayer = null, selectedId = null, selectedFeature = null;
     let selectedGraphic = null, selectedHaloGraphic = null, selectionLabel = null;
     let refreshTimer = null, detailVersion = 0, refreshVersion = 0;
+    let resizeObserver = null, windowResizeHandler = null;
     let currentWaterFilter = 'all'; // 'all', 'with', 'without'
 
     // RF-WEB-03: Mapas Base (OSM y Google Maps Satélite / Híbrido)
@@ -565,18 +566,20 @@ window.arquis = (() => {
                 }
             });
 
-            window.addEventListener('resize', () => {
+            windowResizeHandler = () => {
                 if (map) map.invalidateSize();
-            });
+            };
+            window.addEventListener('resize', windowResizeHandler);
 
             // Paneles y modales cambian el tamano del contenedor sin redimensionar la ventana:
             // sin esto Leaflet sigue con el tamano viejo y el mapa queda en blanco o cortado.
             if (typeof ResizeObserver === 'function') {
                 let pendiente = null;
-                new ResizeObserver(() => {
+                resizeObserver = new ResizeObserver(() => {
                     if (pendiente) cancelAnimationFrame(pendiente);
                     pendiente = requestAnimationFrame(() => { if (map) map.invalidateSize(false); });
-                }).observe(mapContainer);
+                });
+                resizeObserver.observe(mapContainer);
             }
         }
 
@@ -696,12 +699,10 @@ window.arquis = (() => {
         ensureLayers();
         clearRouteHistory();
 
-        let latlngs = [];
-        try {
-            const feature = JSON.parse(ruta.geometriaRutaGeoJson || '{}');
-            if (feature.geometry?.type === 'LineString')
-                latlngs = feature.geometry.coordinates.map(c => [c[1], c[0]]);
-        } catch (error) { console.warn('Geometría de ruta no disponible', error); }
+        const latlngs = puntos
+            .filter(p => Number.isFinite(Number(p.latitud)) && Number.isFinite(Number(p.longitud)))
+            .map(p => [Number(p.latitud), Number(p.longitud)]);
+        if (latlngs.length === 0) return;
 
         // Polilínea de fondo brillante y línea principal
         const polylineGlow = L.polyline(latlngs, {
@@ -786,13 +787,18 @@ window.arquis = (() => {
         ensureLayers();
         clearRutaTrabajo();
 
-        const puntos = ruta.puntos.sort((a, b) => (a.orden || 0) - (b.orden || 0));
+        const puntos = [...ruta.puntos].sort((a, b) => (a.orden || 0) - (b.orden || 0));
         let latlngs = [];
         try {
             const feature = JSON.parse(ruta.geometriaRutaGeoJson || '{}');
             if (feature.geometry?.type === 'LineString')
                 latlngs = feature.geometry.coordinates.map(c => [c[1], c[0]]);
         } catch (error) { console.warn('Geometría de ruta no disponible', error); }
+        if (latlngs.length < 2) {
+            latlngs = puntos
+                .filter(p => Number.isFinite(Number(p.latitud)) && Number.isFinite(Number(p.longitud)))
+                .map(p => [Number(p.latitud), Number(p.longitud)]);
+        }
 
         const esCorte = (ruta.tipo || '').toLowerCase().includes('corte');
         const colorRuta = esCorte ? '#ea4335' : '#1a73e8';
@@ -987,6 +993,18 @@ window.arquis = (() => {
 
     // Destrucción limpia del mapa para navegación entre componentes SPA
     function destroy() {
+        if (resizeObserver) {
+            try { resizeObserver.disconnect(); } catch (_) {}
+            resizeObserver = null;
+        }
+        if (windowResizeHandler) {
+            window.removeEventListener('resize', windowResizeHandler);
+            windowResizeHandler = null;
+        }
+        if (historyPlaybackTimer) {
+            clearInterval(historyPlaybackTimer);
+            historyPlaybackTimer = null;
+        }
         if (map) {
             try {
                 map.remove();

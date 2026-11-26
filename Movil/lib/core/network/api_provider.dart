@@ -25,6 +25,10 @@ class ApiProvider {
         (dotenv.env['API_URL_ANDROID'] ?? 'http://10.0.2.2:5080/api');
     }
 
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
+      baseUrl = 'http://$baseUrl';
+    }
+
     _dio = Dio(
       BaseOptions(
         baseUrl: baseUrl,
