@@ -18,8 +18,10 @@ def _archivos(servicios: list[d.Servicio]) -> dict:
         archivos[f"{s.clave}"] = s.log_out
         archivos[f"{s.clave}:err"] = s.log_err
         if s.clave == "nginx":
-            archivos["nginx:access"] = d.dir_logs() / "nginx.access.log"
-            archivos["nginx:error"] = d.dir_logs() / "nginx.error.log"
+            archivos["nginx:web-access"] = d.dir_logs() / "nginx-web.access.log"
+            archivos["nginx:web-error"] = d.dir_logs() / "nginx-web.error.log"
+            archivos["nginx:api-access"] = d.dir_logs() / "nginx-api.access.log"
+            archivos["nginx:api-error"] = d.dir_logs() / "nginx-api.error.log"
     return archivos
 
 
