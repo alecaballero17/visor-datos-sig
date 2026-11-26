@@ -73,7 +73,7 @@ _PROXY = """
         proxy_set_header Host              $host;
         proxy_set_header X-Real-IP         $remote_addr;
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $arquis_forwarded_proto;
         proxy_set_header Upgrade           $http_upgrade;
         proxy_set_header Connection        $connection_upgrade;"""
 
@@ -164,6 +164,11 @@ map $http_upgrade $connection_upgrade {{
     ''      close;
 }}
 
+map $http_x_forwarded_proto $arquis_forwarded_proto {{
+    ""      $scheme;
+    default $http_x_forwarded_proto;
+}}
+
 upstream arquis_backend  {{ server 127.0.0.1:{be}; keepalive 16; }}
 upstream arquis_frontend {{ server 127.0.0.1:{fe}; keepalive 16; }}
 """
@@ -178,14 +183,41 @@ upstream arquis_frontend {{ server 127.0.0.1:{fe}; keepalive 16; }}
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:arquis_ssl:10m;
     add_header Strict-Transport-Security "max-age=31536000" always;"""
-        texto += f"""
+        if cfg.get("HTTPS") == "cloudflare":
+            texto += """
+map $http_x_forwarded_proto $cf_http_redirect {
+    "https" 0;
+    default 1;
+}
+
+# HTTP (si Cloudflare esta en modo Flexible entra con X-Forwarded-Proto: https sin bucle 301)
+server {
+    listen """ + f"{puerto}{ds}" + """;
+    server_name """ + web + """;
+    if ($cf_http_redirect = 1) { return 301 https://$host$request_uri; }
+""" + _ubicaciones_web(cfg, logs, con_swagger=not api) + """
+}
+"""
+            if api:
+                texto += f"""
+# API publica HTTP (compatible con Cloudflare Flexible)
+server {{
+    listen {puerto};
+    server_name {api};
+    if ($cf_http_redirect = 1) {{ return 301 https://$host$request_uri; }}
+{_ubicaciones_api(cfg, logs)}
+}}
+"""
+        else:
+            texto += f"""
 # HTTP → HTTPS (y validacion de Let's Encrypt)
 server {{
     listen {puerto}{ds};
     server_name {nombres};{_acme()}
     location / {{ return 301 https://$host$request_uri; }}
 }}
-
+"""
+        texto += f"""
 # Visor{' + API en /api' if not api else ''}
 server {{
     {_listen_ssl(ds)}
