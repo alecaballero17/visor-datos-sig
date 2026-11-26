@@ -209,7 +209,8 @@ class _BandejaRutasPantallaState extends State<BandejaRutasPantalla> {
             ListTile(
               leading: CircleAvatar(child: Text('${punto.orden}')),
               title: Text(
-                '${punto.titular ?? "Cliente"} · ${punto.codigoSuministro ?? ""}',
+                '${punto.nombreTitularVisible} · ${punto.codigoSuministro ?? ""}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               subtitle: Text(
                 '${punto.direccion ?? "Sin dirección"}\n${punto.estado} · ${punto.tieneCoordenadas ? "${punto.latitud}, ${punto.longitud}" : "Coordenadas no válidas"}',

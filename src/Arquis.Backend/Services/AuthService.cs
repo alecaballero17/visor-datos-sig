@@ -51,11 +51,13 @@ public sealed class AuthService(ArquisDbContext context)
             .AnyAsync(u => u.Login == emailTrimmed || u.Email == emailTrimmed, ct);
 
         if (exists)
-            throw new Exception("El email ya esta registrado.");
+            throw new InvalidOperationException("El email ya esta registrado.");
 
-        // Si el registro proviene del móvil, el rol asignado es obligatoriamente "Operador"
         var esMovil = string.Equals(request.Origen, "movil", StringComparison.OrdinalIgnoreCase);
-        var nombreRolObjetivo = esMovil ? "Operador" : "Consultor";
+        var nombreRolObjetivo = esMovil
+            ? (NormalizarRolRegistroMovil(request.Rol)
+                ?? throw new ArgumentException("Debe especificar si la cuenta es Cortador o Reconector."))
+            : "Consultor";
 
         var rolObjetivo = await context.Roles
             .FirstOrDefaultAsync(r => r.NombreRol == nombreRolObjetivo && r.Estado, ct);
@@ -65,7 +67,13 @@ public sealed class AuthService(ArquisDbContext context)
             rolObjetivo = new Rol
             {
                 NombreRol = nombreRolObjetivo,
-                Descripcion = esMovil ? "Operador de campo en aplicación móvil" : "Consulta del visor cartográfico",
+                Descripcion = nombreRolObjetivo switch
+                {
+                    "Cortador" => "Rol para corte y suspensión de servicios de agua potable",
+                    "Reconector" => "Rol para reconexión y restitución de servicios de agua potable",
+                    _ when esMovil => "Operador de campo en aplicación móvil",
+                    _ => "Consulta del visor cartográfico"
+                },
                 Estado = true
             };
             context.Roles.Add(rolObjetivo);
@@ -128,6 +136,17 @@ public sealed class AuthService(ArquisDbContext context)
         }
 
         await context.SaveChangesAsync(ct);
+    }
+
+    private static string? NormalizarRolRegistroMovil(string? rol)
+    {
+        if (string.IsNullOrWhiteSpace(rol)) return null;
+        return rol.Trim().ToLowerInvariant() switch
+        {
+            "cortador" or "corte" => "Cortador",
+            "reconector" or "reconexion" or "reconexión" or "reponedor" or "reposicion" or "reposición" => "Reconector",
+            _ => null
+        };
     }
 
     public async Task LogAccessAsync(string login, bool success, string? ip, string? detail, CancellationToken ct)

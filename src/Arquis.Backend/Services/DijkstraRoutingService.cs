@@ -108,18 +108,23 @@ namespace Arquis.Backend.Services
         }
 
         /// <summary>
-        /// Optimiza la ruta utilizando el algoritmo de Dijkstra sobre la red vial dbo.Vias.
-        /// Ordena estrictamente los puntos 1, 2, 3... N garantizando circulación sobre ejes viales.
+        /// Optimiza la ruta utilizando Dijkstra sobre la red vial dbo.Vias.
+        /// Cuando no hay punto de partida fijo, elige automáticamente el punto inicial y el orden óptimo (NN multi-inicio + 2-opt) para minimizar distancia y tiempo.
         /// </summary>
         public async Task<ResultadoOptimizacionRuta> OptimizarRutaAsync(
-            PuntoPartidaDto partida,
-            List<PuntoIntervencionDto> puntos)
+            PuntoPartidaDto? partida,
+            List<PuntoIntervencionDto> puntos,
+            bool partidaAutomatica = false)
         {
+            var usarPartidaAutomatica = partidaAutomatica ||
+                partida == null ||
+                (Math.Abs(partida.Latitud) < 0.0001 && Math.Abs(partida.Longitud) < 0.0001);
+
             if (puntos == null || puntos.Count == 0)
             {
                 return new ResultadoOptimizacionRuta
                 {
-                    Partida = partida,
+                    Partida = partida ?? new PuntoPartidaDto { Nombre = "Inicio óptimo de ruta" },
                     PuntosOrdenados = new List<PuntoIntervencionDto>(),
                     DistanciaTotalMetros = 0,
                     TiempoEstimadoMinutos = 0,
@@ -130,72 +135,90 @@ namespace Arquis.Backend.Services
             var graph = await ObtenerGrafoAsync();
             if (!graph.TieneVias)
                 throw new RutaNoDisponibleException("No hay vías cargadas en dbo.Vias. Prepare la base de datos antes de calcular recorridos.");
-            var resultado = new ResultadoOptimizacionRuta
+
+            var targets = puntos.Select(p => (p.Latitud, p.Longitud)).ToList();
+            var matriz = new double[puntos.Count][];
+            for (int i = 0; i < puntos.Count; i++)
             {
-                Partida = partida
-            };
-
-            // Lista para almacenar la secuencia completa de coordenadas de la ruta [lng, lat]
-            var rutaCoordinates = new List<List<double>>();
-
-            // Punto de partida inicial
-            var currentLat = partida.Latitud;
-            var currentLng = partida.Longitud;
-
-
-            var restantes = new List<PuntoIntervencionDto>(puntos);
-            var ordenados = new List<PuntoIntervencionDto>();
-            double distanciaTotalMetros = 0;
-            int ordenNum = 1;
-
-            // Algoritmo Greedy con optimización Dijkstra punto a punto:
-            // En cada parada, selecciona el punto no visitado con menor distancia de trayectoria por calles
-            while (restantes.Count > 0)
-            {
-                PuntoIntervencionDto? mejorPunto = null;
-                double mejorDistancia = double.MaxValue;
-                List<Coordinate>? mejorTrayectoria = null;
-
-                foreach (var candidato in restantes)
-                {
-                    var pathResult = graph.CalcularRutaDijkstra(
-                        currentLat, currentLng,
-                        candidato.Latitud, candidato.Longitud);
-
-                    if (pathResult.DistanciaMetros < mejorDistancia)
-                    {
-                        mejorDistancia = pathResult.DistanciaMetros;
-                        mejorPunto = candidato;
-                        mejorTrayectoria = pathResult.Coordenadas;
-                    }
-                }
-
-                if (mejorPunto == null)
+                var row = graph.CalcularDistanciasDesde(puntos[i].Latitud, puntos[i].Longitud, targets);
+                if (row == null)
                 {
                     throw new RutaNoDisponibleException("No existe un recorrido conectado por las vías disponibles para todos los puntos seleccionados. Seleccione puntos de la misma red vial y a menos de 200 m de una calle.");
                 }
+                matriz[i] = row;
+            }
 
-                mejorPunto.Orden = ordenNum++;
-                mejorPunto.DistanciaDesdeAnteriorMetros = Math.Round(mejorDistancia, 1);
-                distanciaTotalMetros += mejorDistancia;
-                ordenados.Add(mejorPunto);
-                restantes.Remove(mejorPunto);
-
-                // Agregar los vértices reales de la calle a la trayectoria de la ruta
-                if (mejorTrayectoria != null && mejorTrayectoria.Count > 0)
+            double[]? distDesdePartidaFija = null;
+            if (!usarPartidaAutomatica && partida != null)
+            {
+                distDesdePartidaFija = graph.CalcularDistanciasDesde(partida.Latitud, partida.Longitud, targets);
+                if (distDesdePartidaFija == null)
                 {
-                    foreach (var c in mejorTrayectoria)
+                    throw new RutaNoDisponibleException("No existe un recorrido conectado por las vías disponibles desde el punto de partida. Seleccione puntos de la misma red vial y a menos de 200 m de una calle.");
+                }
+            }
+
+            var ordenIndices = usarPartidaAutomatica
+                ? CalcularMejorOrdenAbierto(matriz, puntos)
+                : CalcularOrdenDesdePartida(distDesdePartidaFija!, matriz);
+
+            var partidaEfectiva = usarPartidaAutomatica
+                ? new PuntoPartidaDto
+                {
+                    Latitud = puntos[ordenIndices[0]].Latitud,
+                    Longitud = puntos[ordenIndices[0]].Longitud,
+                    Nombre = $"Inicio óptimo: {puntos[ordenIndices[0]].CodigoSuministro ?? puntos[ordenIndices[0]].Titular ?? "Parada 1"}"
+                }
+                : partida!;
+
+            var resultado = new ResultadoOptimizacionRuta
+            {
+                Partida = partidaEfectiva
+            };
+
+            var rutaCoordinates = new List<List<double>>();
+            var ordenados = new List<PuntoIntervencionDto>();
+            double distanciaTotalMetros = 0;
+
+            var prevLat = partidaEfectiva.Latitud;
+            var prevLng = partidaEfectiva.Longitud;
+
+            for (int step = 0; step < ordenIndices.Count; step++)
+            {
+                var candidato = puntos[ordenIndices[step]];
+                double distSegmento = 0;
+                List<Coordinate>? trayectoria = null;
+
+                if (step > 0 || !usarPartidaAutomatica)
+                {
+                    var pathResult = graph.CalcularRutaDijkstra(prevLat, prevLng, candidato.Latitud, candidato.Longitud);
+                    if (!double.IsFinite(pathResult.DistanciaMetros))
+                    {
+                        throw new RutaNoDisponibleException("No existe un recorrido conectado por las vías disponibles para todos los puntos seleccionados. Seleccione puntos de la misma red vial y a menos de 200 m de una calle.");
+                    }
+                    distSegmento = pathResult.DistanciaMetros;
+                    trayectoria = pathResult.Coordenadas;
+                }
+
+                candidato.Orden = step + 1;
+                candidato.DistanciaDesdeAnteriorMetros = Math.Round(distSegmento, 1);
+                distanciaTotalMetros += distSegmento;
+                ordenados.Add(candidato);
+
+                if (trayectoria != null && trayectoria.Count > 0)
+                {
+                    foreach (var c in trayectoria)
                     {
                         rutaCoordinates.Add(new List<double> { c.X, c.Y });
                     }
                 }
                 else
                 {
-                    rutaCoordinates.Add(new List<double> { mejorPunto.Longitud, mejorPunto.Latitud });
+                    rutaCoordinates.Add(new List<double> { candidato.Longitud, candidato.Latitud });
                 }
 
-                currentLat = mejorPunto.Latitud;
-                currentLng = mejorPunto.Longitud;
+                prevLat = candidato.Latitud;
+                prevLng = candidato.Longitud;
             }
 
             resultado.PuntosOrdenados = ordenados;
@@ -207,7 +230,6 @@ namespace Arquis.Backend.Services
             var minutosAtencion = ordenados.Count * 5;
             resultado.TiempoEstimadoMinutos = minutosViaje + minutosAtencion;
 
-            // Generar GeoJSON FeatureLineString estándar
             var geoJsonObj = new
             {
                 type = "Feature",
@@ -222,13 +244,155 @@ namespace Arquis.Backend.Services
                     distanciaKm = resultado.DistanciaTotalKm,
                     tiempoEstimadoMinutos = resultado.TiempoEstimadoMinutos,
                     totalPuntos = ordenados.Count,
-                    puntoPartida = partida.Nombre,
-                    algoritmo = resultado.AlgoritmoUtilizado
+                    puntoPartida = partidaEfectiva.Nombre,
+                    algoritmo = usarPartidaAutomatica
+                        ? "Ruta óptima automática Dijkstra + 2-Opt sobre dbo.Vias"
+                        : resultado.AlgoritmoUtilizado
                 }
             };
 
             resultado.GeometriaGeoJson = JsonSerializer.Serialize(geoJsonObj);
             return resultado;
+        }
+
+        private static List<int> CalcularOrdenDesdePartida(double[] distDesdePartida, double[][] matriz)
+        {
+            int n = matriz.Length;
+            var restantes = new HashSet<int>(Enumerable.Range(0, n));
+            var orden = new List<int>(n);
+
+            int actual = restantes.OrderBy(i => distDesdePartida[i]).First();
+            orden.Add(actual);
+            restantes.Remove(actual);
+
+            while (restantes.Count > 0)
+            {
+                int siguiente = -1;
+                double mejor = double.MaxValue;
+                foreach (var idx in restantes)
+                {
+                    if (matriz[actual][idx] < mejor)
+                    {
+                        mejor = matriz[actual][idx];
+                        siguiente = idx;
+                    }
+                }
+                orden.Add(siguiente);
+                restantes.Remove(siguiente);
+                actual = siguiente;
+            }
+
+            Aplicar2Opt(orden, matriz, fixedStartCost: i => distDesdePartida[i]);
+            return orden;
+        }
+
+        private static List<int> CalcularMejorOrdenAbierto(double[][] matriz, List<PuntoIntervencionDto> puntos)
+        {
+            int n = matriz.Length;
+            if (n <= 1) return Enumerable.Range(0, n).ToList();
+
+            IEnumerable<int> candidatosInicio;
+            if (n <= 60)
+            {
+                candidatosInicio = Enumerable.Range(0, n);
+            }
+            else
+            {
+                var set = new HashSet<int>
+                {
+                    Enumerable.Range(0, n).OrderBy(i => puntos[i].Latitud).First(),
+                    Enumerable.Range(0, n).OrderByDescending(i => puntos[i].Latitud).First(),
+                    Enumerable.Range(0, n).OrderBy(i => puntos[i].Longitud).First(),
+                    Enumerable.Range(0, n).OrderByDescending(i => puntos[i].Longitud).First()
+                };
+                int step = Math.Max(1, n / 20);
+                for (int i = 0; i < n && set.Count < 24; i += step) set.Add(i);
+                candidatosInicio = set;
+            }
+
+            List<int>? mejorOrden = null;
+            double mejorCosto = double.MaxValue;
+
+            foreach (var inicio in candidatosInicio)
+            {
+                var orden = new List<int>(n) { inicio };
+                var usados = new bool[n];
+                usados[inicio] = true;
+                int actual = inicio;
+                double costo = 0;
+
+                for (int k = 1; k < n; k++)
+                {
+                    int sig = -1;
+                    double minD = double.MaxValue;
+                    for (int j = 0; j < n; j++)
+                    {
+                        if (!usados[j] && matriz[actual][j] < minD)
+                        {
+                            minD = matriz[actual][j];
+                            sig = j;
+                        }
+                    }
+                    orden.Add(sig);
+                    usados[sig] = true;
+                    costo += minD;
+                    actual = sig;
+                }
+
+                Aplicar2Opt(orden, matriz, fixedStartCost: null);
+                costo = CalcularCostoAbierto(orden, matriz);
+
+                if (costo < mejorCosto)
+                {
+                    mejorCosto = costo;
+                    mejorOrden = orden;
+                }
+            }
+
+            return mejorOrden!;
+        }
+
+        private static double CalcularCostoAbierto(List<int> orden, double[][] matriz, Func<int, double>? fixedStartCost = null)
+        {
+            double total = fixedStartCost != null && orden.Count > 0 ? fixedStartCost(orden[0]) : 0;
+            for (int i = 0; i < orden.Count - 1; i++)
+            {
+                total += matriz[orden[i]][orden[i + 1]];
+            }
+            return total;
+        }
+
+        private static void Aplicar2Opt(List<int> orden, double[][] matriz, Func<int, double>? fixedStartCost)
+        {
+            int n = orden.Count;
+            if (n < 3) return;
+
+            bool mejorado = true;
+            int guard = 0;
+            int maxPasses = n * 2;
+            while (mejorado && guard++ < maxPasses)
+            {
+                mejorado = false;
+                double actualTotal = CalcularCostoAbierto(orden, matriz, fixedStartCost);
+
+                for (int i = 0; i < n - 1; i++)
+                {
+                    for (int j = i + 1; j < n; j++)
+                    {
+                        orden.Reverse(i, j - i + 1);
+                        double nuevoTotal = CalcularCostoAbierto(orden, matriz, fixedStartCost);
+                        if (nuevoTotal < actualTotal - 0.01)
+                        {
+                            actualTotal = nuevoTotal;
+                            mejorado = true;
+                        }
+                        else
+                        {
+                            orden.Reverse(i, j - i + 1);
+                        }
+                    }
+                }
+            }
         }
 
         public static double CalcularHaversine(double lat1, double lon1, double lat2, double lon2)
@@ -309,6 +473,93 @@ namespace Arquis.Backend.Services
                 if (distance < min) { best = i; min = distance; projected = candidate; }
             }
             return (best, projected, min);
+        }
+
+        public double[]? CalcularDistanciasDesde(
+            double startLat,
+            double startLng,
+            IReadOnlyList<(double Lat, double Lng)> targets)
+        {
+            if (!double.IsFinite(startLat) || !double.IsFinite(startLng) ||
+                Math.Abs(startLat) > 90 || Math.Abs(startLng) > 180)
+                return null;
+
+            var start = Snap(startLat, startLng);
+            if (start.Segment < 0 || start.Distance > 200)
+                return null;
+
+            var snappedTargets = new (int Segment, Coordinate Point, double Distance)[targets.Count];
+            var neededVertices = new HashSet<int>();
+
+            for (int k = 0; k < targets.Count; k++)
+            {
+                var (tLat, tLng) = targets[k];
+                if (!double.IsFinite(tLat) || !double.IsFinite(tLng) ||
+                    Math.Abs(tLat) > 90 || Math.Abs(tLng) > 180)
+                    return null;
+
+                var end = Snap(tLat, tLng);
+                if (end.Segment < 0 || end.Distance > 200)
+                    return null;
+
+                snappedTargets[k] = end;
+                if (end.Segment != start.Segment)
+                {
+                    var tSeg = segments[end.Segment];
+                    neededVertices.Add(tSeg.A);
+                    neededVertices.Add(tSeg.B);
+                }
+            }
+
+            var distances = Enumerable.Repeat(double.PositiveInfinity, nodes.Count).ToArray();
+            if (neededVertices.Count > 0)
+            {
+                var queue = new PriorityQueue<int, double>();
+                var source = segments[start.Segment];
+                foreach (int id in new[] { source.A, source.B })
+                {
+                    distances[id] = Distance(start.Point, nodes[id]);
+                    queue.Enqueue(id, distances[id]);
+                }
+
+                int remainingNeeded = neededVertices.Count;
+                while (queue.TryDequeue(out int current, out double cost))
+                {
+                    if (cost > distances[current]) continue;
+                    if (neededVertices.Remove(current))
+                    {
+                        remainingNeeded--;
+                        if (remainingNeeded == 0) break;
+                    }
+                    foreach (var edge in edges[current])
+                    {
+                        double next = cost + edge.Distance;
+                        if (next >= distances[edge.Target]) continue;
+                        distances[edge.Target] = next;
+                        queue.Enqueue(edge.Target, next);
+                    }
+                }
+            }
+
+            var result = new double[targets.Count];
+            for (int k = 0; k < targets.Count; k++)
+            {
+                var end = snappedTargets[k];
+                if (start.Segment == end.Segment)
+                {
+                    result[k] = Distance(start.Point, end.Point);
+                }
+                else
+                {
+                    var tSeg = segments[end.Segment];
+                    double dA = distances[tSeg.A] + Distance(nodes[tSeg.A], end.Point);
+                    double dB = distances[tSeg.B] + Distance(nodes[tSeg.B], end.Point);
+                    double d = Math.Min(dA, dB);
+                    if (!double.IsFinite(d)) return null;
+                    result[k] = d;
+                }
+            }
+            return result;
         }
 
         public PathResult CalcularRutaDijkstra(double startLat, double startLng, double endLat, double endLng)

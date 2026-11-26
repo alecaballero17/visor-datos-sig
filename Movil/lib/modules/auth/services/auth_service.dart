@@ -17,7 +17,12 @@ class AuthService {
     return response;
   }
 
-  Future<dynamic> register(String nombre, String email, String password) async {
+  Future<dynamic> register(
+    String nombre,
+    String email,
+    String password, {
+    required String rol,
+  }) async {
     final response = await api.post(
       AuthEndpoints.registrar,
       data: {
@@ -25,6 +30,7 @@ class AuthService {
         'email': email,
         'password': password,
         'origen': 'movil',
+        'rol': rol,
       },
     );
     return response;

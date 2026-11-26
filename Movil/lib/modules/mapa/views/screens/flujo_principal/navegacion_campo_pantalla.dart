@@ -253,6 +253,38 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
     }
   }
 
+  void _mostrarResumenParada(PuntoTrabajo parada) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Parada #${parada.orden} · ${parada.nombreTitularVisible}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text('Suministro: ${parada.codigoSuministro ?? "N/A"} · Estado: ${parada.estado}'),
+              Text('Dirección: ${parada.direccion ?? "Sin dirección"}'),
+              if (parada.montoDeuda != null && parada.montoDeuda! > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Deuda: Bs. ${parada.montoDeuda!.toStringAsFixed(2)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _mostrarListaCasas() {
     final ruta = _ruta;
     if (ruta == null) return;
@@ -331,9 +363,9 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      '${p.orden}. ${p.titular ?? "Cliente"}',
+                                      '${p.orden}. ${p.nombreTitularVisible}',
                                       style: TextStyle(
-                                        fontWeight: esObjetivo ? FontWeight.bold : FontWeight.normal,
+                                        fontWeight: esObjetivo ? FontWeight.bold : FontWeight.w500,
                                         color: esObjetivo ? Colors.red[900] : null,
                                       ),
                                     ),
@@ -537,13 +569,19 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
                                 ),
                                 width: 36,
                                 height: 36,
-                                child: CircleAvatar(
-                                  backgroundColor: parada.atendido
-                                      ? Colors.green
-                                      : parada.id == punto?.id
-                                      ? Colors.red
-                                      : Colors.blueGrey,
-                                  child: Text('${parada.orden}'),
+                                child: GestureDetector(
+                                  onTap: () => _mostrarResumenParada(parada),
+                                  child: CircleAvatar(
+                                    backgroundColor: parada.atendido
+                                        ? Colors.green
+                                        : parada.id == punto?.id
+                                        ? Colors.red
+                                        : Colors.blueGrey,
+                                    child: Text(
+                                      '${parada.orden}',
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                  ),
                                 ),
                               ),
                         ],
@@ -589,9 +627,16 @@ class _NavegacionCampoPantallaState extends State<NavegacionCampoPantalla>
                         if (punto != null &&
                             (_ruta?.puedeAtender ?? false)) ...[
                           Text(
-                            '${punto.orden}. ${punto.titular ?? "Cliente"} · ${punto.codigoSuministro ?? ""}',
+                            '${punto.orden}. ${punto.nombreTitularVisible}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
-                          Text(punto.direccion ?? 'Sin dirección'),
+                          Text(
+                            'Suministro: ${punto.codigoSuministro ?? "—"} · ${punto.direccion ?? "Sin dirección"}',
+                            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                          ),
                           Text(
                             !destinoValido
                                 ? 'Destino sin coordenadas válidas. Solicite corregir la asignación.'

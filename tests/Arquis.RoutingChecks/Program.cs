@@ -52,3 +52,11 @@ var turn = crossing.CalcularRutaDijkstra(.001, 0, .002, .001);
 Check(turn.Coordenadas.Any(c => c.Equals2D(new Coordinate(.001, .001))) && double.IsFinite(turn.DistanciaMetros),
     "Geometric intersections become traversable junctions");
 Check(graph.CalcularRutaDijkstra(0, .0002, 0, .0002).DistanciaMetros == 0, "Repeated stop has zero distance");
+var elegiblesCorte = suministros.Where(CandidatosServicio.ElegiblesParaCorte()).ToList();
+Check(elegiblesCorte.Count == 4 && elegiblesCorte.All(c => c.Estado == 1 || c.Estado == 2),
+    "Corte manual selection includes active (1) and marked (2) supplies only");
+var distsOk = graph.CalcularDistanciasDesde(0, .0002, [(0, .0006), (.0008, .001)]);
+Check(distsOk != null && Math.Abs(distsOk[1] - path.DistanciaMetros) < 0.01,
+    "Single-source Dijkstra matrix matches exact pairwise road distances");
+Check(graph.CalcularDistanciasDesde(0, .0002, [(0, .01)]) == null,
+    "Single-source matrix rejects disconnected targets");

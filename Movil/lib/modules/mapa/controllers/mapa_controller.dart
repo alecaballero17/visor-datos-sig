@@ -164,13 +164,19 @@ class MapaController {
         final c = geom['coordinates'] as List;
         lng = (c[0] as num).toDouble();
         lat = (c[1] as num).toDouble();
-      } else if (props['Latitud'] != null && props['Longitud'] != null) {
-        lat = (props['Latitud'] as num).toDouble();
-        lng = (props['Longitud'] as num).toDouble();
+      } else {
+        final rawLat = props['latitud'] ?? props['Latitud'];
+        final rawLng = props['longitud'] ?? props['Longitud'];
+        if (rawLat is num && rawLng is num) {
+          lat = rawLat.toDouble();
+          lng = rawLng.toDouble();
+        }
       }
 
       if (lat != null && lng != null) {
-        final tieneAgua = props['TieneAgua'] == true || props['Estado'] == 1;
+        final tieneAguaVal = props['tieneAgua'] ?? props['TieneAgua'];
+        final estadoVal = props['estado'] ?? props['Estado'];
+        final tieneAgua = tieneAguaVal == true || estadoVal == 1 || estadoVal == 2;
 
         markers.add(Marker(
           point: LatLng(lat, lng),
@@ -178,8 +184,9 @@ class MapaController {
           height: 30,
           child: GestureDetector(
             onTap: () {
-              // Notificar al visor de datos
-              onFeatureSelected?.call(f as Map<String, dynamic>);
+              final featureMap = Map<String, dynamic>.from(f as Map);
+              featureMap.putIfAbsent('layer', () => 'codigosfijos');
+              onFeatureSelected?.call(featureMap);
             },
             child: Container(
               decoration: BoxDecoration(

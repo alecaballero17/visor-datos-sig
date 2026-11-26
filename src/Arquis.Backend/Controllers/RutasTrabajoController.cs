@@ -82,6 +82,7 @@ namespace Arquis.Backend.Controllers
 
             if (ruta == null) return NotFound(new { error = "Ruta de trabajo no encontrada." });
 
+            await CompletarTitularesFaltantesAsync(ruta.Puntos);
             return Ok(ruta);
         }
 
@@ -98,7 +99,35 @@ namespace Arquis.Backend.Controllers
                 .OrderByDescending(r => r.FechaCreacion)
                 .ToListAsync();
 
+            await CompletarTitularesFaltantesAsync(rutas.SelectMany(r => r.Puntos));
             return Ok(rutas);
+        }
+
+        private async Task CompletarTitularesFaltantesAsync(IEnumerable<PuntoRutaTrabajo> puntos)
+        {
+            var sinTitular = puntos
+                .Where(p => p.IdCodigoFijo.HasValue &&
+                            (string.IsNullOrWhiteSpace(p.Titular) ||
+                             p.Titular.Equals("Sin nombre", StringComparison.OrdinalIgnoreCase) ||
+                             p.Titular.Equals("Usuario Registrado", StringComparison.OrdinalIgnoreCase) ||
+                             p.Titular.Equals("Usuario Suministro", StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+
+            if (sinTitular.Count == 0) return;
+
+            var ids = sinTitular.Select(p => p.IdCodigoFijo!.Value).Distinct().ToList();
+            var nombres = await _context.CodigosFijos
+                .Where(c => ids.Contains(c.IdCodigo) && c.Nombre != null && c.Nombre != "")
+                .Select(c => new { c.IdCodigo, c.Nombre })
+                .ToDictionaryAsync(c => c.IdCodigo, c => c.Nombre!);
+
+            foreach (var p in sinTitular)
+            {
+                if (p.IdCodigoFijo.HasValue && nombres.TryGetValue(p.IdCodigoFijo.Value, out var nom))
+                {
+                    p.Titular = nom;
+                }
+            }
         }
 
         public class AsignacionMasivaDto
@@ -109,6 +138,7 @@ namespace Arquis.Backend.Controllers
             public List<string> OperariosAsignados { get; set; } = new();
             public string? Observaciones { get; set; }
             public int? CantidadCuentas { get; set; } // Por ejemplo 100 cortes o 200 reconexiones
+            public List<int>? IdsCodigosFijos { get; set; }
             public double? PartidaLatitud { get; set; }
             public double? PartidaLongitud { get; set; }
             public string? PartidaNombre { get; set; }
@@ -121,20 +151,19 @@ namespace Arquis.Backend.Controllers
             if (dto.Puntos == null || dto.Puntos.Count == 0)
                 return BadRequest(new { error = "Debe proporcionar al menos un punto para optimizar la ruta con Dijkstra." });
 
-            if (Math.Abs(dto.Partida.Latitud) < 0.0001 && Math.Abs(dto.Partida.Longitud) < 0.0001)
-            {
-                dto.Partida.Latitud = dto.Puntos[0].Latitud;
-                dto.Partida.Longitud = dto.Puntos[0].Longitud;
-                dto.Partida.Nombre = "Primera parada";
-            }
+            bool partidaAutomatica = dto.Partida == null ||
+                (Math.Abs(dto.Partida.Latitud) < 0.0001 && Math.Abs(dto.Partida.Longitud) < 0.0001);
 
-            var resultado = await _routingService.OptimizarRutaAsync(dto.Partida, dto.Puntos);
+            var resultado = await _routingService.OptimizarRutaAsync(
+                partidaAutomatica ? null : dto.Partida,
+                dto.Puntos,
+                partidaAutomatica);
             return Ok(resultado);
         }
 
         public class OptimizarRutaRequestDto
         {
-            public DijkstraRoutingService.PuntoPartidaDto Partida { get; set; } = new();
+            public DijkstraRoutingService.PuntoPartidaDto? Partida { get; set; }
             public List<DijkstraRoutingService.PuntoIntervencionDto> Puntos { get; set; } = new();
         }
 
@@ -144,68 +173,141 @@ namespace Arquis.Backend.Controllers
             if (dto.OperariosAsignados == null || dto.OperariosAsignados.Count == 0)
                 return BadRequest(new { error = "Debe seleccionar al menos un operario para la asignación masiva." });
 
+            var esReconexion = dto.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ||
+                               dto.Tipo.Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
+                               dto.Tipo.Equals("Reponedor", StringComparison.OrdinalIgnoreCase) ||
+                               dto.Tipo.Equals("Reposicion", StringComparison.OrdinalIgnoreCase);
+            var esCorte = !esReconexion;
+
             var puntosAIntervenir = new List<CrearPuntoDto>();
-            if (dto.Puntos != null && dto.Puntos.Count > 0)
+            var codigosActivosParaCorte = new List<CodigoFijo>();
+
+            if (dto.IdsCodigosFijos != null && dto.IdsCodigosFijos.Count > 0)
+            {
+                var idsUnicos = dto.IdsCodigosFijos.Distinct().ToList();
+                var codigos = await _context.CodigosFijos
+                    .Include(c => c.Lote)
+                        .ThenInclude(l => l!.Manzana)
+                    .Where(c => idsUnicos.Contains(c.IdCodigo) && c.Latitud != null && c.Longitud != null)
+                    .Where(esCorte ? CandidatosServicio.ElegiblesParaCorte() : CandidatosServicio.ParaTipo(dto.Tipo))
+                    .ToListAsync();
+
+                if (codigos.Count != idsUnicos.Count)
+                    return Conflict(new { error = "La selección contiene suministros no disponibles para esta operación. Actualice la lista." });
+
+                foreach (var c in codigos)
+                {
+                    if (esCorte && c.Estado == 1)
+                    {
+                        c.Estado = 2;
+                        c.FechaCambioEstado = DateTime.UtcNow;
+                        codigosActivosParaCorte.Add(c);
+                    }
+                    puntosAIntervenir.Add(new CrearPuntoDto
+                    {
+                        IdCodigoFijo = c.IdCodigo,
+                        IdLote = c.IdLote,
+                        CodigoSuministro = c.CodF_SIG ?? $"CF-{c.CodFijo}",
+                        Titular = !string.IsNullOrWhiteSpace(c.Nombre) ? c.Nombre.Trim() : $"Titular Cód. #{c.CodFijo ?? c.IdCodigo}",
+                        Lote = c.Lote != null ? $"Lote {c.Lote.NroLote}" : $"Lote {c.IdLote ?? c.IdCodigo}",
+                        Direccion = $"UV {c.Lote?.Manzana?.UV ?? "S/N"} - MZA {c.Lote?.Manzana?.MZA ?? "S/N"}",
+                        Latitud = c.Latitud!.Value,
+                        Longitud = c.Longitud!.Value,
+                        MontoDeuda = esCorte ? 350.00m : 0.00m,
+                        Observaciones = esCorte ? "Orden de corte por mora" : "Pago verificado en caja"
+                    });
+                }
+            }
+            else if (dto.Puntos != null && dto.Puntos.Count > 0)
             {
                 puntosAIntervenir.AddRange(dto.Puntos);
             }
             else if (dto.CantidadCuentas.HasValue && dto.CantidadCuentas.Value > 0)
             {
                 int cant = Math.Min(dto.CantidadCuentas.Value, 1000);
-                // Obtener códigos fijos reales de la base de datos
+                // Para cortes, priorizar marcados para corte (estado 2) y completar con suministros activos (estado 1).
                 var codigosDb = await _context.CodigosFijos
+                    .Include(c => c.Lote)
+                        .ThenInclude(l => l!.Manzana)
                     .Where(c => c.Latitud != null && c.Longitud != null)
-                    .Where(CandidatosServicio.ParaTipo(dto.Tipo))
-                    .OrderBy(c => c.IdCodigo)
+                    .Where(esCorte ? CandidatosServicio.ElegiblesParaCorte() : CandidatosServicio.ParaTipo(dto.Tipo))
+                    .OrderByDescending(c => c.Estado == 2)
+                    .ThenBy(c => c.IdCodigo)
                     .Take(cant)
-                    .Select(c => new CrearPuntoDto
+                    .ToListAsync();
+
+                foreach (var c in codigosDb)
+                {
+                    if (esCorte && c.Estado == 1)
+                    {
+                        c.Estado = 2;
+                        c.FechaCambioEstado = DateTime.UtcNow;
+                        codigosActivosParaCorte.Add(c);
+                    }
+                    puntosAIntervenir.Add(new CrearPuntoDto
                     {
                         IdCodigoFijo = c.IdCodigo,
                         IdLote = c.IdLote,
                         CodigoSuministro = c.CodF_SIG ?? $"CF-{c.CodFijo}",
-                        Titular = c.Nombre ?? "Usuario Registrado",
-                        Lote = $"Lote {c.IdLote ?? c.IdCodigo}",
-                        Direccion = $"Av. Principal / Manzana {c.IdLote ?? 1}",
+                        Titular = !string.IsNullOrWhiteSpace(c.Nombre) ? c.Nombre.Trim() : $"Titular Cód. #{c.CodFijo ?? c.IdCodigo}",
+                        Lote = c.Lote != null ? $"Lote {c.Lote.NroLote}" : $"Lote {c.IdLote ?? c.IdCodigo}",
+                        Direccion = $"UV {c.Lote?.Manzana?.UV ?? "S/N"} - MZA {c.Lote?.Manzana?.MZA ?? "S/N"}",
                         Latitud = c.Latitud!.Value,
                         Longitud = c.Longitud!.Value,
-                        MontoDeuda = dto.Tipo == "Corte" ? 350.00m : 0.00m,
-                        Observaciones = dto.Tipo == "Corte" ? "Mora mayor a 90 días" : "Pago verificado en caja"
-                    })
-                    .ToListAsync();
-
-                puntosAIntervenir.AddRange(codigosDb);
-
-
+                        MontoDeuda = esCorte ? 350.00m : 0.00m,
+                        Observaciones = esCorte ? "Orden de corte por mora" : "Pago verificado en caja"
+                    });
+                }
             }
 
             if (puntosAIntervenir.Count == 0)
-                return BadRequest(new { error = "Debe proporcionar los puntos de servicio o una cantidad de cuentas a intervenir." });
+            {
+                var errMsg = dto.CantidadCuentas.HasValue && dto.CantidadCuentas.Value > 0
+                    ? (esCorte
+                        ? "No se encontraron suministros activos disponibles para asignar cortes."
+                        : "No se encontraron suministros marcados como candidatos a reconexión. Marque primero los suministros cortados.")
+                    : "Debe seleccionar las personas/puntos de servicio o indicar una cantidad de cuentas a intervenir.";
+                return BadRequest(new { error = errMsg });
+            }
+
+            // Agrupar geográficamente por sector antes de dividir entre operarios para evitar cruces innecesarios
+            if (dto.OperariosAsignados.Count > 1 && puntosAIntervenir.Count > 1)
+            {
+                double avgLat = puntosAIntervenir.Average(p => p.Latitud);
+                double avgLng = puntosAIntervenir.Average(p => p.Longitud);
+                puntosAIntervenir = puntosAIntervenir
+                    .OrderBy(p => Math.Atan2(p.Latitud - avgLat, p.Longitud - avgLng))
+                    .ThenBy(p => p.Latitud)
+                    .ToList();
+            }
 
             var totalOperarios = dto.OperariosAsignados.Count;
             var rutasCreadas = new List<RutaTrabajo>();
             var baseCount = await _context.RutasTrabajo.CountAsync();
-            var prefijo = (dto.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) ||
-                           dto.Tipo.Equals("Reconector", StringComparison.OrdinalIgnoreCase) ||
-                           dto.Tipo.Equals("Reponedor", StringComparison.OrdinalIgnoreCase) ||
-                           dto.Tipo.Equals("Reposicion", StringComparison.OrdinalIgnoreCase)) ? "RR" : "RC";
+            var prefijo = esReconexion ? "RR" : "RC";
 
-            var partidaBase = new DijkstraRoutingService.PuntoPartidaDto
-            {
-                Latitud = dto.PartidaLatitud ?? puntosAIntervenir[0].Latitud,
-                Longitud = dto.PartidaLongitud ?? puntosAIntervenir[0].Longitud,
-                Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Base de Despacho Operativo"
-            };
+            bool partidaAutomatica = !dto.PartidaLatitud.HasValue || !dto.PartidaLongitud.HasValue ||
+                (Math.Abs(dto.PartidaLatitud.Value) < 0.0001 && Math.Abs(dto.PartidaLongitud.Value) < 0.0001);
 
+            DijkstraRoutingService.PuntoPartidaDto? partidaBase = partidaAutomatica
+                ? null
+                : new DijkstraRoutingService.PuntoPartidaDto
+                {
+                    Latitud = dto.PartidaLatitud!.Value,
+                    Longitud = dto.PartidaLongitud!.Value,
+                    Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Punto de Partida"
+                };
+
+            int offset = 0;
             for (int i = 0; i < totalOperarios; i++)
             {
+                int tam = puntosAIntervenir.Count / totalOperarios + (i < puntosAIntervenir.Count % totalOperarios ? 1 : 0);
+                if (tam <= 0) continue;
+
                 var operario = dto.OperariosAsignados[i];
-                var puntosParaEsteOperario = puntosAIntervenir
-                    .Where((p, idx) => idx % totalOperarios == i)
-                    .ToList();
+                var puntosParaEsteOperario = puntosAIntervenir.Skip(offset).Take(tam).ToList();
+                offset += tam;
 
-                if (puntosParaEsteOperario.Count == 0) continue;
-
-                // Optimizar recorrido con Dijkstra sobre la red vial dbo.Vias
                 var puntosDijkstra = puntosParaEsteOperario.Select(p => new DijkstraRoutingService.PuntoIntervencionDto
                 {
                     IdCodigoFijo = p.IdCodigoFijo,
@@ -220,7 +322,7 @@ namespace Arquis.Backend.Controllers
                     Observaciones = p.Observaciones
                 }).ToList();
 
-                var optRes = await _routingService.OptimizarRutaAsync(partidaBase, puntosDijkstra);
+                var optRes = await _routingService.OptimizarRutaAsync(partidaBase, puntosDijkstra, partidaAutomatica);
 
                 var codigo = $"{prefijo}-{DateTime.UtcNow.Year}-{(baseCount + i + 1):D3}";
                 var nuevaRuta = new RutaTrabajo
@@ -236,9 +338,9 @@ namespace Arquis.Backend.Controllers
                     FechaCreacion = DateTime.UtcNow,
                     FechaAsignacion = DateTime.UtcNow,
                     Observaciones = dto.Observaciones,
-                    PartidaLatitud = partidaBase.Latitud,
-                    PartidaLongitud = partidaBase.Longitud,
-                    PartidaNombre = partidaBase.Nombre,
+                    PartidaLatitud = optRes.Partida.Latitud,
+                    PartidaLongitud = optRes.Partida.Longitud,
+                    PartidaNombre = optRes.Partida.Nombre,
                     DistanciaTotalMetros = optRes.DistanciaTotalMetros,
                     TiempoEstimadoMinutos = optRes.TiempoEstimadoMinutos,
                     GeometriaRutaGeoJson = optRes.GeometriaGeoJson
@@ -543,10 +645,16 @@ namespace Arquis.Backend.Controllers
                     (c.Lote != null && c.Lote.NroLote != null && c.Lote.NroLote.Contains(busqueda)));
             }
 
-            query = query.Where(CandidatosServicio.ParaTipo(tipo));
+            var esCorteQuery = string.Equals(tipo, "Corte", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(tipo, "Cortador", StringComparison.OrdinalIgnoreCase);
+
+            query = query.Where(esCorteQuery
+                ? CandidatosServicio.ElegiblesParaCorte()
+                : CandidatosServicio.ParaTipo(tipo));
 
             var items = await query
-                .OrderBy(c => c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.UV : "")
+                .OrderByDescending(c => c.Estado == 2)
+                .ThenBy(c => c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.UV : "")
                 .ThenBy(c => c.Lote != null && c.Lote.Manzana != null ? c.Lote.Manzana.MZA : "")
                 .ThenBy(c => c.Lote != null ? c.Lote.NroLote : "")
                 .Take(Math.Min(limite, 500))
@@ -555,7 +663,7 @@ namespace Arquis.Backend.Controllers
                     c.IdCodigo,
                     CodigoSuministro = c.CodF_SIG ?? $"CF-{c.CodFijo}",
                     CodFijo = c.CodFijo,
-                    Titular = c.Nombre ?? "Usuario Suministro",
+                    Titular = !string.IsNullOrWhiteSpace(c.Nombre) ? c.Nombre : $"Titular Cód. #{c.CodFijo ?? c.IdCodigo}",
                     Estado = (int)c.Estado,
                     IdLote = c.IdLote,
                     NroLote = c.Lote != null ? c.Lote.NroLote : null,
@@ -618,31 +726,41 @@ namespace Arquis.Backend.Controllers
 
             if (dto.IdsCodigosFijos.Count > 0)
             {
+                var idsUnicos = dto.IdsCodigosFijos.Distinct().ToList();
                 var codigos = await _context.CodigosFijos
                     .Include(c => c.Lote)
                         .ThenInclude(l => l!.Manzana)
-                    .Where(c => dto.IdsCodigosFijos.Contains(c.IdCodigo) && c.Latitud != null && c.Longitud != null)
+                    .Where(c => idsUnicos.Contains(c.IdCodigo) && c.Latitud != null && c.Longitud != null)
                     .ToListAsync();
 
                 var esCorte = string.Equals(dto.Tipo, "Corte", StringComparison.OrdinalIgnoreCase) ||
                               string.Equals(dto.Tipo, "Cortador", StringComparison.OrdinalIgnoreCase);
-                var estadoRequerido = esCorte ? 2 : 0;
-                if (codigos.Count != dto.IdsCodigosFijos.Distinct().Count() || codigos.Any(c => c.Estado != estadoRequerido))
+
+                bool seleccionValida = codigos.Count == idsUnicos.Count && (esCorte
+                    ? codigos.All(c => c.Estado == 2 || c.Estado == 1)
+                    : codigos.All(c => c.Estado == 0));
+
+                if (!seleccionValida)
                     return Conflict(new { error = "La selección contiene suministros no disponibles para esta operación. Actualice la lista." });
 
                 foreach (var c in codigos)
                 {
+                    if (esCorte && c.Estado == 1)
+                    {
+                        c.Estado = 2;
+                        c.FechaCambioEstado = DateTime.UtcNow;
+                    }
                     puntos.Add(new CrearPuntoDto
                     {
                         IdCodigoFijo = c.IdCodigo,
                         IdLote = c.IdLote,
                         CodigoSuministro = c.CodF_SIG ?? $"CF-{c.CodFijo}",
-                        Titular = c.Nombre ?? "Usuario Suministro",
+                        Titular = !string.IsNullOrWhiteSpace(c.Nombre) ? c.Nombre.Trim() : $"Titular Cód. #{c.CodFijo ?? c.IdCodigo}",
                         Lote = c.Lote != null ? $"Lote {c.Lote.NroLote}" : "Lote S/N",
                         Direccion = $"UV {c.Lote?.Manzana?.UV ?? "S/N"} - MZA {c.Lote?.Manzana?.MZA ?? "S/N"}",
                         Latitud = c.Latitud!.Value,
                         Longitud = c.Longitud!.Value,
-                        MontoDeuda = string.Equals(dto.Tipo, "Corte", StringComparison.OrdinalIgnoreCase) ? 385.50m : 0.00m,
+                        MontoDeuda = esCorte ? 385.50m : 0.00m,
                         Observaciones = dto.Observaciones
                     });
                 }
@@ -655,13 +773,17 @@ namespace Arquis.Backend.Controllers
 
             if (puntos.Count == 0) return BadRequest(new { error = "No hay puntos geográficos disponibles para crear la ruta." });
 
-            // Optimizar ruta con Dijkstra sobre dbo.Vias partiendo desde el punto seleccionado
-            var partida = new DijkstraRoutingService.PuntoPartidaDto
-            {
-                Latitud = dto.PartidaLatitud ?? puntos[0].Latitud,
-                Longitud = dto.PartidaLongitud ?? puntos[0].Longitud,
-                Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Base de Operaciones"
-            };
+            bool partidaAutomatica = !dto.PartidaLatitud.HasValue || !dto.PartidaLongitud.HasValue ||
+                (Math.Abs(dto.PartidaLatitud.Value) < 0.0001 && Math.Abs(dto.PartidaLongitud.Value) < 0.0001);
+
+            DijkstraRoutingService.PuntoPartidaDto? partida = partidaAutomatica
+                ? null
+                : new DijkstraRoutingService.PuntoPartidaDto
+                {
+                    Latitud = dto.PartidaLatitud!.Value,
+                    Longitud = dto.PartidaLongitud!.Value,
+                    Nombre = !string.IsNullOrWhiteSpace(dto.PartidaNombre) ? dto.PartidaNombre : "Punto de Partida"
+                };
 
             var puntosDijkstra = puntos.Select(p => new DijkstraRoutingService.PuntoIntervencionDto
             {
@@ -677,7 +799,7 @@ namespace Arquis.Backend.Controllers
                 Observaciones = p.Observaciones
             }).ToList();
 
-            var optRes = await _routingService.OptimizarRutaAsync(partida, puntosDijkstra);
+            var optRes = await _routingService.OptimizarRutaAsync(partida, puntosDijkstra, partidaAutomatica);
 
             var baseCount = await _context.RutasTrabajo.CountAsync() + 1;
             var esReconexion = string.Equals(dto.Tipo, "Reconexion", StringComparison.OrdinalIgnoreCase) ||
@@ -700,9 +822,9 @@ namespace Arquis.Backend.Controllers
                 FechaCreacion = DateTime.UtcNow,
                 FechaAsignacion = DateTime.UtcNow,
                 Observaciones = dto.Observaciones,
-                PartidaLatitud = partida.Latitud,
-                PartidaLongitud = partida.Longitud,
-                PartidaNombre = partida.Nombre,
+                PartidaLatitud = optRes.Partida.Latitud,
+                PartidaLongitud = optRes.Partida.Longitud,
+                PartidaNombre = optRes.Partida.Nombre,
                 DistanciaTotalMetros = optRes.DistanciaTotalMetros,
                 TiempoEstimadoMinutos = optRes.TiempoEstimadoMinutos,
                 GeometriaRutaGeoJson = optRes.GeometriaGeoJson

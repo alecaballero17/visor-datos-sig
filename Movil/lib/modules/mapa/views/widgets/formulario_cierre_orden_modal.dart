@@ -299,7 +299,7 @@ class _FormularioCierreOrdenModalState extends State<FormularioCierreOrdenModal>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "${widget.objetivoActual['titular'] ?? 'Usuario no especificado'}",
+                          "${widget.objetivoActual['titular'] ?? widget.objetivoActual['nombre'] ?? widget.objetivoActual['codigoSuministro'] ?? 'Parada asignada'}",
                           style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 4),

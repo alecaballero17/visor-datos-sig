@@ -41,23 +41,39 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
     _cargarFichaCompleta();
   }
 
+  dynamic _leerProp(Map<String, dynamic> props, List<String> claves) {
+    for (final k in claves) {
+      if (props.containsKey(k) && props[k] != null) return props[k];
+      final target = k.toLowerCase();
+      for (final entry in props.entries) {
+        if (entry.key.toLowerCase() == target && entry.value != null) {
+          return entry.value;
+        }
+      }
+    }
+    return null;
+  }
+
   Future<void> _cargarFichaCompleta() async {
+    final props = (widget.feature['properties'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     final layer = (widget.feature['layer'] ?? widget.feature['capa'] ?? '').toString().toLowerCase();
-    final id = widget.feature['id'] ?? widget.feature['properties']?['IdCodigo'] ?? widget.feature['properties']?['IdLote'];
+    final idCodigoProp = _leerProp(props, ['idCodigo']);
+    final idLoteProp = _leerProp(props, ['idLote']);
+    final id = widget.feature['id'] ?? idCodigoProp ?? idLoteProp;
 
     if (id == null) return;
 
     setState(() => _cargandoFicha = true);
     try {
-      if (layer == 'codigosfijos' || widget.feature['properties']?['IdCodigo'] != null) {
+      if (layer == 'codigosfijos' || idCodigoProp != null) {
         final res = await _api.get('/agua-potable/codigos/$id');
-        if (res is Map<String, dynamic> && mounted) {
-          setState(() => _fichaAgua = FichaAgua.fromJson(res));
+        if (res is Map && mounted) {
+          setState(() => _fichaAgua = FichaAgua.fromJson(Map<String, dynamic>.from(res)));
         }
-      } else if (layer == 'lotes' || widget.feature['properties']?['IdLote'] != null) {
+      } else if (layer == 'lotes' || idLoteProp != null) {
         final res = await _api.get('/agua-potable/lotes/$id');
-        if (res is Map<String, dynamic> && mounted) {
-          setState(() => _fichaAgua = FichaAgua.fromJson(res));
+        if (res is Map && mounted) {
+          setState(() => _fichaAgua = FichaAgua.fromJson(Map<String, dynamic>.from(res)));
         }
       }
     } catch (_) {
@@ -69,16 +85,18 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final props = widget.feature['properties'] as Map<String, dynamic>? ?? {};
+    final props = (widget.feature['properties'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
     final layer = (widget.feature['layer'] ?? widget.feature['capa'] ?? 'Predio').toString().toLowerCase();
     
     // Datos de la API (FichaAgua: los del medidor vienen en registros[]); si no llego, las
-    // propiedades de la capa (GeoDataService envia Nombre/Titular/Dueno, CodFijo, UV, MZA...).
+    // propiedades de la capa (GeoDataService envia nombre/titular/dueno en camelCase o PascalCase).
     final registro = _fichaAgua?.principal;
     String? deProps(List<String> claves) {
-      for (final k in claves) {
-        final v = props[k]?.toString().trim();
-        if (v != null && v.isNotEmpty && v != 'Sin titular vinculado') return v;
+      final raw = _leerProp(props, claves);
+      if (raw == null) return null;
+      final v = raw.toString().trim();
+      if (v.isNotEmpty && v != 'Sin titular vinculado' && v.toLowerCase() != 'sin nombre') {
+        return v;
       }
       return null;
     }
@@ -87,12 +105,14 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
         deProps(['Titular', 'Dueno', 'Nombre', 'nombreRegistrado']) ??
         'Sin titular registrado';
     final codigoFijo = registro?.codigoFijo ?? deProps(['CodFijo', 'CodF_SIG', 'CodigoSuministro']) ?? 'S/N';
-    final codigoSig = registro?.codigoSig ?? deProps(['CodF_SIG']) ?? '';
+    final codigoSig = registro?.codigoSig ?? deProps(['CodF_SIG', 'CodigoSig']) ?? '';
     final uv = registro?.uv ?? deProps(['UV', 'uv']) ?? 'S/N';
-    final mza = registro?.manzana ?? deProps(['MZA', 'mza']) ?? 'S/N';
-    final nroLote = registro?.numeroLote ?? deProps(['NroLote', 'nroLote', 'Lote']) ?? 'S/N';
+    final mza = registro?.manzana ?? deProps(['MZA', 'manzana', 'mza']) ?? 'S/N';
+    final nroLote = registro?.numeroLote ?? deProps(['NroLote', 'nroLote', 'numeroLote', 'Lote']) ?? 'S/N';
 
-    final bool tieneAgua = _fichaAgua?.tieneAgua ?? (props['TieneAgua'] == true || props['Estado'] == 1);
+    final tieneAguaProp = _leerProp(props, ['TieneAgua']);
+    final estadoProp = _leerProp(props, ['Estado']);
+    final bool tieneAgua = _fichaAgua?.tieneAgua ?? (tieneAguaProp == true || estadoProp == 1 || estadoProp == 2);
     final String estadoTexto;
     if (registro != null && registro.estadoVerificado && registro.estadoServicio != null) {
       estadoTexto = registro.estadoTexto;
@@ -109,8 +129,8 @@ class _VisorDatosBottomSheetState extends State<VisorDatosBottomSheet> {
         lat = (c[1] as num).toDouble();
       }
     }
-    lat ??= registro?.latitud ?? (props['Latitud'] ?? props['AguaLatitud'] as num?)?.toDouble();
-    lng ??= registro?.longitud ?? (props['Longitud'] ?? props['AguaLongitud'] as num?)?.toDouble();
+    lat ??= registro?.latitud ?? (_leerProp(props, ['Latitud', 'AguaLatitud']) as num?)?.toDouble();
+    lng ??= registro?.longitud ?? (_leerProp(props, ['Longitud', 'AguaLongitud']) as num?)?.toDouble();
 
     return Container(
       constraints: BoxConstraints(

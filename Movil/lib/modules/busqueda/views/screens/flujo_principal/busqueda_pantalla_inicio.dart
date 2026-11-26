@@ -129,7 +129,17 @@ class _BusquedaPantallaInicioState extends State<BusquedaPantallaInicio> {
                     final item = controlador.resultados[index] as Map<String, dynamic>;
                     final layer = (item['layer'] ?? item['capa'] ?? '').toString().toLowerCase();
                     final label = (item['label'] ?? item['texto'] ?? 'Elemento SIG').toString();
-                    final props = item['properties'] as Map<String, dynamic>? ?? {};
+                    final props = (item['properties'] as Map?)?.cast<String, dynamic>() ?? <String, dynamic>{};
+                    dynamic propCI(List<String> keys) {
+                      for (final k in keys) {
+                        if (props.containsKey(k) && props[k] != null) return props[k];
+                        final kl = k.toLowerCase();
+                        for (final e in props.entries) {
+                          if (e.key.toLowerCase() == kl && e.value != null) return e.value;
+                        }
+                      }
+                      return null;
+                    }
                     
                     IconData icon = Icons.location_on;
                     Color iconColor = const Color(0xFF1A73E8);
@@ -153,11 +163,11 @@ class _BusquedaPantallaInicioState extends State<BusquedaPantallaInicio> {
                       layerLabel = 'Vía / Calle';
                     }
 
-                    final titular = (props['Titular'] ?? props['Dueno'] ?? props['Nombre'] ?? props['nombreRegistrado'])?.toString();
-                    final codFijo = props['CodFijo'] ?? props['codigoFijo'];
-                    final nroLote = props['NroLote'] ?? props['numeroLote'];
-                    final uv = props['UV'] ?? props['uv'];
-                    final mza = props['MZA'] ?? props['manzana'];
+                    final titular = propCI(['Titular', 'Dueno', 'Nombre', 'nombreRegistrado'])?.toString();
+                    final codFijo = propCI(['CodFijo', 'codigoFijo']);
+                    final nroLote = propCI(['NroLote', 'numeroLote']);
+                    final uv = propCI(['UV', 'uv']);
+                    final mza = propCI(['MZA', 'manzana']);
 
                     return InkWell(
                       onTap: () {
