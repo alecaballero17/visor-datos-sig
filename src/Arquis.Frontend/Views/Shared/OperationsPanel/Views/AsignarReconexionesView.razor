@@ -471,6 +471,7 @@
 @code {
     [Parameter] public string? PreselectedOperarioId { get; set; }
     [Parameter] public EventCallback<object> OnVerRutaEnMapa { get; set; }
+    [Parameter] public EventCallback<bool> OnPickingMapChanged { get; set; }
 
     private string vistaActual = "crear";
     private bool isLoadingEntidades = false;
@@ -519,13 +520,14 @@
     private ResultadoDijkstraDto? resultadoDijkstra;
 
     [JSInvokable]
-    public void OnDeparturePointPicked(double lat, double lng)
+    public async Task OnDeparturePointPicked(double lat, double lng)
     {
         partidaLat = lat;
         partidaLng = lng;
         partidaNombre = $"Punto fijado en mapa ({lat:F5}, {lng:F5})";
         isCustomPartida = true;
         isPickingPartidaOnMap = false;
+        await OnPickingMapChanged.InvokeAsync(false);
         StateHasChanged();
     }
 
@@ -535,12 +537,23 @@
         {
             isPickingPartidaOnMap = false;
             await JS.MapaAsync("arquis.cancelDeparturePointSelection");
+            await OnPickingMapChanged.InvokeAsync(false);
         }
         else
         {
             isPickingPartidaOnMap = true;
             dotNetRef ??= DotNetObjectReference.Create(this);
             await JS.MapaAsync("arquis.enableDeparturePointSelection", dotNetRef);
+            await OnPickingMapChanged.InvokeAsync(true);
+        }
+    }
+
+    public void CancelMapPick()
+    {
+        if (isPickingPartidaOnMap)
+        {
+            isPickingPartidaOnMap = false;
+            StateHasChanged();
         }
     }
 
@@ -621,8 +634,8 @@
         dotNetRef?.Dispose();
     }
 
-    private List<OperarioItemDto> SoloReconectores => operarios.Where(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase)).ToList();
-    private List<OperarioItemDto> OtrosOperarios => operarios.Where(o => !string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase)).ToList();
+    private List<OperarioItemDto> SoloReconectores => operarios.Where(o => string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase) || string.Equals(o.Rol, "Reponedor", StringComparison.OrdinalIgnoreCase)).ToList();
+    private List<OperarioItemDto> OtrosOperarios => operarios.Where(o => !string.Equals(o.Rol, "Reconector", StringComparison.OrdinalIgnoreCase) && !string.Equals(o.Rol, "Reponedor", StringComparison.OrdinalIgnoreCase)).ToList();
 
     private IEnumerable<ManzanaDto> ManzanasFiltradas => string.IsNullOrEmpty(uvSeleccionada)
         ? listaManzanas
@@ -902,7 +915,7 @@
             var res = await Http.GetFromJsonAsync<List<TicketRutaDto>>("/api/rutas-trabajo?estado=&operario=");
             if (res != null)
             {
-                ticketsReconexion = res.Where(r => r.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase)).ToList();
+                ticketsReconexion = res.Where(r => r.Tipo.Equals("Reconexion", StringComparison.OrdinalIgnoreCase) || r.Tipo.Equals("Reconector", StringComparison.OrdinalIgnoreCase) || r.Tipo.Equals("Reponedor", StringComparison.OrdinalIgnoreCase) || r.Tipo.Equals("Reposicion", StringComparison.OrdinalIgnoreCase)).ToList();
             }
         }
         catch (Exception ex)
@@ -919,7 +932,7 @@
     {
         if (tk.Puntos != null && tk.Puntos.Count > 0)
         {
-            await JS.MapaAsync("arquis.renderRutaTrabajo", tk);
+            await JS.MapaAsync("arquis.showRutaTrabajo", tk);
             var primerPunto = tk.Puntos.First();
             await JS.MapaAsync("arquis.centerOnCoords", primerPunto.Latitud, primerPunto.Longitud, 16);
             await OnVerRutaEnMapa.InvokeAsync(tk);
@@ -969,6 +982,7 @@
         public string OperarioAsignado { get; set; } = "";
         public DateTime FechaCreacion { get; set; }
         public string? Observaciones { get; set; }
+        public string? GeometriaRutaGeoJson { get; set; }
         public int TotalPuntos { get; set; }
         public int PuntosCompletados { get; set; }
         public List<PuntoRutaDto>? Puntos { get; set; }
@@ -980,6 +994,9 @@
         public int Orden { get; set; }
         public string? CodigoSuministro { get; set; }
         public string? Titular { get; set; }
+        public string? Lote { get; set; }
+        public string? Direccion { get; set; }
+        public decimal? MontoDeuda { get; set; }
         public double Latitud { get; set; }
         public double Longitud { get; set; }
         public string Estado { get; set; } = "";

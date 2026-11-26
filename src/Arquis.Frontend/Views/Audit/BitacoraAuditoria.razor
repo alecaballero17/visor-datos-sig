@@ -64,10 +64,10 @@
 
                 <div class="col-12 col-sm-6 col-lg-3">
                     <div class="p-3 bg-white rounded border" style="border-color:#dadce0 !important;">
-                        <span class="small text-uppercase fw-semibold d-block mb-1" style="color:#5f6368; font-size:0.75rem; letter-spacing:0.3px;">Seguridad de Bitácora</span>
+                        <span class="small text-uppercase fw-semibold d-block mb-1" style="color:#5f6368; font-size:0.75rem; letter-spacing:0.3px;">Reportes Operativos y SIG</span>
                         <div class="d-flex align-items-baseline justify-content-between">
-                            <span class="fs-4 fw-bold" style="color:#137333">Activa</span>
-                            <span class="small" style="color:#5f6368">Inalterable</span>
+                            <span class="fs-4 fw-bold" style="color:#9333ea">@logs.Count(l => l.TipoReporte is "Operaciones/Rutas" or "Cuadrillas" or "Suministros" or "Ejecutivo Global")</span>
+                            <span class="small" style="color:#9333ea">rutas, cartera, KPIs</span>
                         </div>
                     </div>
                 </div>
@@ -88,10 +88,14 @@
                             <input type="text" class="form-control border-start-0" style="border-color:#dadce0; color:#202124;" placeholder="Filtrar por referencia o usuario..." @bind="searchFilter" @bind:event="oninput" />
                         </div>
 
-                        <select class="form-select form-select-sm" style="width:160px; border-color:#dadce0; color:#202124;" @bind="selectedTypeFilter">
+                        <select class="form-select form-select-sm" style="width:190px; border-color:#dadce0; color:#202124;" @bind="selectedTypeFilter">
                             <option value="">Todos los tipos</option>
                             <option value="Predial">Predial (Lotes)</option>
                             <option value="Sector/Barrio">Sector / Manzana</option>
+                            <option value="Operaciones/Rutas">Operaciones / Rutas</option>
+                            <option value="Cuadrillas">Desempeño Cuadrillas</option>
+                            <option value="Suministros">Cartera Suministros</option>
+                            <option value="Ejecutivo Global">Ejecutivo Global</option>
                         </select>
                     </div>
                 </div>
@@ -141,7 +145,7 @@
                                                 </span>
                                             </td>
                                             <td>
-                                                <span class="px-2 py-0.5 rounded" style="background:@(log.TipoReporte == "Predial" ? "#e8f0fe" : "#e6f4ea"); color:@(log.TipoReporte == "Predial" ? "#1a73e8" : "#137333"); font-weight:500; font-size:0.75rem;">
+                                                <span class="px-2 py-0.5 rounded" style="@GetTipoBadgeStyle(log.TipoReporte) font-weight:500; font-size:0.75rem;">
                                                     @log.TipoReporte
                                                 </span>
                                             </td>
@@ -213,6 +217,17 @@
             isLoading = false;
         }
     }
+
+    private static string GetTipoBadgeStyle(string tipo) => tipo switch
+    {
+        "Predial" => "background:#e8f0fe; color:#1a73e8;",
+        "Sector/Barrio" or "Sector" => "background:#e6f4ea; color:#137333;",
+        "Operaciones/Rutas" => "background:#fce8e6; color:#c5221f;",
+        "Cuadrillas" => "background:#fef7e0; color:#b06000;",
+        "Suministros" => "background:#e0f2fe; color:#0369a1;",
+        "Ejecutivo Global" => "background:#f3e8ff; color:#7e22ce;",
+        _ => "background:#f1f3f4; color:#3c4043;"
+    };
 
     public class BitacoraItemModel
     {

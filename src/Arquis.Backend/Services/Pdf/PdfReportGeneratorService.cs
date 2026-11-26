@@ -27,4 +27,16 @@ public sealed class PdfReportGeneratorService
         var doc = new SectorPdfDocument(model, geom);
         return doc.GeneratePdf();
     }
+
+    public byte[] GenerateOperacionesRutasPdf(ReporteOperacionesRutasDto model, string ip = "127.0.0.1") =>
+        StructuredAnalyticsPdfDocument.ForOperacionesRutas(model, ip).GeneratePdf();
+
+    public byte[] GenerateCuadrillasPdf(ReporteDesempenoCuadrillasDto model, string ip = "127.0.0.1") =>
+        StructuredAnalyticsPdfDocument.ForCuadrillas(model, ip).GeneratePdf();
+
+    public byte[] GenerateSuministrosPdf(ReporteEstadoSuministrosDto model, string ip = "127.0.0.1") =>
+        StructuredAnalyticsPdfDocument.ForSuministros(model, ip).GeneratePdf();
+
+    public byte[] GenerateEjecutivoGlobalPdf(ReporteEjecutivoGlobalDto model, string ip = "127.0.0.1") =>
+        StructuredAnalyticsPdfDocument.ForEjecutivoGlobal(model, ip).GeneratePdf();
 }

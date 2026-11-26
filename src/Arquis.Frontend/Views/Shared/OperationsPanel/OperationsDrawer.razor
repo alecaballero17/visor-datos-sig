@@ -1,10 +1,22 @@
 @using Arquis.Frontend.Views.Shared.OperationsPanel.Views
+@inject IJSRuntime JS
 
 <!-- Backdrop oscuro con desenfoque suave -->
-<div class="operations-drawer-backdrop @(IsOpen ? "open" : "")" @onclick="CloseDrawer"></div>
+<div class="operations-drawer-backdrop @((IsOpen && !isPeekingMap) ? "open" : "")" @onclick="CloseDrawer"></div>
+
+@if (IsOpen && isPeekingMap)
+{
+    <div class="map-pick-banner anim-fade-in-up" role="status">
+        <i class="bi bi-geo-alt-fill text-warning"></i>
+        <span>@(isPickingDeparturePoint ? "Haz clic en el mapa para fijar el punto de partida" : "Vista del mapa temporal (panel minimizado)")</span>
+        <button type="button" class="btn btn-sm btn-primary rounded-pill px-3 py-1" @onclick="RestoreFromPeek">
+            <i class="bi bi-layout-sidebar-inset-reverse me-1"></i>Volver al Panel
+        </button>
+    </div>
+}
 
 <!-- Panel Retráctil Lateral (Sliding Drawer) -->
-<aside class="operations-drawer @(IsOpen ? "open" : "")" aria-label="Panel de Operaciones y Opciones">
+<aside class="operations-drawer @((IsOpen && !isPeekingMap) ? "open" : "")" aria-label="Panel de Operaciones y Opciones">
     <!-- Encabezado del Panel Retráctil -->
     <div class="drawer-header">
         <div class="d-flex align-items-center gap-2">
@@ -16,7 +28,12 @@
                 <small class="text-muted">Operaciones SIG · <strong>Cortadores</strong> y <strong>Reconectores</strong></small>
             </div>
         </div>
-        <button type="button" class="btn-close" @onclick="CloseDrawer" aria-label="Cerrar panel"></button>
+        <div class="d-flex align-items-center gap-1">
+            <button type="button" class="btn btn-sm btn-outline-secondary py-1 px-2" @onclick="PeekMap" title="Ocultar temporalmente el panel para ver el mapa">
+                <i class="bi bi-map me-1"></i>Ver mapa
+            </button>
+            <button type="button" class="btn-close ms-1" @onclick="CloseDrawer" aria-label="Cerrar panel"></button>
+        </div>
     </div>
 
     <!-- Barra de Navegación por Categorías (Modular) -->
@@ -53,13 +70,17 @@
         }
         else if (currentTab == "cortes")
         {
-            <AsignarCortesView PreselectedOperarioId="@selectedOperarioId"
-                               OnVerRutaEnMapa="CerrarParaVerMapa" />
+            <AsignarCortesView @ref="cortesView"
+                               PreselectedOperarioId="@selectedOperarioId"
+                               OnVerRutaEnMapa="CerrarParaVerMapa"
+                               OnPickingMapChanged="HandleMapPickChanged" />
         }
         else if (currentTab == "reconexiones")
         {
-            <AsignarReconexionesView PreselectedOperarioId="@selectedOperarioId"
-                                     OnVerRutaEnMapa="CerrarParaVerMapa" />
+            <AsignarReconexionesView @ref="reconexionesView"
+                                     PreselectedOperarioId="@selectedOperarioId"
+                                     OnVerRutaEnMapa="CerrarParaVerMapa"
+                                     OnPickingMapChanged="HandleMapPickChanged" />
         }
         else if (currentTab == "tracking")
         {
@@ -78,10 +99,16 @@
 
     private string currentTab = "operadores";
     private string selectedOperarioId = "";
+    private bool isPeekingMap = false;
+    private bool isPickingDeparturePoint = false;
+    private AsignarCortesView? cortesView;
+    private AsignarReconexionesView? reconexionesView;
 
     public void OpenInTab(string tab)
     {
         currentTab = tab;
+        isPeekingMap = false;
+        isPickingDeparturePoint = false;
         IsOpen = true;
         IsOpenChanged.InvokeAsync(true);
     }
@@ -91,8 +118,31 @@
         currentTab = tab;
     }
 
+    private void PeekMap()
+    {
+        isPeekingMap = true;
+        isPickingDeparturePoint = false;
+    }
+
+    private async Task RestoreFromPeek()
+    {
+        isPeekingMap = false;
+        isPickingDeparturePoint = false;
+        cortesView?.CancelMapPick();
+        reconexionesView?.CancelMapPick();
+        await JS.MapaAsync("arquis.cancelDeparturePointSelection");
+    }
+
+    private void HandleMapPickChanged(bool isPicking)
+    {
+        isPickingDeparturePoint = isPicking;
+        isPeekingMap = isPicking;
+    }
+
     private async Task CloseDrawer()
     {
+        isPeekingMap = false;
+        isPickingDeparturePoint = false;
         IsOpen = false;
         await IsOpenChanged.InvokeAsync(false);
     }

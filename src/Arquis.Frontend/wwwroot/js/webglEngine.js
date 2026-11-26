@@ -62,9 +62,9 @@ window.arquisWebGL = (() => {
         hudEl.id = 'arquis-webgl-hud';
         hudEl.style.cssText = `
             position: absolute;
-            top: 70px;
-            right: 18px;
-            z-index: 510;
+            top: 68px;
+            right: 16px;
+            z-index: 520;
             display: flex;
             flex-direction: column;
             gap: 10px;
