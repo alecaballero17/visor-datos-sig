@@ -89,25 +89,43 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                         padding: const EdgeInsets.only(top: 8.0, left: 4.0),
                         child: "Mínimo 8 caracteres.".texto(color: Colors.black54, size: 12),
                       ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE8F0FE),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: const Color(0xFFBDC1C6)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.badge_outlined, color: Color(0xFF1A73E8), size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: "El registro no habilita el trabajo de campo. Un administrador debe asignar el perfil correspondiente."
-                                  .texto(color: const Color(0xFF1F1F1F), size: 12),
+                      const SizedBox(height: 16),
+                      "Tipo de trabajador de campo".texto(
+                        size: 13,
+                        color: Colors.black87,
+                        negrita: true,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildRoleOption(
+                              title: 'Cortador',
+                              subtitle: 'Cortes de servicio',
+                              icon: Icons.content_cut,
+                              accentColor: const Color(0xFFD93025),
+                              selected: controlador.tipoOperador == 'Cortador',
+                              onTap: () => actualizar(() {
+                                controlador.tipoOperador = 'Cortador';
+                                controlador.errorMessage = null;
+                              }),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildRoleOption(
+                              title: 'Reconector',
+                              subtitle: 'Reconexiones de agua',
+                              icon: Icons.water_drop,
+                              accentColor: const Color(0xFF1A73E8),
+                              selected: controlador.tipoOperador == 'Reconector',
+                              onTap: () => actualizar(() {
+                                controlador.tipoOperador = 'Reconector';
+                                controlador.errorMessage = null;
+                              }),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
 
@@ -177,7 +195,12 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
                             height: 20, width: 20,
                             child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                           )
-                        : (controlador.isLogin ? "Ingresar como Operador" : "Registrar como Operador").texto(color: Colors.white, negrita: true, size: 16),
+                        : (controlador.isLogin
+                            ? "Ingresar como Operador"
+                            : (controlador.tipoOperador != null
+                                ? "Registrar como ${controlador.tipoOperador}"
+                                : "Crear cuenta de Operador"))
+                            .texto(color: Colors.white, negrita: true, size: 16),
                     ),
                     
                     const SizedBox(height: 24),
@@ -201,6 +224,59 @@ class _AuthPantallaInicioState extends State<AuthPantallaInicio> {
       ),
     );
   }
+}
+
+Widget _buildRoleOption({
+  required String title,
+  required String subtitle,
+  required IconData icon,
+  required Color accentColor,
+  required bool selected,
+  required VoidCallback onTap,
+}) {
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(8),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      decoration: BoxDecoration(
+        color: selected ? accentColor.withValues(alpha: 0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: selected ? accentColor : Colors.black26,
+          width: selected ? 2 : 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: selected ? accentColor : Colors.black54, size: 20),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: selected ? accentColor : Colors.black87,
+                  ),
+                ),
+              ),
+              if (selected)
+                Icon(Icons.check_circle, color: accentColor, size: 16),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 11, color: Colors.black54),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 Widget _buildMaterialTextField({

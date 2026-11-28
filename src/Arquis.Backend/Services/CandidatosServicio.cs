@@ -14,6 +14,9 @@ public static class CandidatosServicio
         _ => c => false
     };
 
+    public static Expression<Func<CodigoFijo, bool>> ElegiblesParaCorte() =>
+        c => c.Estado == 2 || c.Estado == 1;
+
     public static Expression<Func<CodigoFijo, bool>> PuedePasarAReconexion(int id) =>
         c => c.IdCodigo == id && c.Estado == 3;
 }

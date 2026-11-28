@@ -20,11 +20,11 @@ class PuntoTrabajo {
       orden = _entero(json['orden']) ?? 0,
       idCodigoFijo = _entero(json['idCodigoFijo']),
       idLote = _entero(json['idLote']),
-      codigoSuministro = json['codigoSuministro'] as String?,
-      lote = json['lote'] as String?,
-      titular = json['titular'] as String?,
-      direccion = json['direccion'] as String?,
-      observaciones = json['observaciones'] as String?,
+      codigoSuministro = _texto(json['codigoSuministro'] ?? json['CodigoSuministro']),
+      lote = _texto(json['lote'] ?? json['Lote']),
+      titular = _texto(json['titular'] ?? json['Titular'] ?? json['nombre'] ?? json['Nombre']),
+      direccion = _texto(json['direccion'] ?? json['Direccion']),
+      observaciones = _texto(json['observaciones'] ?? json['Observaciones']),
       estado = json['estado'] as String? ?? 'Pendiente',
       latitud = _numero(json['latitud']),
       longitud = _numero(json['longitud']),
@@ -37,6 +37,22 @@ class PuntoTrabajo {
       estadoFinal = json['estadoFinal'] as String?,
       motivoObservacion = json['motivoObservacion'] as String?,
       fotosEvidenciasJson = json['fotosEvidenciasJson'] as String?;
+
+  String get nombreTitularVisible {
+    final t = titular?.trim();
+    if (t != null &&
+        t.isNotEmpty &&
+        t.toLowerCase() != 'sin nombre' &&
+        t.toLowerCase() != 'usuario registrado' &&
+        t.toLowerCase() != 'usuario suministro') {
+      return t;
+    }
+    if (codigoSuministro != null && codigoSuministro!.isNotEmpty) {
+      return 'Titular $codigoSuministro';
+    }
+    if (lote != null && lote!.isNotEmpty) return lote!;
+    return 'Parada #$orden';
+  }
 
   bool get atendido => const {
     'completado',
@@ -155,6 +171,11 @@ class RutaTrabajo {
 }
 
 int? _entero(dynamic value) => value is int ? value : int.tryParse('$value');
+String? _texto(dynamic value) {
+  if (value == null) return null;
+  final s = value.toString().trim();
+  return s.isEmpty ? null : s;
+}
 int _id(dynamic value) {
   final id = _entero(value);
   if (id == null || id <= 0) {

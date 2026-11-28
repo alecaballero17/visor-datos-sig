@@ -125,22 +125,40 @@ namespace Arquis.Backend.Controllers
                     OperarioId = u.Login,
                     NombreOperario = u.Nombre,
                     Email = u.Email,
-                    Rol = _context.UsuariosRoles
+                    Roles = _context.UsuariosRoles
                         .Where(ur => ur.IdUsuario == u.IdUsuario)
                         .Select(ur => ur.Rol.NombreRol)
-                        .FirstOrDefault() ?? "Operador"
+                        .ToList()
                 })
                 .ToListAsync();
+
+            static string ElegirRolPrincipal(System.Collections.Generic.IEnumerable<string> roles)
+            {
+                foreach (var r in roles)
+                {
+                    if (string.Equals(r, "Cortador", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r, "Corte", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r, "Reconector", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r, "Reconexion", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r, "Reponedor", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(r, "Reposicion", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return r;
+                    }
+                }
+                return roles.FirstOrDefault() ?? string.Empty;
+            }
 
             // Filtrar usuarios operadores o que hayan reportado ubicacion
             var operariosDict = new Dictionary<string, (string Nombre, string Rol)>(StringComparer.OrdinalIgnoreCase);
             foreach (var u in usuarios)
             {
-                if (operarioRoles.Contains(u.Rol, StringComparer.OrdinalIgnoreCase) || 
+                var rolPrincipal = ElegirRolPrincipal(u.Roles);
+                if (u.Roles.Any(r => operarioRoles.Contains(r, StringComparer.OrdinalIgnoreCase)) ||
                     (!string.IsNullOrEmpty(u.OperarioId) && u.OperarioId.StartsWith("oper", StringComparison.OrdinalIgnoreCase)) ||
                     (!string.IsNullOrEmpty(u.Email) && u.Email.Contains("operador", StringComparison.OrdinalIgnoreCase)))
                 {
-                    operariosDict[u.OperarioId] = (u.NombreOperario, u.Rol);
+                    operariosDict[u.OperarioId] = (u.NombreOperario, string.IsNullOrEmpty(rolPrincipal) ? "Operador" : rolPrincipal);
                 }
             }
 
@@ -171,7 +189,7 @@ namespace Arquis.Backend.Controllers
             var activosMemoria = _cache.ObtenerActivos().ToDictionary(a => a.OperarioId, StringComparer.OrdinalIgnoreCase);
             var statsDict = trackingStats.ToDictionary(x => x.OperarioId, StringComparer.OrdinalIgnoreCase);
 
-            string NormalizarRol(string r, string opId)
+            string NormalizarRol(string r, string opId, string? nombreOp)
             {
                 // Si el rol ya está explícitamente asignado, respetarlo siempre
                 if (string.Equals(r, "Cortador", StringComparison.OrdinalIgnoreCase) ||
@@ -199,7 +217,10 @@ namespace Arquis.Backend.Controllers
 
                 // Fallback heurístico solo si el rol era genérico ("Operador" / "Lecturador") o no definido
                 if (opId.Contains("recon", StringComparison.OrdinalIgnoreCase) ||
-                    opId.Contains("repon", StringComparison.OrdinalIgnoreCase))
+                    opId.Contains("repon", StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrWhiteSpace(nombreOp) &&
+                     (nombreOp.Contains("recon", StringComparison.OrdinalIgnoreCase) ||
+                      nombreOp.Contains("repon", StringComparison.OrdinalIgnoreCase))))
                 {
                     return "Reconector";
                 }
@@ -210,7 +231,7 @@ namespace Arquis.Backend.Controllers
             {
                 var opId = kv.Key;
                 var (nombre, rolRaw) = kv.Value;
-                var rol = NormalizarRol(rolRaw, opId);
+                var rol = NormalizarRol(rolRaw, opId, nombre);
                 var hasStats = statsDict.TryGetValue(opId, out var stats);
                 var isLive = activosMemoria.TryGetValue(opId, out var live);
 

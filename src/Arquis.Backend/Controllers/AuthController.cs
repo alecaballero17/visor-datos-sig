@@ -19,6 +19,8 @@ public sealed class AuthController(AuthService authService) : ControllerBase
     {
         if (request.Nombre.Trim().Length < 2) return BadRequest(new { mensaje="Ingrese su nombre." });
         try { await authService.RegisterAsync(request, ct); }
+        catch (ArgumentException ex) { return BadRequest(new { mensaje = ex.Message }); }
+        catch (InvalidOperationException ex) { return Conflict(new { mensaje = ex.Message }); }
         catch (SqlException ex) when (ex.Number is 2601 or 2627 or 50002)
         { return Conflict(new { mensaje="Ese email ya está registrado." }); }
         return StatusCode(201, new { mensaje="Cuenta creada. Ingrese con su email y contraseña." });

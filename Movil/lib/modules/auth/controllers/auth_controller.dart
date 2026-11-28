@@ -10,6 +10,7 @@ class AuthController {
 
   bool isLogin = true;
   bool isCargando = false;
+  String? tipoOperador; // 'Cortador' o 'Reconector'
   String? errorMessage;
   String? successMessage;
 
@@ -66,6 +67,11 @@ class AuthController {
       return false;
     }
 
+    if (tipoOperador == null || tipoOperador!.isEmpty) {
+      actualizar(() => errorMessage = 'Selecciona si eres Cortador o Reconector');
+      return false;
+    }
+
     actualizar(() {
       isCargando = true;
       errorMessage = null;
@@ -73,7 +79,12 @@ class AuthController {
     });
 
     try {
-      final respuesta = await _authService.register(nombre, email, password);
+      final respuesta = await _authService.register(
+        nombre,
+        email,
+        password,
+        rol: tipoOperador!,
+      );
       actualizar(() {
         isCargando = false;
         errorMessage = null;
